@@ -1,0 +1,4 @@
+- [steam](docs/steam.md)
+- [epic](docs/epic.md)
+- [gog](docs/gog.md)
+- [playstation](docs/playstation.md)
