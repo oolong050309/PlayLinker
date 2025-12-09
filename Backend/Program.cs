@@ -9,6 +9,11 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 配置日志：清除默认的日志提供程序（包括EventLog），只使用Console和Debug
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
 // 添加数据库上下文
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("数据库连接字符串未配置");
@@ -47,6 +52,9 @@ builder.Services.AddAuthentication(options =>
 // 注册服务
 builder.Services.AddScoped<ISteamService, SteamService>();
 builder.Services.AddHttpClient<ISteamService, SteamService>();
+builder.Services.AddScoped<IXboxService, XboxService>();
+builder.Services.AddScoped<IPsnService, PsnService>();
+builder.Services.AddScoped<IGogService, GogService>();
 
 // 添加控制器
 builder.Services.AddControllers();
@@ -59,7 +67,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "PlayLinker API - 开发者B模块",
         Version = "v1",
-        Description = "统一游戏管理平台 - 游戏数据、元数据、游戏库、成就、Steam集成",
+        Description = "统一游戏管理平台 - 游戏数据、元数据、游戏库、成就、Steam/Xbox/PSN/GOG集成",
         Contact = new OpenApiContact
         {
             Name = "开发者B",

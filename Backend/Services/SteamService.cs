@@ -25,6 +25,66 @@ public class SteamService : ISteamService
     }
 
     /// <summary>
+    /// 安全地从 JsonElement 获取整数值，支持数字和字符串两种格式
+    /// </summary>
+    private int SafeGetInt32(JsonElement element, int defaultValue = 0)
+    {
+        try
+        {
+            // 如果是数字类型，直接获取
+            if (element.ValueKind == JsonValueKind.Number)
+            {
+                return element.GetInt32();
+            }
+            // 如果是字符串类型，尝试解析
+            else if (element.ValueKind == JsonValueKind.String)
+            {
+                var strValue = element.GetString();
+                if (int.TryParse(strValue, out var intValue))
+                {
+                    return intValue;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "解析整数失败，使用默认值: {DefaultValue}", defaultValue);
+        }
+        
+        return defaultValue;
+    }
+
+    /// <summary>
+    /// 安全地从 JsonElement 获取长整数值，支持数字和字符串两种格式
+    /// </summary>
+    private long SafeGetInt64(JsonElement element, long defaultValue = 0)
+    {
+        try
+        {
+            // 如果是数字类型，直接获取
+            if (element.ValueKind == JsonValueKind.Number)
+            {
+                return element.GetInt64();
+            }
+            // 如果是字符串类型，尝试解析
+            else if (element.ValueKind == JsonValueKind.String)
+            {
+                var strValue = element.GetString();
+                if (long.TryParse(strValue, out var longValue))
+                {
+                    return longValue;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "解析长整数失败，使用默认值: {DefaultValue}", defaultValue);
+        }
+        
+        return defaultValue;
+    }
+
+    /// <summary>
     /// 导入Steam数据
     /// </summary>
     public async Task<SteamImportResponseDto> ImportSteamData(SteamImportRequestDto request)
@@ -96,7 +156,7 @@ public class SteamService : ISteamService
                                     
                                     if (game.TryGetProperty("appid", out var appIdElement))
                                     {
-                                        var appId = appIdElement.GetInt32();
+                                        var appId = SafeGetInt32(appIdElement);
                                         try
                                         {
                                             var schemaUrl = $"{_baseUrl}/ISteamUserStats/GetSchemaForGame/v2/?key={_apiKey}&appid={appId}";
@@ -224,7 +284,7 @@ public class SteamService : ISteamService
             }
 
             var player = players[0];
-            var profileState = player.TryGetProperty("profilestate", out var ps) ? ps.GetInt32() : 0;
+            var profileState = player.TryGetProperty("profilestate", out var ps) ? SafeGetInt32(ps) : 0;
             var isPublic = profileState > 0;
 
             // 获取用户等级
@@ -243,7 +303,7 @@ public class SteamService : ISteamService
                     {
                         if (levelResponseData.TryGetProperty("player_level", out var playerLevel))
                         {
-                            level = playerLevel.GetInt32();
+                            level = SafeGetInt32(playerLevel);
                         }
                     }
                 }
@@ -312,7 +372,7 @@ public class SteamService : ISteamService
                 ProfileUrl = player.TryGetProperty("profileurl", out var pu) ? pu.GetString() ?? "" : $"https://steamcommunity.com/profiles/{steamId}",
                 AvatarUrl = player.TryGetProperty("avatarfull", out var af) ? af.GetString() ?? "" : "",
                 AccountCreated = player.TryGetProperty("timecreated", out var tc) 
-                    ? DateTimeOffset.FromUnixTimeSeconds(tc.GetInt64()).ToString("yyyy-MM-ddTHH:mm:ssZ") 
+                    ? DateTimeOffset.FromUnixTimeSeconds(SafeGetInt64(tc)).ToString("yyyy-MM-ddTHH:mm:ssZ") 
                     : "",
                 Country = player.TryGetProperty("loccountrycode", out var cc) ? cc.GetString() ?? "" : "",
                 Level = level,
@@ -411,9 +471,9 @@ public class SteamService : ISteamService
                             priceOverview = new SteamPriceDto
                             {
                                 Currency = priceData.TryGetProperty("currency", out var curr) ? curr.GetString() ?? "CNY" : "CNY",
-                                Initial = priceData.TryGetProperty("initial", out var init) ? init.GetInt32() : 0,
-                                Final = priceData.TryGetProperty("final", out var final) ? final.GetInt32() : 0,
-                                DiscountPercent = priceData.TryGetProperty("discount_percent", out var disc) ? disc.GetInt32() : 0
+                                Initial = priceData.TryGetProperty("initial", out var init) ? SafeGetInt32(init) : 0,
+                                Final = priceData.TryGetProperty("final", out var final) ? SafeGetInt32(final) : 0,
+                                DiscountPercent = priceData.TryGetProperty("discount_percent", out var disc) ? SafeGetInt32(disc) : 0
                             };
                         }
 
@@ -423,7 +483,7 @@ public class SteamService : ISteamService
                         {
                             achievements = new SteamAchievementsInfoDto
                             {
-                                Total = achievementsData.TryGetProperty("total", out var total) ? total.GetInt32() : 0
+                                Total = achievementsData.TryGetProperty("total", out var total) ? SafeGetInt32(total) : 0
                             };
                         }
 
@@ -433,7 +493,7 @@ public class SteamService : ISteamService
                         {
                             recommendations = new SteamRecommendationsDto
                             {
-                                Total = recData.TryGetProperty("total", out var total) ? total.GetInt32() : 0
+                                Total = recData.TryGetProperty("total", out var total) ? SafeGetInt32(total) : 0
                             };
                         }
 
@@ -457,7 +517,7 @@ public class SteamService : ISteamService
                             Categories = categories,
                             Genres = genres,
                             ReleaseDate = data.TryGetProperty("release_date", out var rd) && rd.TryGetProperty("date", out var date) ? date.GetString() ?? "" : "",
-                            RequiredAge = data.TryGetProperty("required_age", out var ra) ? ra.GetInt32() : 0,
+                            RequiredAge = data.TryGetProperty("required_age", out var ra) ? SafeGetInt32(ra) : 0,
                             PriceOverview = priceOverview,
                             Achievements = achievements,
                             Recommendations = recommendations
