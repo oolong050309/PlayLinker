@@ -289,6 +289,35 @@ http://localhost:5000/api/v1
 - `GET /api/v1/steam/user/{steamId}` - 获取Steam用户信息
 - `GET /api/v1/steam/games/{appId}` - 获取Steam游戏信息
 
+#### Xbox集成API(需认证)
+- `GET /api/v1/xbox/token-status` - 检查Xbox令牌状态
+- `POST /api/v1/xbox/authenticate` - Xbox认证
+- `POST /api/v1/xbox/import` - 导入Xbox数据
+- `GET /api/v1/xbox/user/{xuid}` - 获取Xbox用户信息
+- `GET /api/v1/xbox/games/{titleId}` - 获取Xbox游戏信息
+- `GET /api/v1/xbox/user/{xuid}/achievements` - 获取Xbox用户成就
+
+#### PSN集成API(需认证)
+- `GET /api/v1/psn/token-status` - 检查PSN令牌状态
+- `POST /api/v1/psn/authenticate` - PSN认证
+- `POST /api/v1/psn/import` - 导入PSN数据
+- `GET /api/v1/psn/user/{onlineId}` - 获取PSN用户信息
+- `GET /api/v1/psn/games/{titleId}` - 获取PSN游戏信息
+- `GET /api/v1/psn/user/{onlineId}/trophies` - 获取PSN用户奖杯
+
+#### GOG集成API(需认证)
+- `GET /api/v1/gog/token-status` - 检查GOG令牌状态
+- `POST /api/v1/gog/authenticate` - GOG认证
+- `POST /api/v1/gog/import` - 导入GOG数据
+- `GET /api/v1/gog/user/{gogUserId}` - 获取GOG用户信息
+- `GET /api/v1/gog/games/{gogGameId}` - 获取GOG游戏信息
+
+**详细文档**:
+- [Steam集成文档](Backend/README.md)
+- [Xbox集成文档](Backend/XBOX_INTEGRATION.md)
+- [PSN集成文档](Backend/PSN_INTEGRATION.md)
+- [GOG集成文档](Backend/GOG_INTEGRATION.md)
+
 ---
 
 ## 测试方式
@@ -829,7 +858,7 @@ curl http://localhost:5000/api/v1/library/overview
 
 ---
 
-**最后更新**: 2024-11-27  
+**最后更新**: 2024-12-08  
 **版本**: v1.0.0  
 **状态**: 开发中 🚧
 
@@ -842,6 +871,9 @@ curl http://localhost:5000/api/v1/library/overview
 - Entity Framework Core团队
 - Vue.js团队
 - Steam Web API
+- Xbox Web API (xbox-webapi-python)
+- PSN API (psn-api)
+- GOG API
 - MySQL数据库
 
 PlayLinker © 2024

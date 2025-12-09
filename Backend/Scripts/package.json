@@ -1,0 +1,19 @@
+{
+  "name": "playlinker-psn-scripts",
+  "version": "1.0.0",
+  "description": "PSN API integration scripts for PlayLinker",
+  "main": "psn_get_data.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "psn",
+    "playstation",
+    "api"
+  ],
+  "author": "PlayLinker",
+  "license": "MIT",
+  "dependencies": {
+    "psn-api": "^2.17.0"
+  }
+}
