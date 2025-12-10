@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+
 using Microsoft.Extensions.Configuration;
 using PlayLinker.Data;
 using PlayLinker.Models;

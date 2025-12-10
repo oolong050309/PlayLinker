@@ -43,6 +43,17 @@ public class PlayLinkerDbContext : DbContext
     public DbSet<PlayerPlatform> PlayerPlatforms { get; set; }
     public DbSet<UserPlatformBinding> UserPlatformBindings { get; set; }
 
+    // D模块：用户偏好与推荐
+    public DbSet<UserPreference> UserPreferences { get; set; }
+    public DbSet<PreferenceGenre> PreferenceGenres { get; set; }
+    public DbSet<Recommendation> Recommendations { get; set; }
+    public DbSet<RecommendationFeedback> RecommendationFeedbacks { get; set; }
+
+    // D模块：价格监控与愿望单
+    public DbSet<PriceHistory> PriceHistories { get; set; }
+    public DbSet<PriceAlertSubscription> PriceAlertSubscriptions { get; set; }
+    public DbSet<PriceAlertLog> PriceAlertLogs { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -110,6 +121,18 @@ public class PlayLinkerDbContext : DbContext
 
         modelBuilder.Entity<UserAchievement>()
             .HasIndex(ua => new { ua.UserId, ua.AchievementId, ua.PlatformId })
+            .IsUnique();
+
+        // D模块配置
+        modelBuilder.Entity<PriceAlertSubscription>()
+            .HasIndex(p => new { p.UserId, p.GameId, p.PlatformId })
+            .IsUnique();
+
+        modelBuilder.Entity<PriceHistory>()
+            .HasIndex(p => new { p.GameId, p.PlatformId });
+
+        modelBuilder.Entity<PreferenceGenre>()
+            .HasIndex(pg => new { pg.PreferenceId, pg.GenreId })
             .IsUnique();
     }
 }
