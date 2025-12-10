@@ -1,13 +1,17 @@
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace PlayLinker.Models.Entities;
 
 /// <summary>
-/// 成就实体类
+/// 成就表
 /// </summary>
 [Table("achievements")]
-public class Achievement
+[Index("GameId", Name = "idx_game_id")]
+public partial class Achievement
 {
     [Key]
     [Column("achievement_id")]
@@ -16,67 +20,41 @@ public class Achievement
     [Column("game_id")]
     public long GameId { get; set; }
 
-    [Required]
-    [MaxLength(128)]
     [Column("achievement_name")]
-    public string AchievementName { get; set; } = string.Empty;
+    [StringLength(128)]
+    public string AchievementName { get; set; } = null!;
 
-    [Required]
-    [MaxLength(128)]
     [Column("displayName")]
-    public string DisplayName { get; set; } = string.Empty;
+    [StringLength(128)]
+    public string DisplayName { get; set; } = null!;
 
+    /// <summary>
+    /// 0=不隐藏，1=隐藏
+    /// </summary>
     [Column("hidden")]
     public bool Hidden { get; set; }
 
-    [Column("description")]
+    [Column("description", TypeName = "text")]
     public string? Description { get; set; }
 
-    [Required]
-    [MaxLength(2048)]
+    /// <summary>
+    /// 解锁状态
+    /// </summary>
     [Column("icon_unlocked")]
-    public string IconUnlocked { get; set; } = string.Empty;
+    [StringLength(2048)]
+    public string IconUnlocked { get; set; } = null!;
 
-    [Required]
-    [MaxLength(2048)]
+    /// <summary>
+    /// 未解锁状态/灰色
+    /// </summary>
     [Column("icon_locked")]
-    public string IconLocked { get; set; } = string.Empty;
+    [StringLength(2048)]
+    public string IconLocked { get; set; } = null!;
 
     [ForeignKey("GameId")]
-    public virtual Game? Game { get; set; }
+    [InverseProperty("Achievements")]
+    public virtual Game Game { get; set; } = null!;
 
+    [InverseProperty("Achievement")]
     public virtual ICollection<UserAchievement> UserAchievements { get; set; } = new List<UserAchievement>();
 }
-
-/// <summary>
-/// 用户成就解锁记录实体类
-/// </summary>
-[Table("user_achievements")]
-public class UserAchievement
-{
-    [Key]
-    [Column("user_achievement_id")]
-    public long UserAchievementId { get; set; }
-
-    [Column("user_id")]
-    public int UserId { get; set; }
-
-    [Column("achievement_id")]
-    public long AchievementId { get; set; }
-
-    [Column("unlocked")]
-    public bool Unlocked { get; set; }
-
-    [Column("unlock_time")]
-    public DateTime? UnlockTime { get; set; }
-
-    [Column("platform_id")]
-    public int PlatformId { get; set; }
-
-    [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    [ForeignKey("AchievementId")]
-    public virtual Achievement? Achievement { get; set; }
-}
-

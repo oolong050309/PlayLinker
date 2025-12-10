@@ -109,7 +109,7 @@ public class GenreDto
 /// </summary>
 public class DeveloperDto
 {
-    public int DeveloperId { get; set; }
+    public long DeveloperId { get; set; }
     public string Name { get; set; } = string.Empty;
     public int? GamesCount { get; set; }
 }
@@ -119,7 +119,7 @@ public class DeveloperDto
 /// </summary>
 public class PublisherDto
 {
-    public int PublisherId { get; set; }
+    public long PublisherId { get; set; }
     public string Name { get; set; } = string.Empty;
     public int? GamesCount { get; set; }
 }

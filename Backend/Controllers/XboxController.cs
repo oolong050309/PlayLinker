@@ -268,7 +268,7 @@ public class XboxController : ControllerBase
             {
                 userPlatformBinding = new UserPlatformBinding
                 {
-                    UserId = userId,
+                    UserId = (int)userId,
                     PlatformId = XBOX_PLATFORM_ID,
                     PlatformUserId = xboxUser.Xuid,
                     BindingStatus = true,

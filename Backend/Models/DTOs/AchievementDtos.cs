@@ -85,7 +85,7 @@ public class AchievementStatisticsDto
 /// </summary>
 public class SyncAchievementsRequestDto
 {
-    public int UserId { get; set; }
+    public long UserId { get; set; }
     public int? PlatformId { get; set; }
     public long? GameId { get; set; }
 }
