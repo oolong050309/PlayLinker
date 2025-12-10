@@ -205,7 +205,7 @@ public class SteamController : ControllerBase
             {
                 userPlatformBinding = new UserPlatformBinding
                 {
-                    UserId = userId,
+                    UserId = (int)userId,
                     PlatformId = STEAM_PLATFORM_ID,
                     PlatformUserId = request.SteamId,
                     BindingStatus = true,
@@ -527,7 +527,7 @@ public class SteamController : ControllerBase
                                                 // 创建新用户成就记录
                                                 _context.UserAchievements.Add(new UserAchievement
                                                 {
-                                                    UserId = userId,
+                                                    UserId = (int)userId,
                                                     AchievementId = achievement.AchievementId,
                                                     PlatformId = STEAM_PLATFORM_ID,
                                                     Unlocked = achieved,
@@ -569,11 +569,11 @@ public class SteamController : ControllerBase
             // 4. 更新用户游戏库统计（统计该用户在所有平台的数据，而不仅仅是Steam）
             // 获取该用户绑定的所有平台账号的 platform_user_id 列表
             var userPlatformUserIds = await _context.UserPlatformBindings
-                .Where(upb => upb.UserId == userId && upb.BindingStatus)
+                .Where(upb => upb.UserId == (int)userId && upb.BindingStatus == true) // 修改点：1.加上(int)强转  2.加上 == true 显式判断
                 .Select(upb => upb.PlatformUserId)
                 .ToListAsync();
 
-            if (userPlatformUserIds.Count == 0)
+            if (userPlatformUserIds.Count == 0) // List的Count是属性，这里不需要加括号，保持原样即可
             {
                 _logger.LogWarning("用户 {UserId} 没有绑定的平台账号", userId);
             }
@@ -586,7 +586,7 @@ public class SteamController : ControllerBase
 
             // 去重统计游戏数量（不同平台可能有相同游戏）
             var uniqueGameIds = allPlatformGames.Select(g => g.GameId).Distinct().ToList();
-            var totalGamesOwned = allPlatformGames.Count; // 所有平台的游戏记录总数
+            var totalGamesOwned = allPlatformGames.Count(); // 所有平台的游戏记录总数
             var totalPlaytimeAllPlatforms = allPlatformGames.Sum(g => g.PlaytimeMinutes);
 
             // 统计所有平台的解锁成就数
@@ -620,9 +620,9 @@ public class SteamController : ControllerBase
             {
                 userLibrary = new UserGameLibrary
                 {
-                    UserId = userId,
+                    UserId = (int)userId,
                     TotalGamesOwned = totalGamesOwned,
-                    GamesPlayed = uniqueGameIds.Count, // 去重后的游戏数量
+                    GamesPlayed = uniqueGameIds.Count(), // 去重后的游戏数量
                     TotalPlaytimeMinutes = totalPlaytimeAllPlatforms,
                     TotalAchievements = totalAchievementsAllPlatforms,
                     UnlockedAchievements = unlockedAchievementsAllPlatforms,
@@ -634,7 +634,7 @@ public class SteamController : ControllerBase
             else
             {
                 userLibrary.TotalGamesOwned = totalGamesOwned;
-                userLibrary.GamesPlayed = uniqueGameIds.Count; // 去重后的游戏数量
+                userLibrary.GamesPlayed = uniqueGameIds.Count(); // 去重后的游戏数量
                 userLibrary.TotalPlaytimeMinutes = totalPlaytimeAllPlatforms;
                 userLibrary.TotalAchievements = totalAchievementsAllPlatforms;
                 userLibrary.UnlockedAchievements = unlockedAchievementsAllPlatforms;

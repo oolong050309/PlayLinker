@@ -1,65 +1,43 @@
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace PlayLinker.Models.Entities;
 
 /// <summary>
-/// 新闻实体类
+/// 新闻/公告源
 /// </summary>
 [Table("news")]
-public class News
+[Index("Date", Name = "idx_date")]
+public partial class News
 {
     [Key]
     [Column("news_id")]
-    public long NewsId { get; set; }
+    public int NewsId { get; set; }
 
-    [Required]
-    [MaxLength(512)]
     [Column("news_title")]
-    public string NewsTitle { get; set; } = string.Empty;
+    [StringLength(512)]
+    public string NewsTitle { get; set; } = null!;
 
-    [MaxLength(2048)]
     [Column("news_url")]
+    [StringLength(2048)]
     public string? NewsUrl { get; set; }
 
+    /// <summary>
+    /// Unix时间戳
+    /// </summary>
     [Column("date")]
     public long Date { get; set; }
 
-    [Required]
-    [MaxLength(128)]
     [Column("author")]
-    public string Author { get; set; } = string.Empty;
+    [StringLength(128)]
+    public string Author { get; set; } = null!;
 
-    [Required]
-    [Column("contents")]
-    public string Contents { get; set; } = string.Empty;
+    [Column("contents", TypeName = "text")]
+    public string Contents { get; set; } = null!;
 
+    [InverseProperty("News")]
     public virtual ICollection<GameNews> GameNews { get; set; } = new List<GameNews>();
 }
-
-/// <summary>
-/// 游戏与新闻关联实体类
-/// </summary>
-[Table("game_news")]
-public class GameNews
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("game_id")]
-    public long GameId { get; set; }
-
-    [Column("news_id")]
-    public long NewsId { get; set; }
-
-    [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    [ForeignKey("GameId")]
-    public virtual Game? Game { get; set; }
-
-    [ForeignKey("NewsId")]
-    public virtual News? News { get; set; }
-}
-

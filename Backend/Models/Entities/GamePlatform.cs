@@ -1,33 +1,43 @@
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace PlayLinker.Models.Entities;
 
 /// <summary>
-/// 游戏平台映射实体类
+/// 游戏在平台的映射
 /// </summary>
+[PrimaryKey("GameId", "PlatformId")]
 [Table("game_platform")]
-public class GamePlatform
+[Index("PlatformId", Name = "platform_id")]
+public partial class GamePlatform
 {
+    [Key]
     [Column("game_id")]
     public long GameId { get; set; }
 
+    [Key]
     [Column("platform_id")]
     public int PlatformId { get; set; }
 
-    [Required]
-    [MaxLength(128)]
+    /// <summary>
+    /// 平台内部标识
+    /// </summary>
     [Column("platform_game_id")]
-    public string PlatformGameId { get; set; } = string.Empty;
+    [StringLength(128)]
+    public string PlatformGameId { get; set; } = null!;
 
-    [MaxLength(2048)]
     [Column("game_platform_url")]
+    [StringLength(2048)]
     public string? GamePlatformUrl { get; set; }
 
     [ForeignKey("GameId")]
-    public virtual Game? Game { get; set; }
+    [InverseProperty("GamePlatforms")]
+    public virtual Game Game { get; set; } = null!;
 
     [ForeignKey("PlatformId")]
-    public virtual Platform? Platform { get; set; }
+    [InverseProperty("GamePlatforms")]
+    public virtual Platform Platform { get; set; } = null!;
 }
-

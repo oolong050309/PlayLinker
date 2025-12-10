@@ -117,7 +117,7 @@ public class MetadataController : ControllerBase
                 .Take(pageSize)
                 .Select(d => new DeveloperDto
                 {
-                    DeveloperId = d.DeveloperId,
+                    DeveloperId = (int)d.DeveloperId,
                     Name = d.Name,
                     GamesCount = d.GameDevelopers.Count
                 })
@@ -169,7 +169,7 @@ public class MetadataController : ControllerBase
                 .Take(pageSize)
                 .Select(p => new PublisherDto
                 {
-                    PublisherId = p.PublisherId,
+                    PublisherId = (int)p.PublisherId,
                     Name = p.Name,
                     GamesCount = p.GamePublishers.Count
                 })

@@ -446,7 +446,7 @@ public class AchievementsController : ControllerBase
                 {
                     _logger.LogInformation("开始同步 Steam 成就: userId={UserId}, steamId={SteamId}, gameIds={GameIds}", 
                         userId, platformUserId, string.Join(",", gameIds));
-                    var steamResult = await SyncSteamAchievementsAsync(userId, platformUserId, gameIds, gameId);
+                    var steamResult = await SyncSteamAchievementsAsync((int)userId, platformUserId, gameIds, gameId);
                     syncedGames += steamResult.SyncedGames;
                     newUnlocks += steamResult.NewUnlocks;
                     _logger.LogInformation("Steam 成就同步完成: syncedGames={SyncedGames}, newUnlocks={NewUnlocks}", 

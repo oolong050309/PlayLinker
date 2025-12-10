@@ -267,7 +267,7 @@ public class PsnController : ControllerBase
             {
                 userPlatformBinding = new UserPlatformBinding
                 {
-                    UserId = userId,
+                    UserId = (int)userId,
                     PlatformId = PSN_PLATFORM_ID,
                     PlatformUserId = psnUser.OnlineId,
                     BindingStatus = true,

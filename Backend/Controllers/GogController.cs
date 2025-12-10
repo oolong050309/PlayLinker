@@ -285,7 +285,7 @@ public class GogController : ControllerBase
             {
                 userPlatformBinding = new UserPlatformBinding
                 {
-                    UserId = userId,
+                    UserId = (int)userId,
                     PlatformId = GOG_PLATFORM_ID,
                     PlatformUserId = gogUser.GogUserId,
                     BindingStatus = true,

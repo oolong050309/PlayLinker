@@ -11,7 +11,7 @@ public class XboxImportRequestDto
     /// 用户ID（必需）
     /// </summary>
     [JsonPropertyName("userId")]
-    public int UserId { get; set; }
+    public long UserId { get; set; }
 
     /// <summary>
     /// Xbox用户ID（XUID格式）

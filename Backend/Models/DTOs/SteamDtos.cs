@@ -5,7 +5,7 @@ namespace PlayLinker.Models.DTOs;
 /// </summary>
 public class SteamImportRequestDto
 {
-    public int UserId { get; set; }
+    public long UserId { get; set; }
     public string SteamId { get; set; } = string.Empty;
     public bool ImportGames { get; set; } = true;
     public bool ImportAchievements { get; set; } = true;
