@@ -83,16 +83,16 @@ public class LocalGamesController : ControllerBase
 
             var query = _context.LocalGameInstalls
                 .Include(lgi => lgi.Game)
-                .Include(lgi => lgi.SaveFiles)
-                .Include(lgi => lgi.Mods)
+                .Include(lgi => lgi.Platform)
+                .Include(lgi => lgi.LocalSaveFiles)
+                .Include(lgi => lgi.LocalMods)
                 .Where(lgi => lgi.UserId == userId)
                 .AsQueryable();
 
             query = sortBy?.ToLower() switch
             {
                 "name" => query.OrderBy(lgi => lgi.Game.Name),
-                "size" => query.OrderByDescending(lgi => lgi.SizeGb),
-                "last_played" => query.OrderByDescending(lgi => lgi.LastPlayed),
+                "detected_time" => query.OrderByDescending(lgi => lgi.DetectedTime),
                 _ => query.OrderByDescending(lgi => lgi.DetectedTime)
             };
 
@@ -106,14 +106,14 @@ public class LocalGamesController : ControllerBase
                     GameId = lgi.GameId,
                     GameName = lgi.Game.Name,
                     PlatformId = lgi.PlatformId,
-                    PlatformName = "Steam", // 简化处理
+                    PlatformName = lgi.Platform != null ? lgi.Platform.PlatformName : "Unknown",
                     InstallPath = lgi.InstallPath,
                     Version = lgi.Version,
-                    SizeGB = lgi.SizeGb ?? 0,
+                    SizeGB = 0, // 数据库表中没有此字段
                     DetectedTime = lgi.DetectedTime,
-                    LastPlayed = lgi.LastPlayed,
-                    SavesCount = lgi.SaveFiles.Count,
-                    ModsCount = lgi.Mods.Count
+                    LastPlayed = null, // 数据库表中没有此字段
+                    SavesCount = lgi.LocalSaveFiles.Count,
+                    ModsCount = lgi.LocalMods.Count
                 })
                 .ToListAsync();
 
@@ -152,8 +152,9 @@ public class LocalGamesController : ControllerBase
         {
             var install = await _context.LocalGameInstalls
                 .Include(lgi => lgi.Game)
-                .Include(lgi => lgi.SaveFiles)
-                .Include(lgi => lgi.Mods)
+                .Include(lgi => lgi.Platform)
+                .Include(lgi => lgi.LocalSaveFiles)
+                .Include(lgi => lgi.LocalMods)
                 .FirstOrDefaultAsync(lgi => lgi.InstallId == id);
 
             if (install == null)
@@ -167,22 +168,22 @@ public class LocalGamesController : ControllerBase
                 GameId = install.GameId,
                 GameName = install.Game.Name,
                 PlatformId = install.PlatformId,
-                PlatformName = "Steam",
+                PlatformName = install.Platform != null ? install.Platform.PlatformName : "Unknown",
                 InstallPath = install.InstallPath,
                 Version = install.Version,
-                SizeGB = install.SizeGb ?? 0,
+                SizeGB = 0, // 数据库表中没有此字段
                 DetectedTime = install.DetectedTime,
-                LastPlayed = install.LastPlayed,
-                ExecutablePath = install.ExecutablePath,
-                ConfigPath = install.ConfigPath,
-                Saves = install.SaveFiles.Select(sf => new SaveFileDto
+                LastPlayed = null, // 数据库表中没有此字段
+                ExecutablePath = null, // 数据库表中没有此字段
+                ConfigPath = null, // 数据库表中没有此字段
+                Saves = install.LocalSaveFiles.Select(sf => new SaveFileDto
                 {
                     SaveId = sf.SaveId,
                     FilePath = sf.FilePath,
                     FileSize = sf.FileSize,
                     UpdatedAt = sf.UpdatedAt
                 }).ToList(),
-                Mods = install.Mods.Select(m => new ModDto
+                Mods = install.LocalMods.Select(m => new ModDto
                 {
                     ModId = m.ModId,
                     ModName = m.ModName,

@@ -40,14 +40,14 @@ public class SavesController : ControllerBase
             int userId = 1001; // 假设当前用户ID
 
             var query = _context.LocalSaveFiles
-                .Include(lsf => lsf.LocalGameInstall)
+                .Include(lsf => lsf.Install)
                     .ThenInclude(lgi => lgi.Game)
-                .Where(lsf => lsf.UserId == userId)
+                .Where(lsf => lsf.Install.UserId == userId)
                 .AsQueryable();
 
             if (gameId.HasValue)
             {
-                query = query.Where(lsf => lsf.LocalGameInstall.GameId == gameId.Value);
+                query = query.Where(lsf => lsf.Install.GameId == gameId.Value);
             }
 
             var total = await query.CountAsync();
@@ -58,8 +58,8 @@ public class SavesController : ControllerBase
                 .Select(lsf => new LocalSaveListDto
                 {
                     SaveId = lsf.SaveId,
-                    GameId = lsf.LocalGameInstall.GameId,
-                    GameName = lsf.LocalGameInstall.Game.Name,
+                    GameId = lsf.Install.GameId,
+                    GameName = lsf.Install.Game.Name,
                     InstallId = lsf.InstallId,
                     FilePath = lsf.FilePath,
                     FileSize = lsf.FileSize,

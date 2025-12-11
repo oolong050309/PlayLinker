@@ -102,7 +102,7 @@ public class CloudController : ControllerBase
         try
         {
             var save = await _context.LocalSaveFiles
-                .Include(lsf => lsf.LocalGameInstall)
+                .Include(lsf => lsf.Install)
                 .FirstOrDefaultAsync(lsf => lsf.SaveId == request.SaveId);
 
             if (save == null)
@@ -117,15 +117,12 @@ public class CloudController : ControllerBase
             var cloudBackup = new CloudSaveBackup
             {
                 CloudBackupId = cloudBackupId,
-                GameId = save.LocalGameInstall.GameId,
-                UserId = save.UserId,
+                GameId = save.Install.GameId,
+                UserId = save.Install.UserId,
                 UploadTime = DateTime.UtcNow,
                 FileSize = save.FileSize,
-                StorageUrl = storageUrl,
-                Compressed = request.Compress,
-                Encrypted = request.Encrypt,
-                Description = request.Description,
-                ExpiresAt = DateTime.UtcNow.AddYears(1)
+                StorageUrl = storageUrl
+                // 注意：数据库表中没有 Compressed, Encrypted, Description, ExpiresAt 字段
             };
 
             _context.CloudSaveBackups.Add(cloudBackup);

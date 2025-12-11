@@ -1,4 +1,4 @@
-namespace PlayLinker.Models;
+namespace PlayLinker.Models.DTOs;
 
 /// <summary>
 /// 统一API响应格式
@@ -77,15 +77,5 @@ public class ResponseMeta
 {
     public string Timestamp { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
     public string Version { get; set; } = "1.0";
-}
-
-/// <summary>
-/// 分页元数据
-/// </summary>
-public class PaginationMeta
-{
-    public int Page { get; set; }
-    public int PageSize { get; set; }
-    public int Total { get; set; }
 }
 
