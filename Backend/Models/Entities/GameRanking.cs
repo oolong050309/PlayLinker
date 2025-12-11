@@ -24,7 +24,7 @@ public partial class GameRanking
     /// <summary>
     /// 峰值在线人数
     /// </summary>
-    [Column("peak_players")]
+    [Column("pack_in_game")]
     public int? PeakPlayers { get; set; }
 
     /// <summary>

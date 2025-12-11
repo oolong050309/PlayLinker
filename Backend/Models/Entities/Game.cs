@@ -41,7 +41,7 @@ public partial class Game
     [StringLength(2048)]
     public string HeaderImage { get; set; } = null!;
 
-    [Column("capsule_image")]
+    [Column("capsile_image")]
     [StringLength(2048)]
     public string CapsuleImage { get; set; } = null!;
 
