@@ -55,6 +55,7 @@ builder.Services.AddHttpClient<ISteamService, SteamService>();
 builder.Services.AddScoped<IXboxService, XboxService>();
 builder.Services.AddScoped<IPsnService, PsnService>();
 builder.Services.AddScoped<IGogService, GogService>();
+builder.Services.AddScoped<ReportGenerationService>();
 
 // 添加控制器
 builder.Services.AddControllers();
