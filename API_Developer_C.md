@@ -763,6 +763,12 @@ URL.revokeObjectURL(url)
 ### 4.2 POST `/api/v1/mods/install` - 安装Mod
 **认证**: 必需
 
+**网页版限制**:
+- ⚠️ 网页版无法自动安装Mod文件，仅记录Mod信息到数据库
+- 系统会提供详细的手动安装指导步骤
+- 用户需要手动下载、解压并放置文件到指定目录
+- 安装完成后需调用确认接口来更新状态
+
 **请求体**:
 ```json
 {
@@ -770,8 +776,9 @@ URL.revokeObjectURL(url)
   "modName": "New Weapons Pack",
   "version": 1,
   "filePath": "D:\\Downloads\\new_weapons.zip",
-  "autoExtract": true,
-  "enabled": true
+  "description": "新武器包，包含10种新武器",
+  "author": "WeaponMaster",
+  "autoEnable": true
 }
 ```
 
@@ -779,24 +786,35 @@ URL.revokeObjectURL(url)
 - `installId`: 游戏安装ID
 - `modName`: Mod名称
 - `version`: Mod版本
-- `filePath`: Mod文件路径
-- `autoExtract`: 是否自动解压
-- `enabled`: 安装后是否启用
+- `filePath`: Mod文件路径（网页版仅用于记录）
+- `description`: Mod描述（可选）
+- `author`: Mod作者（可选）
+- `autoEnable`: 确认安装后是否自动启用
 
 **成功响应** (201):
 ```json
 {
   "success": true,
   "code": "OK",
-  "message": "Mod安装成功",
+  "message": "Mod信息已记录，请按以下步骤手动安装",
   "data": {
     "modId": 6,
     "modName": "New Weapons Pack",
-    "version": 1,
-    "installPath": "D:\\Games\\CP2077\\mods\\new_weapons",
-    "enabled": true,
-    "installedAt": "2024-11-27T10:00:00Z",
-    "sizeGB": 1.2
+    "installId": 2,
+    "installStatus": "pending_manual_install",
+    "targetPath": "D:\\Games\\Cyberpunk2077\\mods\\new_weapons_pack\\",
+    "enabled": false,
+    "installedAt": "2024-12-11T23:35:00Z",
+    "sizeGB": 0.1,
+    "installInstructions": [
+      "1. 下载Mod文件到本地",
+      "2. 解压到：D:\\Games\\Cyberpunk2077\\mods\\new_weapons_pack\\",
+      "3. 确保Mod文件结构正确",
+      "4. 重启游戏以加载Mod",
+      "5. 在PlayLinker中启用该Mod"
+    ],
+    "downloadUrl": "/api/v1/mods/New Weapons Pack/download",
+    "webLimitation": true
   }
 }
 ```
@@ -818,7 +836,41 @@ URL.revokeObjectURL(url)
 
 ---
 
-### 4.3 PATCH `/api/v1/mods/{id}/toggle` - 启用/禁用Mod
+### 4.3 POST `/api/v1/mods/{id}/confirm-install` - 确认手动安装完成
+**认证**: 必需  
+**路径参数**: id = modId
+
+**说明**: 用户手动安装Mod文件后，调用此接口确认安装完成，系统会更新Mod状态为已安装并自动启用
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "手动安装确认成功",
+  "data": {
+    "modId": 6,
+    "modName": "New Weapons Pack",
+    "installStatus": "installed",
+    "enabled": true,
+    "confirmedAt": "2024-12-11T23:40:00Z"
+  }
+}
+```
+
+**错误响应**:
+```json
+// 400 Bad Request - 状态错误
+{
+  "success": false,
+  "code": "ERR_INVALID_STATUS",
+  "message": "该Mod不在等待手动安装状态"
+}
+```
+
+---
+
+### 4.4 PATCH `/api/v1/mods/{id}/toggle` - 启用/禁用Mod
 **认证**: 必需  
 **路径参数**: id = modId
 
@@ -846,7 +898,7 @@ URL.revokeObjectURL(url)
 
 ---
 
-### 4.4 DELETE `/api/v1/mods/{id}` - 卸载Mod
+### 4.5 DELETE `/api/v1/mods/{id}` - 卸载Mod
 **认证**: 必需  
 **路径参数**: id = modId
 
@@ -878,7 +930,7 @@ URL.revokeObjectURL(url)
 
 ---
 
-### 4.5 GET `/api/v1/mods/conflicts` - 检测Mod冲突
+### 4.6 GET `/api/v1/mods/conflicts` - 检测Mod冲突
 **认证**: 必需  
 **查询参数**: `install_id`
 
@@ -1280,24 +1332,4 @@ Content-Disposition: attachment; filename="monthly_report_202411.pdf"
 }
 ```
 
----
 
-## 附录：文件管理最佳实践
-
-### 存档备份策略
-- **自动备份**: 游戏退出时自动备份
-- **定期备份**: 每周自动备份一次
-- **关键节点**: 重要任务前手动备份
-- **保留策略**: 本地保留最近10个，云端保留最近30个
-
-### Mod管理建议
-- **安装前备份**: 安装Mod前自动备份原文件
-- **冲突检测**: 安装时自动检测冲突
-- **加载顺序**: 支持自定义Mod加载顺序
-- **一键恢复**: 出问题时一键恢复原版
-
-### 云存储优化
-- **增量上传**: 只上传变化的部分
-- **压缩传输**: 自动压缩减少流量
-- **断点续传**: 支持大文件断点续传
-- **版本控制**: 保留多个历史版本

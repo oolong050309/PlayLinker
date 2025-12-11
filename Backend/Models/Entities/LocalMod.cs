@@ -41,6 +41,41 @@ public partial class LocalMod
     [Column("install_id")]
     public long InstallId { get; set; }
 
+    /// <summary>
+    /// 安装状态：pending_manual_install, installed, failed
+    /// </summary>
+    [Column("install_status")]
+    [StringLength(50)]
+    public string InstallStatus { get; set; } = "pending_manual_install";
+
+    /// <summary>
+    /// 目标安装路径
+    /// </summary>
+    [Column("target_path")]
+    [StringLength(2048)]
+    public string? TargetPath { get; set; }
+
+    /// <summary>
+    /// Mod描述
+    /// </summary>
+    [Column("description")]
+    [StringLength(1000)]
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// Mod作者
+    /// </summary>
+    [Column("author")]
+    [StringLength(128)]
+    public string? Author { get; set; }
+
+    /// <summary>
+    /// 下载URL
+    /// </summary>
+    [Column("download_url")]
+    [StringLength(2048)]
+    public string? DownloadUrl { get; set; }
+
     [ForeignKey("InstallId")]
     [InverseProperty("LocalMods")]
     public virtual LocalGameInstall Install { get; set; } = null!;

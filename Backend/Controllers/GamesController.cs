@@ -458,5 +458,111 @@ public class GamesController : ControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
+
+    /// <summary>
+    /// 获取游戏Mod列表
+    /// </summary>
+    /// <param name="gameId">游戏ID</param>
+    /// <param name="installId">安装ID（可选）</param>
+    /// <param name="enabled">是否启用（可选）</param>
+    /// <param name="page">页码</param>
+    /// <param name="pageSize">每页数量</param>
+    /// <returns>游戏Mod列表</returns>
+    [HttpGet("{gameId}/mods")]
+    [ProducesResponseType(typeof(ApiResponse<GameModsResponse>), 200)]
+    public async Task<ActionResult<ApiResponse<GameModsResponse>>> GetGameMods(
+        long gameId,
+        [FromQuery] long? installId = null,
+        [FromQuery] bool? enabled = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        try
+        {
+            pageSize = Math.Min(pageSize, 100);
+            page = Math.Max(page, 1);
+
+            // 假设当前用户ID为1001（实际项目中应从JWT Token获取）
+            int userId = 1001;
+
+            // 查询游戏信息
+            var game = await _context.Games.FindAsync(gameId);
+            if (game == null)
+            {
+                return NotFound(ApiResponse<GameModsResponse>.ErrorResponse("ERR_GAME_NOT_FOUND", "游戏不存在"));
+            }
+
+            // 构建查询
+            var query = _context.LocalMods
+                .Include(m => m.Install)
+                .ThenInclude(i => i.Game)
+                .Where(m => m.Install.GameId == gameId && m.Install.UserId == userId);
+
+            // 应用过滤条件
+            if (installId.HasValue)
+            {
+                query = query.Where(m => m.InstallId == installId.Value);
+            }
+
+            if (enabled.HasValue)
+            {
+                query = query.Where(m => m.Enabled == enabled.Value);
+            }
+
+            var total = await query.CountAsync();
+
+            // 分页查询
+            var mods = await query
+                .OrderByDescending(m => m.LastModified)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(m => new ModDetailDto
+                {
+                    ModId = m.ModId,
+                    ModName = m.ModName,
+                    Version = m.Version,
+                    FilePath = m.TargetPath ?? m.FilePath, // 优先使用目标路径
+                    Enabled = m.Enabled ?? false,
+                    LastModified = m.LastModified,
+                    SizeGB = Math.Round((decimal)(new Random().NextDouble() * 5 + 0.1), 2), // 模拟大小
+                    InstallId = m.InstallId,
+                    Description = m.Description ?? $"{m.ModName} - 游戏增强模组",
+                    Author = m.Author ?? "Unknown",
+                    Conflicts = new List<long>() // 简化处理，暂不实现复杂冲突检测
+                })
+                .ToListAsync();
+
+            // 计算汇总信息
+            var allMods = await query.ToListAsync();
+            var summary = new ModsSummary
+            {
+                TotalMods = total,
+                EnabledMods = allMods.Count(m => m.Enabled),
+                TotalSizeGB = Math.Round(allMods.Count * 1.5m, 2), // 模拟总大小
+                ConflictsCount = 0 // 简化处理
+            };
+
+            var response = new GameModsResponse
+            {
+                GameId = gameId,
+                GameName = game.Name,
+                Mods = mods,
+                Meta = new PaginationMeta
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    Total = total
+                },
+                Summary = summary
+            };
+
+            return Ok(ApiResponse<GameModsResponse>.SuccessResponse(response));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting game mods for game {GameId}", gameId);
+            return StatusCode(500, ApiResponse<GameModsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取游戏Mod列表失败"));
+        }
+    }
 }
 
