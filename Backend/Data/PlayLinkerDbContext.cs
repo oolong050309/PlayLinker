@@ -173,7 +173,6 @@ public partial class PlayLinkerDbContext : DbContext
         {
             entity.HasKey(e => e.LinkId).HasName("PRIMARY");
 
-<<<<<<< HEAD
             entity.ToTable("external_links", tb => tb.HasComment("第三方攻略/外链源"));
 
             entity.Property(e => e.Source).HasComment("bilibili,youtube等");
