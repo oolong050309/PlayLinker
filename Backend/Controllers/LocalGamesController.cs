@@ -34,9 +34,13 @@ public class LocalGamesController : ControllerBase
             var startTime = DateTime.UtcNow;
             var gamesFound = new List<LocalGameFoundDto>();
 
-            // 模拟扫描逻辑（实际项目中需要实现真实的文件系统扫描）
-            // 这里仅作为示例，返回空列表
-            _logger.LogInformation("Scanning directories: {Directories}", string.Join(", ", request.Directories));
+            _logger.LogInformation("Scanning with {FileCount} uploaded files", request.UploadedFiles.Count);
+
+            // 方案A：根据前端上传的文件列表分析游戏
+            if (request.UploadedFiles.Any())
+            {
+                gamesFound = AnalyzeUploadedFiles(request.UploadedFiles);
+            }
 
             var scanDuration = (DateTime.UtcNow - startTime).TotalSeconds;
 
@@ -109,13 +113,23 @@ public class LocalGamesController : ControllerBase
                     PlatformName = lgi.Platform != null ? lgi.Platform.PlatformName : "Unknown",
                     InstallPath = lgi.InstallPath,
                     Version = lgi.Version,
-                    SizeGB = 0, // 数据库表中没有此字段
+                    SizeGB = lgi.SizeGb,
                     DetectedTime = lgi.DetectedTime,
-                    LastPlayed = null, // 数据库表中没有此字段
+                    LastPlayed = lgi.LastPlayed,
                     SavesCount = lgi.LocalSaveFiles.Count,
                     ModsCount = lgi.LocalMods.Count
                 })
                 .ToListAsync();
+
+            // 计算汇总信息（基于所有游戏，不只是当前页）
+            var allGames = await query.ToListAsync();
+            var summary = new LocalGamesSummary
+            {
+                TotalGames = total,
+                TotalSizeGB = allGames.Sum(g => g.SizeGb),
+                TotalSaves = allGames.Sum(g => g.LocalSaveFiles.Count),
+                TotalMods = allGames.Sum(g => g.LocalMods.Count)
+            };
 
             var response = new PaginatedResponse<LocalGameListDto>
             {
@@ -125,7 +139,8 @@ public class LocalGamesController : ControllerBase
                     Page = page,
                     PageSize = pageSize,
                     Total = total
-                }
+                },
+                Summary = summary
             };
 
             return Ok(ApiResponse<PaginatedResponse<LocalGameListDto>>.SuccessResponse(response));
@@ -171,11 +186,11 @@ public class LocalGamesController : ControllerBase
                 PlatformName = install.Platform != null ? install.Platform.PlatformName : "Unknown",
                 InstallPath = install.InstallPath,
                 Version = install.Version,
-                SizeGB = 0, // 数据库表中没有此字段
+                SizeGB = install.SizeGb,
                 DetectedTime = install.DetectedTime,
-                LastPlayed = null, // 数据库表中没有此字段
-                ExecutablePath = null, // 数据库表中没有此字段
-                ConfigPath = null, // 数据库表中没有此字段
+                LastPlayed = install.LastPlayed,
+                ExecutablePath = install.ExecutablePath,
+                ConfigPath = install.ConfigPath,
                 Saves = install.LocalSaveFiles.Select(sf => new SaveFileDto
                 {
                     SaveId = sf.SaveId,
@@ -279,6 +294,81 @@ public class LocalGamesController : ControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResponse(
                 "ERR_INTERNAL_SERVER_ERROR", "更新路径失败"));
         }
+    }
+
+    /// <summary>
+    /// 分析前端上传的文件列表，识别游戏
+    /// </summary>
+    private List<LocalGameFoundDto> AnalyzeUploadedFiles(List<UploadedFileInfo> uploadedFiles)
+    {
+        var gamesFound = new List<LocalGameFoundDto>();
+        
+        // 常见的游戏可执行文件名（小写）
+        var commonGameExeNames = new HashSet<string>
+        {
+            "game.exe", "launcher.exe", "play.exe", "client.exe", "start.exe",
+            "cs2.exe", "csgo.exe", "dota2.exe", "hl2.exe",
+            "cyberpunk2077.exe", "witcher3.exe", "eldenring.exe",
+            "gta5.exe", "rdr2.exe", "minecraft.exe"
+        };
+
+        // 按目录分组（根据 RelativePath 的第一级目录）
+        var gameGroups = uploadedFiles
+            .Where(f => !string.IsNullOrEmpty(f.RelativePath))
+            .GroupBy(f =>
+            {
+                var parts = f.RelativePath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                return parts.Length > 0 ? parts[0] : "Unknown";
+            })
+            .ToList();
+
+        long fakeInstallId = 1;
+        long fakeGameId = 10000;
+
+        foreach (var group in gameGroups)
+        {
+            var gameDirName = group.Key;
+            var filesInDir = group.ToList();
+
+            // 查找可执行文件
+            var exeFiles = filesInDir
+                .Where(f => f.IsExecutable || f.FileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (!exeFiles.Any())
+            {
+                _logger.LogDebug("No executable found in directory: {Dir}", gameDirName);
+                continue;
+            }
+
+            // 检查是否有常见游戏 exe 或者和目录名匹配的 exe
+            var mainExe = exeFiles.FirstOrDefault(e =>
+                commonGameExeNames.Contains(e.FileName.ToLower()) ||
+                e.FileName.Replace(".exe", "").Equals(gameDirName, StringComparison.OrdinalIgnoreCase)
+            ) ?? exeFiles.First();
+
+            // 计算总大小
+            long totalBytes = filesInDir.Sum(f => f.FileSize);
+            decimal sizeGB = Math.Round(totalBytes / 1024.0m / 1024 / 1024, 2);
+
+            var gameFound = new LocalGameFoundDto
+            {
+                InstallId = fakeInstallId++,
+                GameId = fakeGameId++,
+                GameName = gameDirName,
+                InstallPath = gameDirName, // 前端只能给相对路径
+                Version = "Unknown",
+                SizeGB = sizeGB,
+                DetectedTime = DateTime.UtcNow,
+                LastPlayed = null // 可以从文件的最后修改时间推断
+            };
+
+            gamesFound.Add(gameFound);
+            _logger.LogInformation("Found game: {GameName}, Size: {Size}GB, Exe: {Exe}",
+                gameDirName, sizeGB, mainExe.FileName);
+        }
+
+        return gamesFound;
     }
 }
 

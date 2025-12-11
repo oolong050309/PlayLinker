@@ -121,3 +121,11 @@ public class CloudFileInfo
     public DateTime UploadTime { get; set; }
     public decimal FileSizeMB { get; set; }
 }
+
+// 本地存档汇总信息
+public class LocalSavesSummary
+{
+    public int TotalSaves { get; set; }
+    public decimal TotalSizeMB { get; set; }
+    public int BackedUpCount { get; set; }
+}

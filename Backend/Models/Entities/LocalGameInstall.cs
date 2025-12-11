@@ -40,6 +40,20 @@ public partial class LocalGameInstall
     [StringLength(100)]
     public string Version { get; set; } = null!;
 
+    [Column("size_gb", TypeName = "decimal(10, 2)")]
+    public decimal SizeGb { get; set; }
+
+    [Column("last_played", TypeName = "datetime")]
+    public DateTime? LastPlayed { get; set; }
+
+    [Column("executable_path")]
+    [StringLength(750)]
+    public string? ExecutablePath { get; set; }
+
+    [Column("config_path")]
+    [StringLength(750)]
+    public string? ConfigPath { get; set; }
+
     [ForeignKey("GameId")]
     [InverseProperty("LocalGameInstalls")]
     public virtual Game Game { get; set; } = null!;
