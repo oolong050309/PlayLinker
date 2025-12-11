@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PlayLinker.Data;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
+using System.IO.Compression;
 
 namespace PlayLinker.Controllers;
 
@@ -12,11 +13,13 @@ public class CloudController : ControllerBase
 {
     private readonly PlayLinkerDbContext _context;
     private readonly ILogger<CloudController> _logger;
+    private readonly IConfiguration _configuration;
 
-    public CloudController(PlayLinkerDbContext context, ILogger<CloudController> logger)
+    public CloudController(PlayLinkerDbContext context, ILogger<CloudController> logger, IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -65,9 +68,23 @@ public class CloudController : ControllerBase
                     FileSize = csb.FileSize,
                     FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2),
                     StorageUrl = csb.StorageUrl,
+                    Metadata = null, // 网页版不支持存档元数据解析
                     ExpiresAt = csb.ExpiresAt
                 })
                 .ToListAsync();
+
+            // 计算汇总信息（基于所有云存档，不只是当前页）
+            var allCloudSaves = await query.ToListAsync();
+            var storageLimitMB = 1024m; // 1GB 存储限制
+            var totalSizeMB = Math.Round(allCloudSaves.Sum(s => s.FileSize) / 1024.0m / 1024, 2);
+            
+            var summary = new CloudSavesSummary
+            {
+                TotalCloudSaves = total,
+                TotalSizeMB = totalSizeMB,
+                StorageUsedMB = totalSizeMB,
+                StorageLimitMB = storageLimitMB
+            };
 
             var response = new PaginatedResponse<CloudSaveListDto>
             {
@@ -77,7 +94,8 @@ public class CloudController : ControllerBase
                     Page = page,
                     PageSize = pageSize,
                     Total = total
-                }
+                },
+                Summary = summary
             };
 
             return Ok(ApiResponse<PaginatedResponse<CloudSaveListDto>>.SuccessResponse(response));
@@ -93,52 +111,119 @@ public class CloudController : ControllerBase
     /// <summary>
     /// 上传存档到云端
     /// </summary>
-    /// <param name="request">上传请求</param>
+    /// <param name="file">存档文件</param>
+    /// <param name="saveId">本地存档ID</param>
+    /// <param name="compress">是否压缩</param>
+    /// <param name="encrypt">是否加密</param>
+    /// <param name="description">描述</param>
     /// <returns>上传结果</returns>
+    /// <remarks>
+    /// 网页版实现：用户手动选择存档文件上传到云服务器磁盘
+    /// </remarks>
     [HttpPost("upload")]
+    [RequestSizeLimit(100_000_000)] // 限制100MB
     [ProducesResponseType(typeof(ApiResponse<UploadToCloudResponse>), 201)]
-    public async Task<ActionResult<ApiResponse<UploadToCloudResponse>>> UploadToCloud([FromBody] UploadToCloudRequest request)
+    public async Task<ActionResult<ApiResponse<UploadToCloudResponse>>> UploadToCloud(
+        [FromForm] IFormFile file,
+        [FromForm] long saveId,
+        [FromForm] bool compress = false,
+        [FromForm] bool encrypt = false,
+        [FromForm] string? description = null)
     {
         try
         {
+            // 1. 验证文件
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(ApiResponse<UploadToCloudResponse>.ErrorResponse(
+                    "ERR_NO_FILE", "请选择要上传的文件"));
+            }
+
+            var maxSizeMB = _configuration.GetValue<int>("CloudStorage:MaxFileSizeMB");
+            if (file.Length > maxSizeMB * 1024 * 1024)
+            {
+                return BadRequest(ApiResponse<UploadToCloudResponse>.ErrorResponse(
+                    "ERR_FILE_TOO_LARGE", $"文件大小不能超过{maxSizeMB}MB"));
+            }
+
+            // 2. 验证存档是否存在
             var save = await _context.LocalSaveFiles
                 .Include(lsf => lsf.Install)
-                .FirstOrDefaultAsync(lsf => lsf.SaveId == request.SaveId);
+                .FirstOrDefaultAsync(lsf => lsf.SaveId == saveId);
 
             if (save == null)
             {
-                return NotFound(ApiResponse<UploadToCloudResponse>.ErrorResponse("ERR_SAVE_NOT_FOUND", "存档不存在"));
+                return NotFound(ApiResponse<UploadToCloudResponse>.ErrorResponse(
+                    "ERR_SAVE_NOT_FOUND", "存档不存在"));
             }
 
-            var cloudBackupId = $"cloud_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-            var storageUrl = $"https://storage.playlinker.com/saves/{cloudBackupId}";
-            var uploadedSize = request.Compress ? save.FileSize / 2 : save.FileSize;
+            // 3. 生成云备份ID和存储路径
+            int userId = save.Install.UserId;
+            var cloudBackupId = $"cloud_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}";
+            var relativePath = $"user_{userId}\\game_{save.Install.GameId}\\{cloudBackupId}.dat";
+            
+            var localPath = _configuration["CloudStorage:LocalPath"];
+            var fullPath = Path.Combine(localPath, relativePath);
+            
+            // 4. 创建目录
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+                _logger.LogInformation("Created directory: {Directory}", directory);
+            }
 
+            // 5. 保存文件
+            long uploadedSize = 0;
+            using (var stream = new FileStream(fullPath, FileMode.Create))
+            {
+                if (compress)
+                {
+                    // 压缩后保存
+                    using (var gzipStream = new GZipStream(stream, CompressionMode.Compress))
+                    {
+                        await file.CopyToAsync(gzipStream);
+                    }
+                    uploadedSize = new FileInfo(fullPath).Length;
+                    _logger.LogInformation("File compressed and saved: {Size} bytes", uploadedSize);
+                }
+                else
+                {
+                    await file.CopyToAsync(stream);
+                    uploadedSize = stream.Length;
+                    _logger.LogInformation("File saved: {Size} bytes", uploadedSize);
+                }
+            }
+
+            // 6. 记录到数据库
+            var baseUrl = _configuration["CloudStorage:BaseUrl"];
+            var storageUrl = $"{baseUrl}/{relativePath.Replace("\\", "/")}";
+            
             var cloudBackup = new CloudSaveBackup
             {
                 CloudBackupId = cloudBackupId,
                 GameId = save.Install.GameId,
-                UserId = save.Install.UserId,
+                UserId = userId,
                 UploadTime = DateTime.UtcNow,
-                FileSize = save.FileSize,
+                FileSize = (int)(uploadedSize / 1024 / 1024), // 转换为MB
                 StorageUrl = storageUrl
-                // 注意：数据库表中没有 Compressed, Encrypted, Description, ExpiresAt 字段
             };
 
             _context.CloudSaveBackups.Add(cloudBackup);
             await _context.SaveChangesAsync();
 
+            // 7. 返回响应
             var response = new UploadToCloudResponse
             {
                 CloudBackupId = cloudBackupId,
-                SaveId = request.SaveId,
+                SaveId = saveId,
                 StorageUrl = storageUrl,
-                OriginalSize = save.FileSize,
+                OriginalSize = file.Length,
                 UploadedSize = uploadedSize,
-                Compressed = request.Compress,
-                Encrypted = request.Encrypt,
+                Compressed = compress,
+                Encrypted = encrypt,
                 UploadTime = DateTime.UtcNow,
-                ExpiresAt = cloudBackup.ExpiresAt
+                ExpiresAt = DateTime.UtcNow.AddYears(1)
             };
 
             return CreatedAtAction(nameof(UploadToCloud), new { id = cloudBackupId },
@@ -146,9 +231,9 @@ public class CloudController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error uploading save {SaveId} to cloud", request.SaveId);
+            _logger.LogError(ex, "Error uploading save {SaveId} to cloud", saveId);
             return StatusCode(500, ApiResponse<UploadToCloudResponse>.ErrorResponse(
-                "ERR_UPLOAD_FAILED", "上传存档失败"));
+                "ERR_UPLOAD_FAILED", $"上传存档失败: {ex.Message}"));
         }
     }
 
@@ -156,37 +241,55 @@ public class CloudController : ControllerBase
     /// 从云端下载存档
     /// </summary>
     /// <param name="id">云备份ID</param>
-    /// <param name="request">下载请求</param>
-    /// <returns>下载结果</returns>
-    [HttpPost("download/{id}")]
-    [ProducesResponseType(typeof(ApiResponse<DownloadFromCloudResponse>), 200)]
-    public async Task<ActionResult<ApiResponse<DownloadFromCloudResponse>>> DownloadFromCloud(
-        string id,
-        [FromBody] DownloadFromCloudRequest request)
+    /// <returns>存档文件</returns>
+    /// <remarks>
+    /// 网页版实现：直接返回文件流供用户下载
+    /// </remarks>
+    [HttpGet("download/{id}")]
+    [ProducesResponseType(typeof(FileResult), 200)]
+    public async Task<IActionResult> DownloadFromCloud(string id)
     {
         try
         {
             var cloudBackup = await _context.CloudSaveBackups.FindAsync(id);
             if (cloudBackup == null)
             {
-                return NotFound(ApiResponse<DownloadFromCloudResponse>.ErrorResponse("ERR_BACKUP_NOT_FOUND", "云存档不存在"));
+                return NotFound(ApiResponse<object>.ErrorResponse(
+                    "ERR_BACKUP_NOT_FOUND", "云备份不存在"));
             }
 
-            var response = new DownloadFromCloudResponse
-            {
-                CloudBackupId = id,
-                DownloadPath = request.TargetPath,
-                FileSize = cloudBackup.FileSize,
-                DownloadTime = DateTime.UtcNow
-            };
+            // 从 storage_url 提取相对路径
+            var baseUrl = _configuration["CloudStorage:BaseUrl"];
+            var relativePath = cloudBackup.StorageUrl.Replace(baseUrl + "/", "").Replace("/", "\\");
+            
+            var localPath = _configuration["CloudStorage:LocalPath"];
+            var fullPath = Path.Combine(localPath, relativePath);
 
-            return Ok(ApiResponse<DownloadFromCloudResponse>.SuccessResponse(response, "存档下载成功"));
+            if (!System.IO.File.Exists(fullPath))
+            {
+                _logger.LogError("File not found: {Path}", fullPath);
+                return NotFound(ApiResponse<object>.ErrorResponse(
+                    "ERR_FILE_NOT_FOUND", "存档文件不存在"));
+            }
+
+            // 读取文件
+            var memory = new MemoryStream();
+            using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read))
+            {
+                await stream.CopyToAsync(memory);
+            }
+            memory.Position = 0;
+
+            var fileName = $"{id}.dat";
+            _logger.LogInformation("Downloading file: {FileName}, Size: {Size} bytes", fileName, memory.Length);
+
+            return File(memory, "application/octet-stream", fileName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error downloading cloud save {CloudBackupId}", id);
-            return StatusCode(500, ApiResponse<DownloadFromCloudResponse>.ErrorResponse(
-                "ERR_DOWNLOAD_FAILED", "下载存档失败"));
+            _logger.LogError(ex, "Error downloading cloud backup {Id}", id);
+            return StatusCode(500, ApiResponse<object>.ErrorResponse(
+                "ERR_DOWNLOAD_FAILED", $"下载存档失败: {ex.Message}"));
         }
     }
 

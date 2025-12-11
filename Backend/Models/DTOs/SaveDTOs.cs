@@ -129,3 +129,12 @@ public class LocalSavesSummary
     public decimal TotalSizeMB { get; set; }
     public int BackedUpCount { get; set; }
 }
+
+// 云存档汇总信息
+public class CloudSavesSummary
+{
+    public int TotalCloudSaves { get; set; }
+    public decimal TotalSizeMB { get; set; }
+    public decimal StorageUsedMB { get; set; }
+    public decimal StorageLimitMB { get; set; }
+}

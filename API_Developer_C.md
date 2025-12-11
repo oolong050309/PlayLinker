@@ -521,6 +521,11 @@
 **认证**: 必需  
 **查询参数**: `game_id`, `page`, `page_size`
 
+**网页版限制**:
+- ⚠️ `metadata` 字段在网页版中固定返回 `null`
+- 存档元数据解析需要本地客户端版本
+- ✅ `summary` 汇总信息已实现
+
 **成功响应** (200):
 ```json
 {
@@ -536,12 +541,8 @@
         "uploadTime": "2024-11-27T10:00:00Z",
         "fileSize": 5242880,
         "fileSizeMB": 5.0,
-        "storageUrl": "https://storage.playlinker.com/saves/...",
-        "metadata": {
-          "characterName": "V",
-          "playTime": "45:30:00",
-          "level": 30
-        },
+        "storageUrl": "https://114.55.115.211/storage/saves/user_1001/game_10004/cloud_xxx.dat",
+        "metadata": null,
         "expiresAt": "2025-11-27T10:00:00Z"
       }
     ],
@@ -561,20 +562,24 @@
 ### 3.2 POST `/api/v1/cloud/upload` - 上传到云端
 **认证**: 必需
 
-**请求体**:
-```json
-{
-  "saveId": 1,
-  "compress": true,
-  "encrypt": true,
-  "description": "关键任务前存档"
-}
-```
+**网页版实现**:
+- ✅ **已实现**：用户手动选择存档文件上传到云服务器
+- 文件存储位置：`D:\PlayLinker\Storage\Saves\user_{userId}\game_{gameId}\`
+- 支持压缩（GZip）
+- 最大文件大小：100MB
+
+**请求体** (multipart/form-data):
+- `file`: 存档文件（必需）
+- `saveId`: 本地存档ID（必需）
+- `compress`: 是否压缩（可选，默认false）
+- `encrypt`: 是否加密（可选，默认false，暂未实现）
+- `description`: 描述（可选）
 
 **字段说明**:
+- `file`: 用户选择的存档文件
 - `saveId`: 本地存档ID
-- `compress`: 是否压缩
-- `encrypt`: 是否加密
+- `compress`: 是否压缩（true时使用GZip压缩）
+- `encrypt`: 是否加密（暂未实现）
 - `description`: 描述（可选）
 
 **成功响应** (201):
@@ -599,30 +604,44 @@
 
 ---
 
-### 3.3 POST `/api/v1/cloud/download/{id}` - 从云端下载
+### 3.3 GET `/api/v1/cloud/download/{id}` - 从云端下载
 **认证**: 必需  
 **路径参数**: id = cloudBackupId
 
-**请求体**:
-```json
-{
-  "targetPath": "C:\\Users\\Player\\Downloads\\save001.dat"
-}
-```
+**网页版实现**:
+- ✅ **已实现**：直接返回文件流供用户下载
+- 浏览器会自动弹出下载对话框
+- 无需指定目标路径（由用户选择）
+
+**无需请求体**
 
 **成功响应** (200):
-```json
-{
-  "success": true,
-  "code": "OK",
-  "message": "存档下载成功",
-  "data": {
-    "cloudBackupId": "cloud_20241127_100000",
-    "downloadPath": "C:\\Users\\Player\\Downloads\\save001.dat",
-    "fileSize": 5242880,
-    "downloadTime": "2024-11-27T10:05:00Z"
-  }
-}
+```
+HTTP/1.1 200 OK
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="cloud_20241127_100000.dat"
+Content-Length: 5242880
+
+[文件的二进制内容]
+```
+
+**说明**:
+- 此接口返回文件流，不是JSON格式
+- 浏览器会自动识别为文件下载并弹出"另存为"对话框
+- 用户选择保存位置后，文件下载到本地
+- `Content-Disposition` 头指定了默认文件名
+
+**前端调用示例**:
+```javascript
+const response = await axios.get(`/api/v1/cloud/download/${cloudBackupId}`, {
+  responseType: 'blob'
+})
+const url = URL.createObjectURL(new Blob([response.data]))
+const link = document.createElement('a')
+link.href = url
+link.download = `${cloudBackupId}.dat`
+link.click()
+URL.revokeObjectURL(url)
 ```
 
 ---
