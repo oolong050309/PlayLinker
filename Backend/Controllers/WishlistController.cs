@@ -34,7 +34,7 @@ public class WishlistController : ControllerBase
     {
         var userId = GetCurrentUserId();
         var query = _context.PriceAlertSubscriptions
-            .Where(s => s.UserId == userId && s.IsActive)
+            .Where(w => w.UserId == userId && (w.IsActive ?? true))
             .Include(s => s.Game)
             .Include(s => s.Platform);
 
@@ -67,7 +67,7 @@ public class WishlistController : ControllerBase
                 IsOnSale = latestPrice?.IsDiscount ?? false,
                 TargetPrice = sub.TargetPrice,
                 TargetDiscount = sub.TargetDiscount,
-                AddedAt = sub.CreatedAt
+                AddedAt = sub.CreatedAt ?? DateTime.UtcNow
             });
         }
 
@@ -126,6 +126,6 @@ public class WishlistController : ControllerBase
         sub.IsActive = false;
         await _context.SaveChangesAsync();
 
-        return Ok(ApiResponse<object>.SuccessResponse(null, "已从愿望单移除"));
+        return Ok(ApiResponse<object>.SuccessResponse(new { }, "已从愿望单移除"));
     }
 }

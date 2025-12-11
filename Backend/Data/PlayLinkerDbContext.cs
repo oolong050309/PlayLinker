@@ -105,17 +105,6 @@ public partial class PlayLinkerDbContext : DbContext
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
         => optionsBuilder.UseMySql("server=114.55.115.211;database=playlinker_db;user=root;password=123456", Microsoft.EntityFrameworkCore.ServerVersion.Parse("8.0.44-mysql"));
 
-    // D模块：用户偏好与推荐
-    public DbSet<UserPreference> UserPreferences { get; set; }
-    public DbSet<PreferenceGenre> PreferenceGenres { get; set; }
-    public DbSet<Recommendation> Recommendations { get; set; }
-    public DbSet<RecommendationFeedback> RecommendationFeedbacks { get; set; }
-
-    // D模块：价格监控与愿望单
-    public DbSet<PriceHistory> PriceHistories { get; set; }
-    public DbSet<PriceAlertSubscription> PriceAlertSubscriptions { get; set; }
-    public DbSet<PriceAlertLog> PriceAlertLogs { get; set; }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder

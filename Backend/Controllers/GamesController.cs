@@ -506,7 +506,7 @@ public class GamesController : ControllerBase
 
             if (enabled.HasValue)
             {
-                query = query.Where(m => m.Enabled == enabled.Value);
+                query = query.Where(m => (m.Enabled ?? false) == enabled.Value);
             }
 
             var total = await query.CountAsync();
@@ -537,7 +537,7 @@ public class GamesController : ControllerBase
             var summary = new ModsSummary
             {
                 TotalMods = total,
-                EnabledMods = allMods.Count(m => m.Enabled),
+                EnabledMods = allMods.Count(m => m.Enabled ?? false),
                 TotalSizeGB = Math.Round(allMods.Count * 1.5m, 2), // 模拟总大小
                 ConflictsCount = 0 // 简化处理
             };

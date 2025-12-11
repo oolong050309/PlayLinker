@@ -69,7 +69,7 @@ public class CloudController : ControllerBase
                     FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2),
                     StorageUrl = csb.StorageUrl,
                     Metadata = null, // 网页版不支持存档元数据解析
-                    ExpiresAt = csb.ExpiresAt
+                    ExpiresAt = DateTime.UtcNow.AddYears(1) // 默认1年后过期
                 })
                 .ToListAsync();
 
@@ -222,8 +222,7 @@ public class CloudController : ControllerBase
                 UploadedSize = uploadedSize,
                 Compressed = compress,
                 Encrypted = encrypt,
-                UploadTime = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddYears(1)
+                UploadTime = DateTime.UtcNow
             };
 
             return CreatedAtAction(nameof(UploadToCloud), new { id = cloudBackupId },

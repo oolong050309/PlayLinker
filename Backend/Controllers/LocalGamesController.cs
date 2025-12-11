@@ -26,7 +26,7 @@ public class LocalGamesController : ControllerBase
     /// <returns>扫描结果</returns>
     [HttpPost("scan")]
     [ProducesResponseType(typeof(ApiResponse<ScanLocalGamesResponse>), 200)]
-    public async Task<ActionResult<ApiResponse<ScanLocalGamesResponse>>> ScanLocalGames([FromBody] ScanLocalGamesRequest request)
+    public Task<ActionResult<ApiResponse<ScanLocalGamesResponse>>> ScanLocalGames([FromBody] ScanLocalGamesRequest request)
     {
         try
         {
@@ -53,13 +53,13 @@ public class LocalGamesController : ControllerBase
                 ScannedDirectories = request.Directories.Count
             };
 
-            return Ok(ApiResponse<ScanLocalGamesResponse>.SuccessResponse(response, "扫描完成"));
+            return Task.FromResult<ActionResult<ApiResponse<ScanLocalGamesResponse>>>(Ok(ApiResponse<ScanLocalGamesResponse>.SuccessResponse(response, "扫描完成")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error scanning local games");
-            return StatusCode(500, ApiResponse<ScanLocalGamesResponse>.ErrorResponse(
-                "ERR_SCAN_FAILED", "扫描失败"));
+            return Task.FromResult<ActionResult<ApiResponse<ScanLocalGamesResponse>>>(StatusCode(500, ApiResponse<ScanLocalGamesResponse>.ErrorResponse(
+                "ERR_SCAN_FAILED", "扫描失败")));
         }
     }
 
@@ -109,7 +109,7 @@ public class LocalGamesController : ControllerBase
                     InstallId = lgi.InstallId,
                     GameId = lgi.GameId,
                     GameName = lgi.Game.Name,
-                    PlatformId = lgi.PlatformId,
+                    PlatformId = lgi.PlatformId ?? 0,
                     PlatformName = lgi.Platform != null ? lgi.Platform.PlatformName : "Unknown",
                     InstallPath = lgi.InstallPath,
                     Version = lgi.Version,
@@ -182,7 +182,7 @@ public class LocalGamesController : ControllerBase
                 InstallId = install.InstallId,
                 GameId = install.GameId,
                 GameName = install.Game.Name,
-                PlatformId = install.PlatformId,
+                PlatformId = install.PlatformId ?? 0,
                 PlatformName = install.Platform != null ? install.Platform.PlatformName : "Unknown",
                 InstallPath = install.InstallPath,
                 Version = install.Version,
@@ -203,7 +203,7 @@ public class LocalGamesController : ControllerBase
                     ModId = m.ModId,
                     ModName = m.ModName,
                     Version = m.Version,
-                    Enabled = m.Enabled
+                    Enabled = m.Enabled ?? false
                 }).ToList()
             };
 

@@ -24,10 +24,13 @@ public class ReportGenerationService
     public async Task<string> GenerateMonthlyReportHtml(int userId, DateTime startDate, DateTime endDate)
     {
         // 查询数据
-        var gameRecords = await _context.UserPlatformGameRecords
+        var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
-            .Include(r => r.Platform)
-            .Where(r => r.UserId == userId)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.Platform)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.UserPlatformBindings)
+            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
             .ToListAsync();
 
         var achievements = await _context.UserAchievements
@@ -217,7 +220,7 @@ public class ReportGenerationService
                     <tr>
                         <td class='rank'>#{i + 1}</td>
                         <td>{r.Game?.Name ?? "Unknown"}</td>
-                        <td>{r.Platform?.PlatformName ?? "Unknown"}</td>
+                        <td>{r.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"}</td>
                         <td>{Math.Round(r.PlaytimeMinutes / 60.0, 1)} 小时</td>
                         <td>{(totalMinutes > 0 ? Math.Round((decimal)r.PlaytimeMinutes / totalMinutes * 100, 1) : 0)}%</td>
                     </tr>"))}
@@ -249,10 +252,13 @@ public class ReportGenerationService
     public async Task<byte[]> GenerateMonthlyReportCsv(int userId, DateTime startDate, DateTime endDate)
     {
         // 查询数据
-        var gameRecords = await _context.UserPlatformGameRecords
+        var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
-            .Include(r => r.Platform)
-            .Where(r => r.UserId == userId)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.Platform)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.UserPlatformBindings)
+            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
             .OrderByDescending(r => r.PlaytimeMinutes)
             .ToListAsync();
 
@@ -279,7 +285,7 @@ public class ReportGenerationService
         int rank = 1;
         foreach (var record in gameRecords)
         {
-            csv.AppendLine($"{rank},{record.Game?.Name ?? "Unknown"},{record.Platform?.PlatformName ?? "Unknown"},{Math.Round(record.PlaytimeMinutes / 60.0, 1)},{record.PlaytimeMinutes}");
+            csv.AppendLine($"{rank},{record.Game?.Name ?? "Unknown"},{record.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"},{Math.Round(record.PlaytimeMinutes / 60.0, 1)},{record.PlaytimeMinutes}");
             rank++;
         }
         
@@ -298,10 +304,13 @@ public class ReportGenerationService
         QuestPDF.Settings.License = LicenseType.Community;
 
         // 查询数据
-        var gameRecords = await _context.UserPlatformGameRecords
+        var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
-            .Include(r => r.Platform)
-            .Where(r => r.UserId == userId)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.Platform)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.UserPlatformBindings)
+            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
             .ToListAsync();
 
         var achievements = await _context.UserAchievements
@@ -321,7 +330,7 @@ public class ReportGenerationService
             .ToList();
 
         // 生成PDF
-        var pdfBytes = Document.Create(container =>
+        var document = Document.Create(container =>
         {
             container.Page(page =>
             {
@@ -433,7 +442,7 @@ public class ReportGenerationService
                                 table.Cell().Background(bgColor).Padding(8)
                                     .Text(game.Game?.Name ?? "Unknown");
                                 table.Cell().Background(bgColor).Padding(8)
-                                    .Text(game.Platform?.PlatformName ?? "Unknown");
+                                    .Text(game.PlayerPlatform?.Platform?.PlatformName ?? "Unknown");
                                 table.Cell().Background(bgColor).Padding(8)
                                     .Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}h");
                                 table.Cell().Background(bgColor).Padding(8)
@@ -464,15 +473,16 @@ public class ReportGenerationService
                             .FontSize(9).FontColor(Colors.Grey.Darken1);
                         row.ConstantItem(100).AlignRight().Text(text =>
                         {
-                            text.Span("Page ");
-                            text.CurrentPageNumber();
-                            text.Span(" / ");
-                            text.TotalPages();
-                        }).FontSize(9).FontColor(Colors.Grey.Darken1);
+                            text.Span("Page ").FontSize(9).FontColor(Colors.Grey.Darken1);
+                            text.CurrentPageNumber().FontSize(9).FontColor(Colors.Grey.Darken1);
+                            text.Span(" / ").FontSize(9).FontColor(Colors.Grey.Darken1);
+                            text.TotalPages().FontSize(9).FontColor(Colors.Grey.Darken1);
+                        });
                     });
             });
-        }).GeneratePdf();
+        });
 
+        var pdfBytes = document.GeneratePdf();
         return pdfBytes;
     }
 }

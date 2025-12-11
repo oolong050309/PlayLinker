@@ -93,7 +93,7 @@ public class ReportsController : ControllerBase
     /// </summary>
     [HttpPost("generate")]
     [ProducesResponseType(typeof(ApiResponse<GenerateReportResponse>), 202)]
-    public async Task<ActionResult<ApiResponse<GenerateReportResponse>>> GenerateReport([FromBody] GenerateReportRequest request)
+    public Task<ActionResult<ApiResponse<GenerateReportResponse>>> GenerateReport([FromBody] GenerateReportRequest request)
     {
         try
         {
@@ -113,12 +113,12 @@ public class ReportsController : ControllerBase
 
             _logger.LogInformation("Report generation started: {ReportId}, Template: {TemplateId}", reportId, request.TemplateId);
 
-            return StatusCode(202, ApiResponse<GenerateReportResponse>.SuccessResponse(response, "报表生成任务已创建"));
+            return Task.FromResult<ActionResult<ApiResponse<GenerateReportResponse>>>(StatusCode(202, ApiResponse<GenerateReportResponse>.SuccessResponse(response, "报表生成任务已创建")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating report");
-            return StatusCode(500, ApiResponse<GenerateReportResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "生成报表失败"));
+            return Task.FromResult<ActionResult<ApiResponse<GenerateReportResponse>>>(StatusCode(500, ApiResponse<GenerateReportResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "生成报表失败")));
         }
     }
 

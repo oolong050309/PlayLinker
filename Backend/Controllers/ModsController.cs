@@ -96,7 +96,7 @@ public class ModsController : ControllerBase
                 InstallId = newMod.InstallId,
                 InstallStatus = newMod.InstallStatus,
                 TargetPath = targetPath,
-                Enabled = newMod.Enabled,
+                Enabled = newMod.Enabled ?? false,
                 InstalledAt = newMod.LastModified,
                 SizeGB = sizeGB,
                 InstallInstructions = installInstructions,
@@ -142,7 +142,7 @@ public class ModsController : ControllerBase
             {
                 ModId = mod.ModId,
                 ModName = mod.ModName,
-                Enabled = mod.Enabled,
+                Enabled = mod.Enabled ?? false,
                 UpdatedAt = mod.LastModified
             };
 

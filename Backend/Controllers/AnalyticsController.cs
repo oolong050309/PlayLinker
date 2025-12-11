@@ -37,9 +37,11 @@ public class AnalyticsController : ControllerBase
             var analyzePeriod = period ?? $"{year ?? DateTime.UtcNow.Year}-{month ?? DateTime.UtcNow.Month:D2}";
 
             // 从数据库查询用户的游戏记录
-            var gameRecords = await _context.UserPlatformGameRecords
+            var gameRecords = await _context.UserPlatformLibraries
                 .Include(r => r.Game)
-                .Where(r => r.UserId == userId)
+                .Include(r => r.PlayerPlatform)
+                .ThenInclude(pp => pp.UserPlatformBindings)
+                .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
                 .ToListAsync();
 
             // 计算总游玩时间
@@ -54,7 +56,7 @@ public class AnalyticsController : ControllerBase
                 .Select(r => new GamePlaytimeBreakdown
                 {
                     GameId = r.GameId,
-                    Name = r.Game?.Name ?? "Unknown",
+                    Name = r.Game?.Name ?? string.Empty,
                     Minutes = r.PlaytimeMinutes,
                     Percentage = totalMinutes > 0 ? Math.Round((decimal)r.PlaytimeMinutes / totalMinutes * 100, 1) : 0,
                     Sessions = new Random().Next(10, 50) // 模拟会话数（无法从现有数据获取）
@@ -66,7 +68,7 @@ public class AnalyticsController : ControllerBase
                 Period = analyzePeriod,
                 TotalMinutes = totalMinutes,
                 DailyAverage = dailyAverage,
-                PeakDay = null, // 无法从累计数据获取
+                PeakDay = string.Empty, // 无法从累计数据获取
                 PeakMinutes = 0,
                 Distribution = new List<DailyPlaytime>(), // 无详细会话记录
                 GameBreakdown = gameBreakdown,
@@ -96,17 +98,19 @@ public class AnalyticsController : ControllerBase
             int userId = 1001;
 
             // 从数据库查询用户的游戏记录，关联题材信息
-            var gameRecords = await _context.UserPlatformGameRecords
+            var gameRecords = await _context.UserPlatformLibraries
                 .Include(r => r.Game)
                 .ThenInclude(g => g.GameGenres)
                 .ThenInclude(gg => gg.Genre)
-                .Where(r => r.UserId == userId)
+                .Include(r => r.PlayerPlatform)
+                .ThenInclude(pp => pp.UserPlatformBindings)
+                .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
                 .ToListAsync();
 
             // 按题材分组统计
             var genreStats = gameRecords
                 .SelectMany(r => r.Game.GameGenres.Select(gg => new { Genre = gg.Genre, Record = r }))
-                .GroupBy(x => new { x.Genre.GenreId, x.Genre.GenreName })
+                .GroupBy(x => new { x.Genre.GenreId, GenreName = x.Genre.Name })
                 .Select(g => new GenrePreference
                 {
                     GenreId = g.Key.GenreId,
@@ -164,10 +168,13 @@ public class AnalyticsController : ControllerBase
             int userId = 1001;
 
             // 从数据库查询用户的游戏记录，按平台分组
-            var platformStats = await _context.UserPlatformGameRecords
-                .Include(r => r.Platform)
-                .Where(r => r.UserId == userId)
-                .GroupBy(r => new { r.PlatformId, r.Platform.PlatformName })
+            var platformStats = await _context.UserPlatformLibraries
+                .Include(r => r.PlayerPlatform)
+                .ThenInclude(pp => pp.Platform)
+                .Include(r => r.PlayerPlatform)
+                .ThenInclude(pp => pp.UserPlatformBindings)
+                .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .GroupBy(r => new { r.PlatformId, PlatformName = r.PlayerPlatform.Platform.PlatformName })
                 .Select(g => new
                 {
                     PlatformId = g.Key.PlatformId,
@@ -244,10 +251,10 @@ public class AnalyticsController : ControllerBase
 
             // 按游戏分组统计
             var gameAchievements = userAchievements
-                .GroupBy(a => new { a.GameId, GameName = a.Achievement?.Game?.Name ?? "Unknown" })
+                .GroupBy(a => new { a.AchievementId, GameName = a.Achievement?.Game?.Name ?? "Unknown" })
                 .Select(g => new
                 {
-                    GameId = g.Key.GameId,
+                    AchievementId = g.Key.AchievementId,
                     GameName = g.Key.GameName,
                     TotalAchievements = g.Count(),
                     Unlocked = g.Count(a => a.Unlocked),
@@ -265,8 +272,8 @@ public class AnalyticsController : ControllerBase
 
             // 最近趋势（最近7天和30天解锁的成就）
             var now = DateTime.UtcNow;
-            var last7Days = userAchievements.Count(a => a.Unlocked && a.UnlockedAt.HasValue && a.UnlockedAt.Value >= now.AddDays(-7));
-            var last30Days = userAchievements.Count(a => a.Unlocked && a.UnlockedAt.HasValue && a.UnlockedAt.Value >= now.AddDays(-30));
+            var last7Days = userAchievements.Count(a => a.Unlocked && a.UnlockTime.HasValue && a.UnlockTime.Value >= now.AddDays(-7));
+            var last30Days = userAchievements.Count(a => a.Unlocked && a.UnlockTime.HasValue && a.UnlockTime.Value >= now.AddDays(-30));
             var trend = last7Days > 0 ? "increasing" : "stable";
 
             // 成就最多的游戏TOP 5
@@ -275,7 +282,7 @@ public class AnalyticsController : ControllerBase
                 .Take(5)
                 .Select(g => new TopAchievementGame
                 {
-                    GameId = g.GameId,
+                    GameId = g.AchievementId,
                     GameName = g.GameName,
                     TotalAchievements = g.TotalAchievements,
                     Unlocked = g.Unlocked,
@@ -313,15 +320,12 @@ public class AnalyticsController : ControllerBase
     /// </summary>
     [HttpGet("spending")]
     [ProducesResponseType(typeof(ApiResponse<SpendingAnalyticsResponse>), 200)]
-    public async Task<ActionResult<ApiResponse<SpendingAnalyticsResponse>>> GetSpendingAnalytics(
+    public Task<ActionResult<ApiResponse<SpendingAnalyticsResponse>>> GetSpendingAnalytics(
         [FromQuery] string? period = null,
         [FromQuery] int? year = null)
     {
         try
         {
-            // 假设当前用户ID为1001
-            int userId = 1001;
-
             // 确定分析周期
             var analyzePeriod = period ?? year?.ToString() ?? DateTime.UtcNow.Year.ToString();
 
@@ -346,12 +350,12 @@ public class AnalyticsController : ControllerBase
 
             _logger.LogWarning("Spending analytics requested but game_purchase table does not exist");
 
-            return Ok(ApiResponse<SpendingAnalyticsResponse>.SuccessResponse(response));
+            return Task.FromResult<ActionResult<ApiResponse<SpendingAnalyticsResponse>>>(Ok(ApiResponse<SpendingAnalyticsResponse>.SuccessResponse(response)));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting spending analytics");
-            return StatusCode(500, ApiResponse<SpendingAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取消费分析失败"));
+            return Task.FromResult<ActionResult<ApiResponse<SpendingAnalyticsResponse>>>(StatusCode(500, ApiResponse<SpendingAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取消费分析失败")));
         }
     }
 

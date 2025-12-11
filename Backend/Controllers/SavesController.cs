@@ -166,7 +166,7 @@ public class SavesController : ControllerBase
     /// </remarks>
     [HttpPost("restore/{id}")]
     [ProducesResponseType(typeof(ApiResponse<RestoreSaveResponse>), 200)]
-    public async Task<ActionResult<ApiResponse<RestoreSaveResponse>>> RestoreSave(
+    public Task<ActionResult<ApiResponse<RestoreSaveResponse>>> RestoreSave(
         string id, 
         [FromBody] RestoreSaveRequest request)
     {
@@ -182,13 +182,13 @@ public class SavesController : ControllerBase
                 RestoredAt = DateTime.UtcNow
             };
 
-            return Ok(ApiResponse<RestoreSaveResponse>.SuccessResponse(response, "存档恢复成功"));
+            return Task.FromResult<ActionResult<ApiResponse<RestoreSaveResponse>>>(Ok(ApiResponse<RestoreSaveResponse>.SuccessResponse(response, "存档恢复成功")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error restoring save from backup {BackupId}", id);
-            return StatusCode(500, ApiResponse<RestoreSaveResponse>.ErrorResponse(
-                "ERR_RESTORE_FAILED", "恢复存档失败"));
+            return Task.FromResult<ActionResult<ApiResponse<RestoreSaveResponse>>>(StatusCode(500, ApiResponse<RestoreSaveResponse>.ErrorResponse(
+                "ERR_RESTORE_FAILED", "恢复存档失败")));
         }
     }
 
@@ -215,7 +215,7 @@ public class SavesController : ControllerBase
                 return NotFound(ApiResponse<object>.ErrorResponse("ERR_SAVE_NOT_FOUND", "存档不存在"));
             }
 
-            // ⚠️ 网页版：仅删除数据库记录，不删除物理文件
+            // 网页版：仅删除数据库记录，不删除物理文件
             // request.DeleteFile 和 request.DeleteBackups 参数被忽略
             _context.LocalSaveFiles.Remove(save);
             await _context.SaveChangesAsync();
