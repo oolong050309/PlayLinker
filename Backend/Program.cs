@@ -66,12 +66,21 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "PlayLinker API - 开发者B模块",
+        Title = "PlayLinker API - 统一游戏管理平台",
         Version = "v1",
-        Description = "统一游戏管理平台 - 游戏数据、元数据、游戏库、成就、Steam/Xbox/PSN/GOG集成",
+        Description = @"PlayLinker 统一游戏管理平台完整API文档
+
+📦 API模块列表：
+• 开发者A：账号绑定与数据接入 (AuthController, SteamController, XboxController, PsnController, GogController)
+• 开发者B：游戏数据与元数据 (GamesController, MetadataController, AchievementsController, LibraryController, WishlistController, NewsController, PreferencesController)
+• 开发者C：本地游戏管理、存档管理、云存档、Mod管理、报表系统、数据分析 (LocalGamesController, SavesController, CloudController, ModsController, ReportsController, AnalyticsController)
+• 开发者D：家长监管与社交功能 (待实现)
+
+🔐 认证说明：
+大部分API需要JWT认证，请先调用 POST /api/v1/auth/token 获取Token",
         Contact = new OpenApiContact
         {
-            Name = "开发者B",
+            Name = "PlayLinker Team",
             Email = "developer@playlinker.com"
         }
     });
