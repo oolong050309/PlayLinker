@@ -82,3 +82,52 @@ public class PlatformDistribution
     public int PlaytimeMinutes { get; set; }
     public decimal Percentage { get; set; }
 }
+
+// 成就统计分析响应
+public class AchievementAnalyticsResponse
+{
+    public int TotalAchievements { get; set; }
+    public int UnlockedAchievements { get; set; }
+    public decimal UnlockRate { get; set; }
+    public int PerfectGames { get; set; }
+    public decimal AverageCompletionRate { get; set; }
+    public AchievementTrend RecentTrend { get; set; } = new();
+    public List<TopAchievementGame> TopAchievementGames { get; set; } = new();
+}
+
+// 成就趋势
+public class AchievementTrend
+{
+    public int Last7Days { get; set; }
+    public int Last30Days { get; set; }
+    public string Trend { get; set; } = string.Empty;
+}
+
+// 成就最多的游戏
+public class TopAchievementGame
+{
+    public long GameId { get; set; }
+    public string GameName { get; set; } = string.Empty;
+    public int TotalAchievements { get; set; }
+    public int Unlocked { get; set; }
+    public decimal CompletionRate { get; set; }
+}
+
+// 消费分析响应
+public class SpendingAnalyticsResponse
+{
+    public string Period { get; set; } = string.Empty;
+    public decimal TotalSpending { get; set; }
+    public string Currency { get; set; } = "CNY";
+    public int GamesCount { get; set; }
+    public decimal AverageGamePrice { get; set; }
+    public List<PlatformSpending> PlatformBreakdown { get; set; } = new();
+}
+
+// 平台消费
+public class PlatformSpending
+{
+    public string Platform { get; set; } = string.Empty;
+    public decimal Spending { get; set; }
+    public int GamesCount { get; set; }
+}

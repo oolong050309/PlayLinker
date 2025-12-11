@@ -1294,6 +1294,14 @@ Content-Disposition: attachment; filename="monthly_report_202411.pdf"
 **认证**: 必需  
 **查询参数**: `period`, `year`
 
+> **⚠️ 数据说明**：  
+> 该API因缺少游戏购买记录数据表（`game_purchase`），目前无法提供真实的消费统计数据。  
+> API接口已实现，返回结构完整，但所有消费相关字段均为0或"暂无消费数据"提示。  
+> 如需完整功能，需要：
+> 1. 创建 `game_purchase` 表存储购买记录
+> 2. 通过Steam API等平台接口同步购买数据（注：大部分平台不提供购买记录API）
+> 3. 或由用户手动录入购买信息
+
 **成功响应** (200):
 ```json
 {

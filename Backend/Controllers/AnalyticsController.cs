@@ -218,4 +218,141 @@ public class AnalyticsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 成就统计分析
+    /// </summary>
+    [HttpGet("achievements")]
+    [ProducesResponseType(typeof(ApiResponse<AchievementAnalyticsResponse>), 200)]
+    public async Task<ActionResult<ApiResponse<AchievementAnalyticsResponse>>> GetAchievementAnalytics()
+    {
+        try
+        {
+            // 假设当前用户ID为1001
+            int userId = 1001;
+
+            // 从数据库查询用户的成就记录
+            var userAchievements = await _context.UserAchievements
+                .Include(a => a.Achievement)
+                .ThenInclude(ach => ach.Game)
+                .Where(a => a.UserId == userId)
+                .ToListAsync();
+
+            // 计算总成就数和已解锁成就数
+            var totalAchievements = userAchievements.Count;
+            var unlockedAchievements = userAchievements.Count(a => a.Unlocked);
+            var unlockRate = totalAchievements > 0 ? Math.Round((decimal)unlockedAchievements / totalAchievements, 2) : 0;
+
+            // 按游戏分组统计
+            var gameAchievements = userAchievements
+                .GroupBy(a => new { a.GameId, GameName = a.Achievement?.Game?.Name ?? "Unknown" })
+                .Select(g => new
+                {
+                    GameId = g.Key.GameId,
+                    GameName = g.Key.GameName,
+                    TotalAchievements = g.Count(),
+                    Unlocked = g.Count(a => a.Unlocked),
+                    CompletionRate = g.Count() > 0 ? (decimal)g.Count(a => a.Unlocked) / g.Count() : 0
+                })
+                .ToList();
+
+            // 完美游戏数（100%完成率）
+            var perfectGames = gameAchievements.Count(g => g.CompletionRate == 1.0m);
+
+            // 平均完成率
+            var averageCompletionRate = gameAchievements.Any() 
+                ? Math.Round(gameAchievements.Average(g => g.CompletionRate), 2) 
+                : 0;
+
+            // 最近趋势（最近7天和30天解锁的成就）
+            var now = DateTime.UtcNow;
+            var last7Days = userAchievements.Count(a => a.Unlocked && a.UnlockedAt.HasValue && a.UnlockedAt.Value >= now.AddDays(-7));
+            var last30Days = userAchievements.Count(a => a.Unlocked && a.UnlockedAt.HasValue && a.UnlockedAt.Value >= now.AddDays(-30));
+            var trend = last7Days > 0 ? "increasing" : "stable";
+
+            // 成就最多的游戏TOP 5
+            var topAchievementGames = gameAchievements
+                .OrderByDescending(g => g.Unlocked)
+                .Take(5)
+                .Select(g => new TopAchievementGame
+                {
+                    GameId = g.GameId,
+                    GameName = g.GameName,
+                    TotalAchievements = g.TotalAchievements,
+                    Unlocked = g.Unlocked,
+                    CompletionRate = Math.Round(g.CompletionRate, 2)
+                })
+                .ToList();
+
+            var response = new AchievementAnalyticsResponse
+            {
+                TotalAchievements = totalAchievements,
+                UnlockedAchievements = unlockedAchievements,
+                UnlockRate = unlockRate,
+                PerfectGames = perfectGames,
+                AverageCompletionRate = averageCompletionRate,
+                RecentTrend = new AchievementTrend
+                {
+                    Last7Days = last7Days,
+                    Last30Days = last30Days,
+                    Trend = trend
+                },
+                TopAchievementGames = topAchievementGames
+            };
+
+            return Ok(ApiResponse<AchievementAnalyticsResponse>.SuccessResponse(response));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting achievement analytics");
+            return StatusCode(500, ApiResponse<AchievementAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取成就统计分析失败"));
+        }
+    }
+
+    /// <summary>
+    /// 消费分析
+    /// </summary>
+    [HttpGet("spending")]
+    [ProducesResponseType(typeof(ApiResponse<SpendingAnalyticsResponse>), 200)]
+    public async Task<ActionResult<ApiResponse<SpendingAnalyticsResponse>>> GetSpendingAnalytics(
+        [FromQuery] string? period = null,
+        [FromQuery] int? year = null)
+    {
+        try
+        {
+            // 假设当前用户ID为1001
+            int userId = 1001;
+
+            // 确定分析周期
+            var analyzePeriod = period ?? year?.ToString() ?? DateTime.UtcNow.Year.ToString();
+
+            // 由于没有game_purchase表，返回提示信息
+            var response = new SpendingAnalyticsResponse
+            {
+                Period = analyzePeriod,
+                TotalSpending = 0,
+                Currency = "CNY",
+                GamesCount = 0,
+                AverageGamePrice = 0,
+                PlatformBreakdown = new List<PlatformSpending>
+                {
+                    new PlatformSpending
+                    {
+                        Platform = "暂无消费数据",
+                        Spending = 0,
+                        GamesCount = 0
+                    }
+                }
+            };
+
+            _logger.LogWarning("Spending analytics requested but game_purchase table does not exist");
+
+            return Ok(ApiResponse<SpendingAnalyticsResponse>.SuccessResponse(response));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting spending analytics");
+            return StatusCode(500, ApiResponse<SpendingAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取消费分析失败"));
+        }
+    }
+
 }
