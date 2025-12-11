@@ -773,13 +773,11 @@ public partial class PlayLinkerDbContext : DbContext
                 .HasConstraintName("user_preference_ibfk_1");
         });
 
-        OnModelCreatingPartial(modelBuilder);
-=======
+        // D模块索引配置
         modelBuilder.Entity<UserAchievement>()
             .HasIndex(ua => new { ua.UserId, ua.AchievementId, ua.PlatformId })
             .IsUnique();
 
-        // D模块配置
         modelBuilder.Entity<PriceAlertSubscription>()
             .HasIndex(p => new { p.UserId, p.GameId, p.PlatformId })
             .IsUnique();
@@ -790,7 +788,8 @@ public partial class PlayLinkerDbContext : DbContext
         modelBuilder.Entity<PreferenceGenre>()
             .HasIndex(pg => new { pg.PreferenceId, pg.GenreId })
             .IsUnique();
->>>>>>> feature/D
+
+        OnModelCreatingPartial(modelBuilder);
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
