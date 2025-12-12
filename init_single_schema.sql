@@ -116,7 +116,7 @@ CREATE TABLE game_genres (
 
 -- 表3.5: Developers（游戏开发商）
 CREATE TABLE developers (
-    developers_id INT PRIMARY KEY AUTO_INCREMENT,
+    developer_id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(20) UNIQUE NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='游戏开发商';
@@ -125,16 +125,16 @@ CREATE TABLE developers (
 CREATE TABLE game_developers (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     game_id BIGINT NOT NULL,
-    developers_id INT NOT NULL,
+    developer_id INT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (game_id) REFERENCES games(game_id) ON DELETE CASCADE,
-    FOREIGN KEY (developers_id) REFERENCES developers(developers_id),
-    UNIQUE KEY uk_game_developer (game_id, developers_id)
+    FOREIGN KEY (developer_id) REFERENCES developers(developer_id),
+    UNIQUE KEY uk_game_developer (game_id, developer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='游戏与开发商关联表';
 
 -- 表3.7: Publishers（游戏发行商）
 CREATE TABLE publishers (
-    publishers_id INT PRIMARY KEY AUTO_INCREMENT,
+    publisher_id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(20) UNIQUE NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='游戏发行商';
@@ -143,11 +143,11 @@ CREATE TABLE publishers (
 CREATE TABLE game_publishers (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     game_id BIGINT NOT NULL,
-    publishers_id INT NOT NULL,
+    publisher_id INT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (game_id) REFERENCES games(game_id) ON DELETE CASCADE,
-    FOREIGN KEY (publishers_id) REFERENCES publishers(publishers_id),
-    UNIQUE KEY uk_game_publisher (game_id, publishers_id)
+    FOREIGN KEY (publisher_id) REFERENCES publishers(publisher_id),
+    UNIQUE KEY uk_game_publisher (game_id, publisher_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='游戏与发行商关联表';
 
 -- 表3.9: Categories（分类/标签词表）
