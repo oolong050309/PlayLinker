@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GameVerse Nexus | Unified Game Management</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js for Data Visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: '#09090b', // zinc-950
+              surface: '#18181b', // zinc-900
+              primary: '#6366f1', // indigo-500
+              secondary: '#a1a1aa', // zinc-400
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #09090b;
+        color: #ffffff;
+        font-family: 'Inter', sans-serif;
+      }
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #09090b; }
+      ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+      .glass-panel {
+        background: rgba(24, 24, 27, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .gradient-text {
+        background: linear-gradient(to bottom, #ffffff, #71717a);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+    </style>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    
+    <!-- Navbar -->
+    <nav class="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-background/80 backdrop-blur-md">
+      <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+            <i data-lucide="gamepad-2" class="w-5 h-5 text-white"></i>
+          </div>
+          <span class="font-bold text-lg tracking-tight">GameVerse</span>
+        </div>
+        <div class="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-400">
+          <a href="#about" class="hover:text-white transition-colors">Project Info</a>
+          <a href="#stats" class="hover:text-white transition-colors">Analytics</a>
+          <a href="#features" class="hover:text-white transition-colors">Modules</a>
+          <a href="#personas" class="hover:text-white transition-colors">Personas</a>
+        </div>
+        <a href="login.html" class="bg-white text-black px-4 py-2 rounded-full text-sm font-semibold hover:bg-zinc-200 transition-colors">
+          Sign In
+        </a>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="relative pt-32 pb-24 md:pt-48 md:pb-32 px-6 overflow-hidden">
+      <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-indigo-600/20 rounded-full blur-[120px] -z-10 opacity-50"></div>
+      
+      <div class="max-w-5xl mx-auto text-center">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium mb-8">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+          </span>
+          Project Showcase 2024
+        </div>
+        
+        <h1 class="text-5xl md:text-7xl font-bold tracking-tight mb-8 gradient-text pb-2">
+          Your Entire Game Library.<br />
+          <span class="text-indigo-500" style="-webkit-text-fill-color: #6366f1;">One Unified Reality.</span>
+        </h1>
+        
+        <p class="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+          Stop switching launchers. Integrate Steam, Epic, GOG, and Xbox into a single, 
+          powerful dashboard with advanced analytics, price tracking, and community sharing.
+        </p>
+        
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <a href="app-library.html" class="h-12 px-8 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-all flex items-center justify-center gap-2">
+            Get Started <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </a>
+          <a href="#about" class="h-12 px-8 rounded-full bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 font-medium transition-all flex items-center justify-center">
+            Read Documentation
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Problem & Solution -->
+    <section id="about" class="py-24 border-t border-white/5 bg-zinc-950/50">
+      <div class="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
+        <div>
+          <h3 class="text-indigo-400 font-semibold mb-2">The Challenge</h3>
+          <h2 class="text-3xl font-bold mb-6 text-white">Fragmentation is the Enemy</h2>
+          <div class="space-y-6 text-zinc-400 leading-relaxed">
+            <p>
+              Gamers today are plagued by launcher fatigue. Achievements, saves, and friends are scattered across 
+              Steam, Epic, GOG, and Xbox. 
+            </p>
+            <ul class="space-y-3 mt-4">
+              <li class="flex items-start gap-3">
+                <span class="mt-2 w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                High management cost across multiple logins
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="mt-2 w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                Difficulty in social sharing & showcasing collections
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="mt-2 w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                Lack of unified tools for media & community managers
+              </li>
+            </ul>
+          </div>
+        </div>
+        
+        <div class="glass-panel p-8 rounded-3xl border border-white/10 relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl -z-10"></div>
+          <h3 class="text-indigo-400 font-semibold mb-2">Our Solution</h3>
+          <h2 class="text-3xl font-bold mb-6 text-white">Unified & Secure</h2>
+          <p class="text-zinc-400 mb-6 leading-relaxed">
+            A deeply integrated aggregation platform that prioritizes official APIs for security 
+            while offering flexible manual imports for closed systems.
+          </p>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-zinc-900/50 p-4 rounded-xl border border-white/5">
+              <i data-lucide="globe" class="w-6 h-6 text-white mb-2"></i>
+              <div class="text-sm font-semibold text-white">Multi-Platform</div>
+              <div class="text-xs text-zinc-500">Steam, Epic, & More</div>
+            </div>
+            <div class="bg-zinc-900/50 p-4 rounded-xl border border-white/5">
+              <i data-lucide="shield-check" class="w-6 h-6 text-white mb-2"></i>
+              <div class="text-sm font-semibold text-white">Official APIs</div>
+              <div class="text-xs text-zinc-500">100% Compliant</div>
+            </div>
+            <div class="bg-zinc-900/50 p-4 rounded-xl border border-white/5">
+              <i data-lucide="bar-chart-3" class="w-6 h-6 text-white mb-2"></i>
+              <div class="text-sm font-semibold text-white">Visual Stats</div>
+              <div class="text-xs text-zinc-500">Deep Analytics</div>
+            </div>
+            <div class="bg-zinc-900/50 p-4 rounded-xl border border-white/5">
+              <i data-lucide="zap" class="w-6 h-6 text-white mb-2"></i>
+              <div class="text-sm font-semibold text-white">Real-time</div>
+              <div class="text-xs text-zinc-500">Price Alerts</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visualization Section -->
+    <section id="stats" class="py-24 px-6 relative">
+      <div class="max-w-7xl mx-auto">
+        <div class="mb-12 text-center">
+          <h2 class="text-3xl md:text-5xl font-bold tracking-tight gradient-text mb-4">
+            Your Data, Visualized
+          </h2>
+          <p class="text-secondary text-lg max-w-2xl mx-auto leading-relaxed">
+            Visualize your gaming habits with our data dashboard. Track playtimes, platform distribution, and achievement progress in one view.
+          </p>
+        </div>
+
+        <div class="grid lg:grid-cols-3 gap-6 mt-12">
+          <!-- Left Column: Stats & Pie -->
+          <div class="space-y-6">
+            <div class="grid grid-cols-2 gap-4">
+              <div class="glass-panel p-6 rounded-2xl">
+                <div class="text-sm text-zinc-500 font-medium uppercase tracking-wider mb-2">Total Games</div>
+                <div class="text-3xl font-bold text-white mb-1">695</div>
+                <div class="text-xs text-emerald-400 font-mono">+12 this month</div>
+              </div>
+              <div class="glass-panel p-6 rounded-2xl">
+                <div class="text-sm text-zinc-500 font-medium uppercase tracking-wider mb-2">Total Hours</div>
+                <div class="text-3xl font-bold text-white mb-1">4,208h</div>
+                <div class="text-xs text-emerald-400 font-mono">Top 1% of players</div>
+              </div>
+            </div>
+            
+            <div class="glass-panel p-6 rounded-2xl h-[340px] flex flex-col items-center justify-center">
+              <h4 class="text-lg font-semibold mb-4 text-zinc-200 self-start">Library Distribution</h4>
+              <div class="relative w-48 h-48">
+                <canvas id="platformChart"></canvas>
+              </div>
+              <div class="flex justify-center gap-4 text-xs text-zinc-500 mt-6 w-full">
+                <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-[#3b82f6]"></div> Steam</div>
+                <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-[#333333]"></div> Epic</div>
+                <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-[#107c10]"></div> Xbox</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Center/Right: Main Chart -->
+          <div class="lg:col-span-2 glass-panel p-6 rounded-2xl flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+              <h4 class="text-lg font-semibold text-zinc-200">Weekly Playtime Trend</h4>
+              <button class="text-xs bg-zinc-800 hover:bg-zinc-700 px-3 py-1 rounded-md transition-colors text-white">Export PDF</button>
+            </div>
+            <div class="flex-1 w-full min-h-[300px] relative">
+              <canvas id="activityChart"></canvas>
+            </div>
+            <div class="mt-4 p-4 rounded-xl bg-indigo-900/20 border border-indigo-500/20 text-indigo-200 text-sm flex items-start gap-3">
+               <i data-lucide="bell" class="w-5 h-5 flex-shrink-0"></i>
+               <div>
+                 <span class="font-semibold block mb-1">Weekly Goal Alert</span>
+                 You have completed 50% of your "2 Achievements" goal for this week. Keep going!
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Personas Section -->
+    <section id="personas" class="py-24 px-6 border-t border-white/5 relative overflow-hidden">
+      <div class="absolute top-1/2 left-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[100px] -z-10"></div>
+      
+      <div class="max-w-4xl mx-auto">
+        <div class="mb-12 text-center">
+          <h2 class="text-3xl md:text-5xl font-bold tracking-tight gradient-text mb-4">Designed For Everyone</h2>
+          <p class="text-secondary text-lg max-w-2xl mx-auto leading-relaxed">Tailored experiences for different user needs.</p>
+        </div>
+
+        <div class="flex justify-center mb-12">
+          <div class="bg-zinc-900 p-1 rounded-full border border-zinc-800 inline-flex">
+            <button onclick="switchTab('gamer')" id="tab-gamer" class="px-6 py-2 rounded-full text-sm font-medium transition-all bg-indigo-600 text-white shadow-lg cursor-pointer">
+              Individual Gamer
+            </button>
+            <button onclick="switchTab('media')" id="tab-media" class="px-6 py-2 rounded-full text-sm font-medium transition-all text-zinc-400 hover:text-white cursor-pointer">
+              Media & Community
+            </button>
+            <button onclick="switchTab('parent')" id="tab-parent" class="px-6 py-2 rounded-full text-sm font-medium transition-all text-zinc-400 hover:text-white cursor-pointer">
+              Parent & Guardian
+            </button>
+          </div>
+        </div>
+
+        <div class="glass-panel p-8 rounded-3xl border border-white/10 min-h-[300px] relative">
+          
+          <!-- Gamer Content -->
+          <div id="content-gamer" class="animate-fade-in">
+            <div class="flex items-center gap-4 mb-6">
+              <div class="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <i data-lucide="gamepad-2" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="text-xl font-bold text-white">The Core Gamer</h3>
+                <p class="text-zinc-500 text-sm">Needs organization & deals</p>
+              </div>
+            </div>
+            <ul class="space-y-4">
+              <li class="flex gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
+                <span class="text-2xl">🎯</span>
+                <div>
+                  <h4 class="font-semibold text-zinc-200">Unified View</h4>
+                  <p class="text-sm text-zinc-400">"I want to see my Steam and Epic libraries side-by-side to choose what to play next."</p>
+                </div>
+              </li>
+              <li class="flex gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
+                <span class="text-2xl">💰</span>
+                <div>
+                  <h4 class="font-semibold text-zinc-200">Price Alerts</h4>
+                  <p class="text-sm text-zinc-400">"Set a 30% discount threshold for Cyberpunk 2077 and notify me on my phone."</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Media Content -->
+          <div id="content-media" class="hidden animate-fade-in">
+            <div class="flex items-center gap-4 mb-6">
+              <div class="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <i data-lucide="share-2" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="text-xl font-bold text-white">Media Creator</h3>
+                <p class="text-zinc-500 text-sm">Needs data & content</p>
+              </div>
+            </div>
+            <ul class="space-y-4">
+              <li class="flex gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
+                <span class="text-2xl">📊</span>
+                <div>
+                  <h4 class="font-semibold text-zinc-200">Annual Reports</h4>
+                  <p class="text-sm text-zinc-400">"I need to export a yearly playtime trend PDF to write my 'Year in Gaming' article."</p>
+                </div>
+              </li>
+              <li class="flex gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
+                <span class="text-2xl">🤝</span>
+                <div>
+                  <h4 class="font-semibold text-zinc-200">Community Stats</h4>
+                  <p class="text-sm text-zinc-400">"Easily share library stats to engage with my Discord community."</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Parent Content (Added) -->
+          <div id="content-parent" class="hidden animate-fade-in">
+            <div class="flex items-center gap-4 mb-6">
+              <div class="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400">
+                <i data-lucide="shield-alert" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="text-xl font-bold text-white">Parent & Guardian</h3>
+                <p class="text-zinc-500 text-sm">Needs oversight & balance</p>
+              </div>
+            </div>
+            <ul class="space-y-4">
+              <li class="flex gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
+                <span class="text-2xl">⏰</span>
+                <div>
+                  <h4 class="font-semibold text-zinc-200">Playtime Limits</h4>
+                  <p class="text-sm text-zinc-400">"Set daily limits (e.g. 1 hour on weekdays) to ensure gaming doesn't affect homework."</p>
+                </div>
+              </li>
+              <li class="flex gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
+                <span class="text-2xl">📩</span>
+                <div>
+                  <h4 class="font-semibold text-zinc-200">Weekly Activity Digest</h4>
+                  <p class="text-sm text-zinc-400">"Receive an email summary of what games were played and for how long."</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-black py-12 border-t border-white/10 text-center text-zinc-500 text-sm">
+      <div class="max-w-7xl mx-auto px-6 flex flex-col items-center">
+        <div class="flex items-center gap-2 mb-6 opacity-50">
+          <i data-lucide="gamepad-2" class="w-5 h-5"></i>
+          <span class="font-bold tracking-tight">GameVerse Nexus</span>
+        </div>
+        <p class="max-w-md mx-auto mb-8">
+          A project demonstrating Vanilla JS + Tailwind + Chart.js integration for complex game data management.
+        </p>
+        <div class="mt-8 text-xs text-zinc-700">
+          © 2024 Project GameVerse. All rights reserved.
+        </div>
+      </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+      lucide.createIcons();
+
+      function switchTab(tabName) {
+        // Reset Buttons
+        ['gamer', 'media', 'parent'].forEach(t => {
+          document.getElementById('tab-' + t).className = "px-6 py-2 rounded-full text-sm font-medium transition-all text-zinc-400 hover:text-white cursor-pointer";
+          document.getElementById('content-' + t).classList.add('hidden');
+        });
+
+        // Activate Selected
+        document.getElementById('tab-' + tabName).className = "px-6 py-2 rounded-full text-sm font-medium transition-all bg-indigo-600 text-white shadow-lg cursor-pointer";
+        document.getElementById('content-' + tabName).classList.remove('hidden');
+      }
+
+      document.addEventListener('DOMContentLoaded', function() {
+        Chart.defaults.color = '#71717a';
+        Chart.defaults.borderColor = '#27272a';
+
+        const ctxPlatform = document.getElementById('platformChart').getContext('2d');
+        new Chart(ctxPlatform, {
+          type: 'doughnut',
+          data: {
+            labels: ['Steam', 'Epic', 'Xbox', 'GOG'],
+            datasets: [{
+              data: [450, 120, 80, 45],
+              backgroundColor: ['#3b82f6', '#333333', '#107c10', '#8c429e'],
+              borderWidth: 0,
+              hoverOffset: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: { legend: { display: false } }
+          }
+        });
+
+        const ctxActivity = document.getElementById('activityChart').getContext('2d');
+        new Chart(ctxActivity, {
+          type: 'bar',
+          data: {
+            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            datasets: [{
+              label: 'Hours Played',
+              data: [2.5, 1.0, 4.0, 0.5, 5.5, 8.0, 6.5],
+              backgroundColor: '#6366f1',
+              borderRadius: 4,
+              barThickness: 30,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                grid: { display: true, drawBorder: false },
+                ticks: { callback: function(value) { return value + 'h'; } }
+              },
+              x: { grid: { display: false, drawBorder: false } }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+      });
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

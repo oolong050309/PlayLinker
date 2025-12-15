@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notifications | GameVerse Nexus</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { background: '#09090b', surface: '#18181b', primary: '#6366f1', secondary: '#a1a1aa' },
+          fontFamily: { sans: ['Inter', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #09090b; color: #ffffff; }
+    .glass-panel { background: rgba(24, 24, 27, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+  </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+  
+  <!-- Sidebar -->
+  <aside class="w-64 border-r border-white/10 bg-surface flex flex-col">
+    <div class="p-6 flex items-center gap-2 border-b border-white/5">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+        <i data-lucide="gamepad-2" class="w-5 h-5 text-white"></i>
+      </div>
+      <span class="font-bold text-lg">GameVerse</span>
+    </div>
+    
+    <nav class="flex-1 p-4 space-y-1">
+      <a href="app-discover.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="compass" class="w-5 h-5"></i> Discover
+      </a>
+      <a href="app-library.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="library" class="w-5 h-5"></i> My Library
+      </a>
+      <a href="app-analytics.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="bar-chart-2" class="w-5 h-5"></i> Analytics
+      </a>
+      <a href="app-price-monitor.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="tag" class="w-5 h-5"></i> Price Monitor
+      </a>
+      <a href="app-parental.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="shield" class="w-5 h-5"></i> Parental
+      </a>
+      <a href="app-binding.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="link" class="w-5 h-5"></i> Binding
+      </a>
+      <a href="app-mods.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="package" class="w-5 h-5"></i> Mods & Saves
+      </a>
+      <a href="app-notifications.html" class="flex items-center gap-3 px-4 py-3 bg-indigo-600/10 text-indigo-400 rounded-xl font-medium">
+        <i data-lucide="bell" class="w-5 h-5"></i> Notifications
+      </a>
+      <a href="app-settings.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="settings" class="w-5 h-5"></i> Settings
+      </a>
+    </nav>
+
+    <div class="p-4 border-t border-white/5">
+      <a href="index.html" class="flex items-center gap-3 px-4 py-3 text-zinc-500 hover:text-red-400 transition-colors text-sm">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Logout
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <!-- Header -->
+    <header class="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-background/50 backdrop-blur-sm">
+      <h1 class="text-xl font-semibold">Notifications</h1>
+      <div class="flex items-center gap-4">
+        <button class="relative p-2 text-zinc-400 hover:text-white">
+          <i data-lucide="bell" class="w-5 h-5"></i>
+          <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500"></div>
+      </div>
+    </header>
+
+    <!-- Scrollable Area -->
+    <div class="flex-1 overflow-y-auto p-8">
+      
+      <!-- Stats Overview -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm text-zinc-400">Total</div>
+            <i data-lucide="inbox" class="w-5 h-5 text-indigo-400"></i>
+          </div>
+          <div class="text-2xl font-bold">24</div>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm text-zinc-400">Unread</div>
+            <i data-lucide="mail" class="w-5 h-5 text-amber-400"></i>
+          </div>
+          <div class="text-2xl font-bold">8</div>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm text-zinc-400">Price Alerts</div>
+            <i data-lucide="tag" class="w-5 h-5 text-emerald-400"></i>
+          </div>
+          <div class="text-2xl font-bold">5</div>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm text-zinc-400">System</div>
+            <i data-lucide="info" class="w-5 h-5 text-blue-400"></i>
+          </div>
+          <div class="text-2xl font-bold">3</div>
+        </div>
+      </div>
+
+      <!-- Filter Tabs -->
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex gap-2">
+          <button class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium">All</button>
+          <button class="px-4 py-2 rounded-lg bg-white/5 text-zinc-400 hover:text-white text-sm font-medium transition-colors">Unread</button>
+          <button class="px-4 py-2 rounded-lg bg-white/5 text-zinc-400 hover:text-white text-sm font-medium transition-colors">Price Alerts</button>
+          <button class="px-4 py-2 rounded-lg bg-white/5 text-zinc-400 hover:text-white text-sm font-medium transition-colors">Parental</button>
+          <button class="px-4 py-2 rounded-lg bg-white/5 text-zinc-400 hover:text-white text-sm font-medium transition-colors">System</button>
+        </div>
+        <button class="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-2">
+          <i data-lucide="check-check" class="w-4 h-4"></i> Mark All as Read
+        </button>
+      </div>
+
+      <!-- Notifications List -->
+      <div class="space-y-3">
+        
+        <!-- Price Alert Notification - Unread -->
+        <div class="glass-panel rounded-2xl p-5 hover:bg-white/5 transition-colors cursor-pointer border-l-4 border-emerald-500">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="tag" class="w-6 h-6 text-emerald-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <h3 class="font-bold text-lg mb-1">Price Drop Alert!</h3>
+                  <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-medium">Price Alert</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                  <div class="text-xs text-zinc-500">2 minutes ago</div>
+                  <div class="w-2 h-2 bg-indigo-500 rounded-full mt-1 ml-auto"></div>
+                </div>
+              </div>
+              <p class="text-sm text-zinc-400 mb-3">Cyberpunk 2077 is now 40% off on Steam! Price dropped from $59.99 to $35.99. Your target price of $40 has been reached.</p>
+              <div class="flex items-center gap-3">
+                <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">
+                  View Deal
+                </button>
+                <button class="px-4 py-2 bg-white/5 hover:bg-white/10 text-zinc-400 rounded-lg text-sm font-medium transition-colors">
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Game Update Notification - Unread -->
+        <div class="glass-panel rounded-2xl p-5 hover:bg-white/5 transition-colors cursor-pointer border-l-4 border-blue-500">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="download" class="w-6 h-6 text-blue-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <h3 class="font-bold text-lg mb-1">New Update Available</h3>
+                  <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs font-medium">Game Update</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                  <div class="text-xs text-zinc-500">1 hour ago</div>
+                  <div class="w-2 h-2 bg-indigo-500 rounded-full mt-1 ml-auto"></div>
+                </div>
+              </div>
+              <p class="text-sm text-zinc-400 mb-3">Elden Ring has a new patch (v1.12) available. Update includes bug fixes and performance improvements.</p>
+              <div class="flex items-center gap-3">
+                <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">
+                  View Details
+                </button>
+                <button class="px-4 py-2 bg-white/5 hover:bg-white/10 text-zinc-400 rounded-lg text-sm font-medium transition-colors">
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Parental Control Alert - Unread -->
+        <div class="glass-panel rounded-2xl p-5 hover:bg-white/5 transition-colors cursor-pointer border-l-4 border-amber-500">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="alert-triangle" class="w-6 h-6 text-amber-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <h3 class="font-bold text-lg mb-1">Playtime Limit Reached</h3>
+                  <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-xs font-medium">Parental Control</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                  <div class="text-xs text-zinc-500">3 hours ago</div>
+                  <div class="w-2 h-2 bg-indigo-500 rounded-full mt-1 ml-auto"></div>
+                </div>
+              </div>
+              <p class="text-sm text-zinc-400 mb-3">Child account "Alex" has reached the daily playtime limit of 2 hours. Gaming session was automatically paused.</p>
+              <div class="flex items-center gap-3">
+                <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">
+                  View Details
+                </button>
+                <button class="px-4 py-2 bg-white/5 hover:bg-white/10 text-zinc-400 rounded-lg text-sm font-medium transition-colors">
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recommendation Notification - Read -->
+        <div class="glass-panel rounded-2xl p-5 hover:bg-white/5 transition-colors cursor-pointer border-l-4 border-purple-500 opacity-60">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="sparkles" class="w-6 h-6 text-purple-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <h3 class="font-bold text-lg mb-1">New Game Recommendation</h3>
+                  <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 text-xs font-medium">Recommendation</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                  <div class="text-xs text-zinc-500">1 day ago</div>
+                </div>
+              </div>
+              <p class="text-sm text-zinc-400 mb-3">Based on your love for Destiny 2, we recommend checking out The Division 2. 95% match with your preferences!</p>
+              <div class="flex items-center gap-3">
+                <button class="px-4 py-2 bg-white/5 hover:bg-white/10 text-zinc-400 rounded-lg text-sm font-medium transition-colors">
+                  View Game
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Notification - Read -->
+        <div class="glass-panel rounded-2xl p-5 hover:bg-white/5 transition-colors cursor-pointer border-l-4 border-zinc-500 opacity-60">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-zinc-500/20 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="info" class="w-6 h-6 text-zinc-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <h3 class="font-bold text-lg mb-1">System Maintenance Scheduled</h3>
+                  <span class="px-2 py-0.5 rounded bg-zinc-500/20 text-zinc-400 text-xs font-medium">System</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                  <div class="text-xs text-zinc-500">2 days ago</div>
+                </div>
+              </div>
+              <p class="text-sm text-zinc-400 mb-3">Scheduled maintenance on Dec 20, 2025 from 2:00 AM to 4:00 AM UTC. Some features may be temporarily unavailable.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Price Alert - Read -->
+        <div class="glass-panel rounded-2xl p-5 hover:bg-white/5 transition-colors cursor-pointer border-l-4 border-emerald-500 opacity-60">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="tag" class="w-6 h-6 text-emerald-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <h3 class="font-bold text-lg mb-1">Wishlist Game on Sale</h3>
+                  <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-medium">Price Alert</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                  <div class="text-xs text-zinc-500">3 days ago</div>
+                </div>
+              </div>
+              <p class="text-sm text-zinc-400 mb-3">God of War Ragnarök is now 25% off on PlayStation Store! Price: $52.49 (was $69.99)</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Achievement Unlocked - Read -->
+        <div class="glass-panel rounded-2xl p-5 hover:bg-white/5 transition-colors cursor-pointer border-l-4 border-amber-500 opacity-60">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="trophy" class="w-6 h-6 text-amber-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <h3 class="font-bold text-lg mb-1">Achievement Unlocked!</h3>
+                  <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-xs font-medium">Achievement</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                  <div class="text-xs text-zinc-500">5 days ago</div>
+                </div>
+              </div>
+              <p class="text-sm text-zinc-400 mb-3">You've unlocked "Master Explorer" in Elden Ring! You've discovered all map locations.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cloud Save Backup - Read -->
+        <div class="glass-panel rounded-2xl p-5 hover:bg-white/5 transition-colors cursor-pointer border-l-4 border-blue-500 opacity-60">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="cloud-upload" class="w-6 h-6 text-blue-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <h3 class="font-bold text-lg mb-1">Cloud Save Backup Complete</h3>
+                  <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs font-medium">System</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                  <div class="text-xs text-zinc-500">1 week ago</div>
+                </div>
+              </div>
+              <p class="text-sm text-zinc-400 mb-3">Your save files for Cyberpunk 2077 have been successfully backed up to cloud storage (125 MB).</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Load More -->
+      <div class="mt-8 text-center">
+        <button class="px-6 py-3 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded-xl font-medium transition-colors">
+          Load More Notifications
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

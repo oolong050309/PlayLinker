@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Platform Binding - GameVerse</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { background: linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 50%, #0f0f0f 100%); }
+    .glass-panel {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(10px);
+    }
+    .platform-card {
+      transition: all 0.3s ease;
+    }
+    .platform-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+    .platform-card.connected {
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+    .steam-gradient { background: linear-gradient(135deg, #1b2838 0%, #2a475e 100%); }
+    .epic-gradient { background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%); }
+    .xbox-gradient { background: linear-gradient(135deg, #107c10 0%, #0e6b0e 100%); }
+    .playstation-gradient { background: linear-gradient(135deg, #003791 0%, #00246d 100%); }
+    .nintendo-gradient { background: linear-gradient(135deg, #e60012 0%, #c4000f 100%); }
+    .gog-gradient { background: linear-gradient(135deg, #86328a 0%, #5c2260 100%); }
+    .battlenet-gradient { background: linear-gradient(135deg, #00aeff 0%, #0078d4 100%); }
+  </style>
+</head>
+<body class="bg-[#0a0a0a] text-white min-h-screen flex">
+  
+  <!-- Sidebar -->
+  <aside class="w-64 bg-[#111] border-r border-white/5 flex flex-col">
+    <div class="p-6 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+        <i data-lucide="gamepad-2" class="w-5 h-5 text-white"></i>
+      </div>
+      <span class="font-bold text-lg">GameVerse</span>
+    </div>
+    
+    <nav class="flex-1 p-4 space-y-1">
+      <a href="app-discover.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="compass" class="w-5 h-5"></i> Discover
+      </a>
+      <a href="app-library.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="library" class="w-5 h-5"></i> My Library
+      </a>
+      <a href="app-analytics.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="bar-chart-2" class="w-5 h-5"></i> Analytics
+      </a>
+      <a href="app-price-monitor.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="tag" class="w-5 h-5"></i> Price Monitor
+      </a>
+      <a href="app-parental.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="shield" class="w-5 h-5"></i> Parental
+      </a>
+      <a href="app-binding.html" class="flex items-center gap-3 px-4 py-3 bg-indigo-600/10 text-indigo-400 rounded-xl font-medium">
+        <i data-lucide="link" class="w-5 h-5"></i> Binding
+      </a>
+      <a href="app-mods.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="package" class="w-5 h-5"></i> Mods & Saves
+      </a>
+      <a href="app-notifications.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="bell" class="w-5 h-5"></i> Notifications
+      </a>
+      <a href="app-settings.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="settings" class="w-5 h-5"></i> Settings
+      </a>
+    </nav>
+
+    <div class="p-4 border-t border-white/5">
+      <a href="index.html" class="flex items-center gap-3 px-4 py-3 text-zinc-500 hover:text-red-400 transition-colors text-sm">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Logout
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 overflow-y-auto">
+    
+    <!-- Header -->
+    <header class="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5">
+      <div class="px-8 py-4 flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold">Platform Binding</h1>
+          <p class="text-sm text-zinc-400">Connect your gaming accounts to sync your library</p>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2 px-4 py-2 glass-panel rounded-xl">
+            <i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i>
+            <span class="text-sm"><span class="text-emerald-400 font-bold">3</span> Connected</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="p-8">
+      
+      <!-- Stats Overview -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="glass-panel p-5 rounded-2xl flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <i data-lucide="link" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-sm text-zinc-400">Connected Platforms</div>
+            <div class="text-2xl font-bold">3 / 7</div>
+          </div>
+        </div>
+        
+        <div class="glass-panel p-5 rounded-2xl flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <i data-lucide="gamepad-2" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-sm text-zinc-400">Total Games Synced</div>
+            <div class="text-2xl font-bold">127</div>
+          </div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+            <i data-lucide="trophy" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-sm text-zinc-400">Achievements Synced</div>
+            <div class="text-2xl font-bold">892</div>
+          </div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-400">
+            <i data-lucide="clock" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-sm text-zinc-400">Last Sync</div>
+            <div class="text-2xl font-bold">2m ago</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connected Platforms -->
+      <div class="mb-8">
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i>
+          Connected Platforms
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          
+          <!-- Steam - Connected -->
+          <div class="platform-card connected glass-panel rounded-2xl overflow-hidden">
+            <div class="steam-gradient p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/1024px-Steam_icon_logo.svg.png" class="w-8 h-8 object-contain" alt="Steam">
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-lg">Steam</h3>
+                    <p class="text-sm text-white/60">@gamer_pro_2024</p>
+                  </div>
+                </div>
+                <span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">Connected</span>
+              </div>
+              <div class="flex items-center gap-6 text-sm text-white/70">
+                <div class="flex items-center gap-1">
+                  <i data-lucide="gamepad-2" class="w-4 h-4"></i>
+                  <span>85 Games</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <i data-lucide="trophy" class="w-4 h-4"></i>
+                  <span>542 Achievements</span>
+                </div>
+              </div>
+            </div>
+            <div class="p-4 flex items-center justify-between">
+              <span class="text-xs text-zinc-500">Last synced: 2 minutes ago</span>
+              <div class="flex gap-2">
+                <button class="px-3 py-1.5 text-sm bg-white/5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1">
+                  <i data-lucide="refresh-cw" class="w-3 h-3"></i> Sync
+                </button>
+                <button class="px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors">
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Epic Games - Connected -->
+          <div class="platform-card connected glass-panel rounded-2xl overflow-hidden">
+            <div class="epic-gradient p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/a/a7/Epic_Games_logo.png" class="w-8 h-8 object-contain" alt="Epic Games">
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-lg">Epic Games</h3>
+                    <p class="text-sm text-white/60">@epic_gamer</p>
+                  </div>
+                </div>
+                <span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">Connected</span>
+              </div>
+              <div class="flex items-center gap-6 text-sm text-white/70">
+                <div class="flex items-center gap-1">
+                  <i data-lucide="gamepad-2" class="w-4 h-4"></i>
+                  <span>32 Games</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <i data-lucide="trophy" class="w-4 h-4"></i>
+                  <span>128 Achievements</span>
+                </div>
+              </div>
+            </div>
+            <div class="p-4 flex items-center justify-between">
+              <span class="text-xs text-zinc-500">Last synced: 15 minutes ago</span>
+              <div class="flex gap-2">
+                <button class="px-3 py-1.5 text-sm bg-white/5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1">
+                  <i data-lucide="refresh-cw" class="w-3 h-3"></i> Sync
+                </button>
+                <button class="px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors">
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Xbox - Connected -->
+          <div class="platform-card connected glass-panel rounded-2xl overflow-hidden">
+            <div class="xbox-gradient p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Xbox_one_logo.svg/2048px-Xbox_one_logo.svg.png" class="w-8 h-8 object-contain" alt="Xbox">
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-lg">Xbox</h3>
+                    <p class="text-sm text-white/60">@XboxPlayer123</p>
+                  </div>
+                </div>
+                <span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">Connected</span>
+              </div>
+              <div class="flex items-center gap-6 text-sm text-white/70">
+                <div class="flex items-center gap-1">
+                  <i data-lucide="gamepad-2" class="w-4 h-4"></i>
+                  <span>10 Games</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <i data-lucide="trophy" class="w-4 h-4"></i>
+                  <span>222 Achievements</span>
+                </div>
+              </div>
+            </div>
+            <div class="p-4 flex items-center justify-between">
+              <span class="text-xs text-zinc-500">Last synced: 1 hour ago</span>
+              <div class="flex gap-2">
+                <button class="px-3 py-1.5 text-sm bg-white/5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1">
+                  <i data-lucide="refresh-cw" class="w-3 h-3"></i> Sync
+                </button>
+                <button class="px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors">
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Available Platforms -->
+      <div>
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <i data-lucide="plus-circle" class="w-5 h-5 text-zinc-400"></i>
+          Available Platforms
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          
+          <!-- PlayStation -->
+          <div class="platform-card glass-panel rounded-2xl overflow-hidden">
+            <div class="playstation-gradient p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                    <img src="https://images.seeklogo.com/logo-png/49/1/playstation-logo-png_seeklogo-494440.png" class="w-8 h-8 object-contain" alt="PlayStation">
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-lg">PlayStation</h3>
+                    <p class="text-sm text-white/60">Not connected</p>
+                  </div>
+                </div>
+              </div>
+              <p class="text-sm text-white/70">Sync your PlayStation trophies and game library</p>
+            </div>
+            <div class="p-4">
+              <button class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                <i data-lucide="link" class="w-4 h-4"></i> Connect Account
+              </button>
+            </div>
+          </div>
+
+          <!-- Nintendo -->
+          <div class="platform-card glass-panel rounded-2xl overflow-hidden">
+            <div class="nintendo-gradient p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                    <img src="https://images.seeklogo.com/logo-png/31/1/nintendo-switch-logo-png_seeklogo-315901.png" class="w-8 h-8 object-contain" alt="Nintendo Switch">
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-lg">Nintendo Switch</h3>
+                    <p class="text-sm text-white/60">Not connected</p>
+                  </div>
+                </div>
+              </div>
+              <p class="text-sm text-white/70">Connect your Nintendo Account for Switch games</p>
+            </div>
+            <div class="p-4">
+              <button class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                <i data-lucide="link" class="w-4 h-4"></i> Connect Account
+              </button>
+            </div>
+          </div>
+
+          <!-- GOG -->
+          <div class="platform-card glass-panel rounded-2xl overflow-hidden">
+            <div class="gog-gradient p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                    <img src="https://w7.pngwing.com/pngs/403/46/png-transparent-gog-galaxy-alt-macos-bigsur-icon-thumbnail.png" class="w-8 h-8 object-contain" alt="GOG">
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-lg">GOG Galaxy</h3>
+                    <p class="text-sm text-white/60">Not connected</p>
+                  </div>
+                </div>
+              </div>
+              <p class="text-sm text-white/70">DRM-free games and classic titles</p>
+            </div>
+            <div class="p-4">
+              <button class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                <i data-lucide="link" class="w-4 h-4"></i> Connect Account
+              </button>
+            </div>
+          </div>
+
+          <!-- Battle.net -->
+          <div class="platform-card glass-panel rounded-2xl overflow-hidden">
+            <div class="battlenet-gradient p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTmi7pxirQ-yuPN673zi5amugvUn8bCsPSiTw&s" class="w-8 h-8 object-contain" alt="Battle.net">
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-lg">Battle.net</h3>
+                    <p class="text-sm text-white/60">Not connected</p>
+                  </div>
+                </div>
+              </div>
+              <p class="text-sm text-white/70">Blizzard games including WoW, Diablo, Overwatch</p>
+            </div>
+            <div class="p-4">
+              <button class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                <i data-lucide="link" class="w-4 h-4"></i> Connect Account
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Sync Settings -->
+      <div class="mt-8 glass-panel rounded-2xl p-6">
+        <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+          <i data-lucide="settings" class="w-5 h-5"></i>
+          Sync Settings
+        </h2>
+        <div class="space-y-4">
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Auto-sync Library</h3>
+              <p class="text-sm text-zinc-400">Automatically sync your game library every hour</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors" id="autoSyncToggle">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+          
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Sync Achievements</h3>
+              <p class="text-sm text-zinc-400">Import achievements and trophies from connected platforms</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors" id="achievementsToggle">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+          
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Sync Playtime</h3>
+              <p class="text-sm text-zinc-400">Track and combine playtime across all platforms</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors" id="playtimeToggle">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+          
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Sync Notifications</h3>
+              <p class="text-sm text-zinc-400">Get notified when sync completes or fails</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-zinc-700 relative transition-colors" id="notifyToggle">
+              <span class="absolute left-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="mt-6 flex gap-4">
+          <button class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium transition-colors flex items-center gap-2">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync All Now
+          </button>
+          <button class="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-medium transition-colors border border-white/10">
+            View Sync History
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+    
+    // Toggle functionality
+    document.querySelectorAll('[id$="Toggle"]').forEach(toggle => {
+      toggle.addEventListener('click', function() {
+        const span = this.querySelector('span');
+        if (this.classList.contains('bg-indigo-600')) {
+          this.classList.remove('bg-indigo-600');
+          this.classList.add('bg-zinc-700');
+          span.classList.remove('right-1');
+          span.classList.add('left-1');
+        } else {
+          this.classList.remove('bg-zinc-700');
+          this.classList.add('bg-indigo-600');
+          span.classList.remove('left-1');
+          span.classList.add('right-1');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

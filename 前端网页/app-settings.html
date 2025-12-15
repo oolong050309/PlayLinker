@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings | GameVerse Nexus</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { background: '#09090b', surface: '#18181b', primary: '#6366f1', secondary: '#a1a1aa' },
+          fontFamily: { sans: ['Inter', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #09090b; color: #ffffff; }
+    .glass-panel { background: rgba(24, 24, 27, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+  </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+  
+  <!-- Sidebar -->
+  <aside class="w-64 border-r border-white/10 bg-surface flex flex-col">
+    <div class="p-6 flex items-center gap-2 border-b border-white/5">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+        <i data-lucide="gamepad-2" class="w-5 h-5 text-white"></i>
+      </div>
+      <span class="font-bold text-lg">GameVerse</span>
+    </div>
+    
+    <nav class="flex-1 p-4 space-y-1">
+      <a href="app-discover.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="compass" class="w-5 h-5"></i> Discover
+      </a>
+      <a href="app-library.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="library" class="w-5 h-5"></i> My Library
+      </a>
+      <a href="app-analytics.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="bar-chart-2" class="w-5 h-5"></i> Analytics
+      </a>
+      <a href="app-price-monitor.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="tag" class="w-5 h-5"></i> Price Monitor
+      </a>
+      <a href="app-parental.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="shield" class="w-5 h-5"></i> Parental
+      </a>
+      <a href="app-binding.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="link" class="w-5 h-5"></i> Binding
+      </a>
+      <a href="app-mods.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="package" class="w-5 h-5"></i> Mods & Saves
+      </a>
+      <a href="app-notifications.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="bell" class="w-5 h-5"></i> Notifications
+      </a>
+      <a href="app-settings.html" class="flex items-center gap-3 px-4 py-3 bg-indigo-600/10 text-indigo-400 rounded-xl font-medium">
+        <i data-lucide="settings" class="w-5 h-5"></i> Settings
+      </a>
+    </nav>
+
+    <div class="p-4 border-t border-white/5">
+      <a href="index.html" class="flex items-center gap-3 px-4 py-3 text-zinc-500 hover:text-red-400 transition-colors text-sm">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Logout
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <!-- Header -->
+    <header class="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-background/50 backdrop-blur-sm">
+      <h1 class="text-xl font-semibold">Settings & Preferences</h1>
+      <div class="flex items-center gap-4">
+        <button class="relative p-2 text-zinc-400 hover:text-white">
+          <i data-lucide="bell" class="w-5 h-5"></i>
+          <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500"></div>
+      </div>
+    </header>
+
+    <!-- Scrollable Area -->
+    <div class="flex-1 overflow-y-auto p-8">
+      
+      <!-- Profile Settings -->
+      <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-6">Profile Settings</h2>
+        <div class="glass-panel rounded-2xl p-6">
+          <div class="flex items-start gap-6 mb-6">
+            <div class="relative">
+              <div class="w-24 h-24 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500"></div>
+              <button class="absolute bottom-0 right-0 w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-700 transition-colors">
+                <i data-lucide="camera" class="w-4 h-4"></i>
+              </button>
+            </div>
+            <div class="flex-1">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm text-zinc-400 mb-2">Username</label>
+                  <input type="text" value="GamerPro2024" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+                </div>
+                <div>
+                  <label class="block text-sm text-zinc-400 mb-2">Email</label>
+                  <input type="email" value="gamer@example.com" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+                </div>
+                <div>
+                  <label class="block text-sm text-zinc-400 mb-2">Phone</label>
+                  <input type="tel" value="+1 234 567 8900" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+                </div>
+                <div>
+                  <label class="block text-sm text-zinc-400 mb-2">Gender</label>
+                  <select class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+              </div>
+              <button class="mt-4 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors">
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Gaming Preferences -->
+      <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-6">Gaming Preferences</h2>
+        <div class="glass-panel rounded-2xl p-6">
+          
+          <!-- Favorite Genres -->
+          <div class="mb-6">
+            <h3 class="font-bold text-lg mb-4">Favorite Game Genres</h3>
+            <div class="flex flex-wrap gap-2">
+              <button class="px-4 py-2 rounded-full bg-indigo-600 text-white text-sm font-medium">RPG</button>
+              <button class="px-4 py-2 rounded-full bg-indigo-600 text-white text-sm font-medium">Action</button>
+              <button class="px-4 py-2 rounded-full bg-white/10 text-zinc-400 hover:bg-white/20 text-sm font-medium transition-colors">FPS</button>
+              <button class="px-4 py-2 rounded-full bg-white/10 text-zinc-400 hover:bg-white/20 text-sm font-medium transition-colors">Strategy</button>
+              <button class="px-4 py-2 rounded-full bg-indigo-600 text-white text-sm font-medium">Adventure</button>
+              <button class="px-4 py-2 rounded-full bg-white/10 text-zinc-400 hover:bg-white/20 text-sm font-medium transition-colors">Simulation</button>
+              <button class="px-4 py-2 rounded-full bg-white/10 text-zinc-400 hover:bg-white/20 text-sm font-medium transition-colors">Sports</button>
+              <button class="px-4 py-2 rounded-full bg-white/10 text-zinc-400 hover:bg-white/20 text-sm font-medium transition-colors">Racing</button>
+              <button class="px-4 py-2 rounded-full bg-indigo-600 text-white text-sm font-medium">Indie</button>
+              <button class="px-4 py-2 rounded-full bg-white/10 text-zinc-400 hover:bg-white/20 text-sm font-medium transition-colors">Horror</button>
+            </div>
+            <p class="text-xs text-zinc-500 mt-2">Click to select/deselect your favorite genres for better recommendations</p>
+          </div>
+
+          <!-- Playtime Preference -->
+          <div class="mb-6">
+            <h3 class="font-bold text-lg mb-4">Preferred Playtime Range</h3>
+            <select class="w-full md:w-1/2 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+              <option>Less than 1 hour/day</option>
+              <option selected>1-3 hours/day</option>
+              <option>3-5 hours/day</option>
+              <option>5+ hours/day</option>
+              <option>Casual (weekends only)</option>
+            </select>
+          </div>
+
+          <!-- Price Sensitivity -->
+          <div class="mb-6">
+            <h3 class="font-bold text-lg mb-4">Price Sensitivity</h3>
+            <div class="flex items-center gap-4">
+              <input type="range" min="1" max="3" value="2" class="flex-1" id="priceSensitivity">
+              <div class="w-32 text-center">
+                <span class="px-4 py-2 rounded-lg bg-indigo-600/20 text-indigo-400 text-sm font-medium" id="sensitivityLabel">Medium</span>
+              </div>
+            </div>
+            <div class="flex justify-between text-xs text-zinc-500 mt-2">
+              <span>High (Budget-conscious)</span>
+              <span>Medium</span>
+              <span>Low (Premium games)</span>
+            </div>
+          </div>
+
+          <!-- Age Restriction -->
+          <div>
+            <h3 class="font-bold text-lg mb-4">Content Filtering</h3>
+            <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+              <div>
+                <h4 class="font-medium">Hide Mature Content (18+)</h4>
+                <p class="text-sm text-zinc-400">Filter out games with mature ratings</p>
+              </div>
+              <button class="w-12 h-7 rounded-full bg-white/20 relative transition-colors" id="matureToggle">
+                <span class="absolute left-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Notification Settings -->
+      <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-6">Notification Settings</h2>
+        <div class="glass-panel rounded-2xl p-6 space-y-4">
+          
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Price Drop Alerts</h3>
+              <p class="text-sm text-zinc-400">Get notified when wishlist games go on sale</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Game Updates</h3>
+              <p class="text-sm text-zinc-400">Notifications for game patches and DLC releases</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Achievement Unlocked</h3>
+              <p class="text-sm text-zinc-400">Celebrate when you unlock new achievements</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Recommendations</h3>
+              <p class="text-sm text-zinc-400">AI-powered game suggestions based on your taste</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Parental Control Alerts</h3>
+              <p class="text-sm text-zinc-400">Notifications for parental control violations</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-white/20 relative transition-colors">
+              <span class="absolute left-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Email Notifications</h3>
+              <p class="text-sm text-zinc-400">Receive notifications via email</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Privacy & Security -->
+      <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-6">Privacy & Security</h2>
+        <div class="glass-panel rounded-2xl p-6 space-y-4">
+          
+          <div class="p-4 bg-white/5 rounded-xl">
+            <h3 class="font-medium mb-2">Change Password</h3>
+            <p class="text-sm text-zinc-400 mb-4">Update your password to keep your account secure</p>
+            <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">
+              Change Password
+            </button>
+          </div>
+
+          <div class="p-4 bg-white/5 rounded-xl">
+            <h3 class="font-medium mb-2">Two-Factor Authentication</h3>
+            <p class="text-sm text-zinc-400 mb-4">Add an extra layer of security to your account</p>
+            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-zinc-400 rounded-lg text-sm font-medium transition-colors">
+              Enable 2FA
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Profile Visibility</h3>
+              <p class="text-sm text-zinc-400">Make your gaming profile visible to others</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div>
+              <h3 class="font-medium">Share Playtime Stats</h3>
+              <p class="text-sm text-zinc-400">Allow others to see your gaming statistics</p>
+            </div>
+            <button class="w-12 h-7 rounded-full bg-indigo-600 relative transition-colors">
+              <span class="absolute right-1 top-1 w-5 h-5 bg-white rounded-full transition-all"></span>
+            </button>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Data & Storage -->
+      <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-6">Data & Storage</h2>
+        <div class="glass-panel rounded-2xl p-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="p-4 bg-white/5 rounded-xl">
+              <div class="text-sm text-zinc-400 mb-1">Cloud Storage Used</div>
+              <div class="text-2xl font-bold">2.4 GB</div>
+              <div class="text-xs text-zinc-500">of 10 GB</div>
+            </div>
+            <div class="p-4 bg-white/5 rounded-xl">
+              <div class="text-sm text-zinc-400 mb-1">Save Files</div>
+              <div class="text-2xl font-bold">47</div>
+              <div class="text-xs text-zinc-500">across 12 games</div>
+            </div>
+            <div class="p-4 bg-white/5 rounded-xl">
+              <div class="text-sm text-zinc-400 mb-1">Last Backup</div>
+              <div class="text-2xl font-bold">2h ago</div>
+              <div class="text-xs text-zinc-500">Auto-sync enabled</div>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <button class="w-full p-4 bg-white/5 hover:bg-white/10 rounded-xl text-left transition-colors flex items-center justify-between">
+              <div>
+                <h3 class="font-medium">Backup All Save Files</h3>
+                <p class="text-sm text-zinc-400">Manually backup all your game saves to cloud</p>
+              </div>
+              <i data-lucide="cloud-upload" class="w-5 h-5 text-indigo-400"></i>
+            </button>
+
+            <button class="w-full p-4 bg-white/5 hover:bg-white/10 rounded-xl text-left transition-colors flex items-center justify-between">
+              <div>
+                <h3 class="font-medium">Export Data</h3>
+                <p class="text-sm text-zinc-400">Download all your gaming data and statistics</p>
+              </div>
+              <i data-lucide="download" class="w-5 h-5 text-indigo-400"></i>
+            </button>
+
+            <button class="w-full p-4 bg-red-500/10 hover:bg-red-500/20 rounded-xl text-left transition-colors flex items-center justify-between border border-red-500/30">
+              <div>
+                <h3 class="font-medium text-red-400">Clear Cache</h3>
+                <p class="text-sm text-zinc-400">Free up space by clearing temporary data</p>
+              </div>
+              <i data-lucide="trash-2" class="w-5 h-5 text-red-400"></i>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Danger Zone -->
+      <section>
+        <h2 class="text-2xl font-bold mb-6 text-red-400">Danger Zone</h2>
+        <div class="glass-panel rounded-2xl p-6 border-2 border-red-500/30">
+          <div class="space-y-4">
+            <div class="p-4 bg-red-500/10 rounded-xl">
+              <h3 class="font-medium text-red-400 mb-2">Delete Account</h3>
+              <p class="text-sm text-zinc-400 mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
+              <button class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors">
+                Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    // Price sensitivity slider
+    const slider = document.getElementById('priceSensitivity');
+    const label = document.getElementById('sensitivityLabel');
+    const labels = ['High', 'Medium', 'Low'];
+    
+    slider.addEventListener('input', function() {
+      label.textContent = labels[this.value - 1];
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Monitor | GameVerse Nexus</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { background: '#09090b', surface: '#18181b', primary: '#6366f1', secondary: '#a1a1aa' },
+          fontFamily: { sans: ['Inter', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #09090b; color: #ffffff; }
+    .glass-panel { background: rgba(24, 24, 27, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .scroll-hide::-webkit-scrollbar { display: none; }
+    .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+  
+  <!-- Sidebar -->
+  <aside class="w-64 border-r border-white/10 bg-surface flex flex-col">
+    <div class="p-6 flex items-center gap-2 border-b border-white/5">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+        <i data-lucide="gamepad-2" class="w-5 h-5 text-white"></i>
+      </div>
+      <span class="font-bold text-lg">GameVerse</span>
+    </div>
+    
+    <nav class="flex-1 p-4 space-y-1">
+      <a href="app-discover.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="compass" class="w-5 h-5"></i> Discover
+      </a>
+      <a href="app-library.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="library" class="w-5 h-5"></i> My Library
+      </a>
+      <a href="app-analytics.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="bar-chart-2" class="w-5 h-5"></i> Analytics
+      </a>
+      <a href="app-price-monitor.html" class="flex items-center gap-3 px-4 py-3 bg-indigo-600/10 text-indigo-400 rounded-xl font-medium">
+        <i data-lucide="tag" class="w-5 h-5"></i> Price Monitor
+      </a>
+      <a href="app-parental.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="shield" class="w-5 h-5"></i> Parental
+      </a>
+      <a href="app-binding.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="link" class="w-5 h-5"></i> Binding
+      </a>
+      <a href="app-mods.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="package" class="w-5 h-5"></i> Mods & Saves
+      </a>
+      <a href="app-notifications.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="bell" class="w-5 h-5"></i> Notifications
+      </a>
+      <a href="app-settings.html" class="flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
+        <i data-lucide="settings" class="w-5 h-5"></i> Settings
+      </a>
+    </nav>
+
+    <div class="p-4 border-t border-white/5">
+      <a href="index.html" class="flex items-center gap-3 px-4 py-3 text-zinc-500 hover:text-red-400 transition-colors text-sm">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Logout
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <!-- Header -->
+    <header class="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-background/50 backdrop-blur-sm">
+      <div class="flex items-center gap-4">
+        <h1 class="text-xl font-semibold">Price Monitor</h1>
+        <span class="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-medium">Beta</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="relative">
+          <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"></i>
+          <input type="text" placeholder="Search games to track..." class="bg-white/5 border border-white/10 rounded-full pl-10 pr-4 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 w-64">
+        </div>
+        <button class="relative p-2 text-zinc-400 hover:text-white">
+          <i data-lucide="bell" class="w-5 h-5"></i>
+          <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500"></div>
+      </div>
+    </header>
+
+    <!-- Scrollable Area -->
+    <div class="flex-1 overflow-y-auto p-8">
+      
+      <!-- Overview Stats -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="glass-panel p-5 rounded-2xl flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <i data-lucide="list-video" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-sm text-zinc-400">Tracked Games</div>
+            <div class="text-2xl font-bold">24</div>
+          </div>
+        </div>
+        
+        <div class="glass-panel p-5 rounded-2xl flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <i data-lucide="percent" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-sm text-zinc-400">On Sale Now</div>
+            <div class="text-2xl font-bold">8</div>
+          </div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-400">
+            <i data-lucide="bell-ring" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-sm text-zinc-400">Active Alerts</div>
+            <div class="text-2xl font-bold">5</div>
+          </div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+            <i data-lucide="piggy-bank" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-sm text-zinc-400">Potential Savings</div>
+            <div class="text-2xl font-bold">$142.50</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px]">
+        
+        <!-- Tracked Games List -->
+        <div class="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col">
+          <div class="p-6 border-b border-white/10 flex justify-between items-center">
+            <h2 class="font-semibold text-lg">My Wishlist & Alerts</h2>
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm transition-colors border border-white/10">Filter</button>
+              <button class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-sm transition-colors flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i> Add Game
+              </button>
+            </div>
+          </div>
+          
+          <div class="overflow-y-auto flex-1 p-2">
+            <table class="w-full text-left border-collapse">
+              <thead class="text-zinc-500 text-xs uppercase sticky top-0 bg-[#18181b] z-10">
+                <tr>
+                  <th class="px-4 py-3 font-medium">Game</th>
+                  <th class="px-4 py-3 font-medium">Platform</th>
+                  <th class="px-4 py-3 font-medium">Current Price</th>
+                  <th class="px-4 py-3 font-medium">Target</th>
+                  <th class="px-4 py-3 font-medium">Status</th>
+                  <th class="px-4 py-3 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody class="text-sm divide-y divide-white/5">
+                <!-- Row 1 -->
+                <tr class="hover:bg-white/5 transition-colors group cursor-pointer" onclick="selectGame(0)">
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                      <img src="https://upload.wikimedia.org/wikipedia/en/9/9f/Cyberpunk_2077_box_art.jpg" class="w-10 h-10 rounded object-cover" alt="Cyberpunk 2077">
+                      <span class="font-medium group-hover:text-indigo-400 transition-colors">Cyberpunk 2077</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <div class="w-2 h-2 rounded-full bg-white"></div> Epic
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex flex-col">
+                      <span class="text-emerald-400 font-bold">$29.99</span>
+                      <span class="text-xs text-zinc-500 line-through">$59.99</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="text-zinc-300">< $35.00</span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs border border-emerald-500/20">Target Met</span>
+                  </td>
+                  <td class="px-4 py-3 text-right">
+                    <button class="p-2 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                      <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+                    </button>
+                  </td>
+                </tr>
+
+                <!-- Row 2 -->
+                <tr class="hover:bg-white/5 transition-colors group cursor-pointer" onclick="selectGame(1)">
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                      <img src="https://platform.theverge.com/wp-content/uploads/sites/2/chorus/uploads/chorus_asset/file/24076850/elden_ring_bandai_namco.jpg?quality=90&strip=all&crop=21.458333333333,0,57.083333333333,100" class="w-10 h-10 rounded object-cover" alt="Elden Ring">
+                      <span class="font-medium group-hover:text-indigo-400 transition-colors">Elden Ring</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <div class="w-2 h-2 rounded-full bg-blue-500"></div> Steam
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex flex-col">
+                      <span class="text-white font-bold">$59.99</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="text-zinc-300">< $40.00</span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded-full bg-zinc-500/10 text-zinc-400 text-xs border border-zinc-500/20">Waiting</span>
+                  </td>
+                  <td class="px-4 py-3 text-right">
+                    <button class="p-2 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                      <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+                    </button>
+                  </td>
+                </tr>
+
+                <!-- Row 3 -->
+                <tr class="hover:bg-white/5 transition-colors group cursor-pointer" onclick="selectGame(2)">
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                      <img src="https://assets-prd.ignimgs.com/2021/09/09/god-of-war-ragnarok-button-1631231879154.jpg?crop=1%3A1%2Csmart&format=jpg&auto=webp&quality=80" class="w-10 h-10 rounded object-cover" alt="God of War">
+                      <span class="font-medium group-hover:text-indigo-400 transition-colors">God of War</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <div class="w-2 h-2 rounded-full bg-blue-500"></div> Steam
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex flex-col">
+                      <span class="text-emerald-400 font-bold">$24.99</span>
+                      <span class="text-xs text-zinc-500 line-through">$49.99</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="text-zinc-300">-50%</span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs border border-emerald-500/20">On Sale</span>
+                  </td>
+                  <td class="px-4 py-3 text-right">
+                    <button class="p-2 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                      <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+                    </button>
+                  </td>
+                </tr>
+                
+                <!-- Row 4 -->
+                <tr class="hover:bg-white/5 transition-colors group cursor-pointer" onclick="selectGame(3)">
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                      <img src="https://static0.gamerantimages.com/wordpress/wp-content/uploads/2024/12/mixcollage-24-dec-2024-11-35-pm-1494.jpg?q=50&fit=crop&w=480&h=600&dpr=1.5" class="w-10 h-10 rounded object-cover" alt="Red Dead Redemption 2">
+                      <span class="font-medium group-hover:text-indigo-400 transition-colors">Red Dead Redemption 2</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <div class="w-2 h-2 rounded-full bg-white"></div> Epic
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex flex-col">
+                      <span class="text-white font-bold">$19.99</span>
+                      <span class="text-xs text-zinc-500 line-through">$59.99</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="text-zinc-300">Wishlist</span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded-full bg-zinc-500/10 text-zinc-400 text-xs border border-zinc-500/20">Monitoring</span>
+                  </td>
+                  <td class="px-4 py-3 text-right">
+                    <button class="p-2 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                      <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+                    </button>
+                  </td>
+                </tr>
+
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Details Panel -->
+        <div class="lg:col-span-1 flex flex-col gap-6">
+          
+          <!-- Selected Game Info -->
+          <div class="glass-panel p-6 rounded-2xl flex-1 flex flex-col">
+            <div id="game-details-content">
+              <div class="flex items-start justify-between mb-6">
+                <div>
+                  <h3 class="text-xl font-bold mb-1" id="detail-title">Cyberpunk 2077</h3>
+                  <div class="flex items-center gap-2 text-sm text-zinc-400">
+                    <span class="px-2 py-0.5 rounded bg-white/10 text-white text-xs">RPG</span>
+                    <span class="px-2 py-0.5 rounded bg-white/10 text-white text-xs">Open World</span>
+                  </div>
+                </div>
+                <div class="w-12 h-12 bg-zinc-800 rounded-lg overflow-hidden">
+                   <img id="detail-img" src="https://upload.wikimedia.org/wikipedia/en/9/9f/Cyberpunk_2077_box_art.jpg" class="w-full h-full object-cover" alt="Cover">
+                </div>
+              </div>
+
+              <!-- Price Info -->
+              <div class="mb-8">
+                <div class="flex items-end gap-3 mb-2">
+                  <span class="text-3xl font-bold text-emerald-400" id="detail-price">$29.99</span>
+                  <span class="text-lg text-zinc-500 line-through mb-1" id="detail-original">$59.99</span>
+                  <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 text-sm font-bold mb-1">-50%</span>
+                </div>
+                <p class="text-sm text-zinc-400">Lowest recorded: <span class="text-white">$29.99</span> (Today)</p>
+              </div>
+
+              <!-- Price Chart -->
+              <div class="flex-1 min-h-[200px] mb-6 relative">
+                <canvas id="priceHistoryChart"></canvas>
+              </div>
+
+              <!-- Alert Settings -->
+              <div class="space-y-4">
+                <div class="space-y-2">
+                  <label class="text-sm font-medium text-zinc-300">Alert Threshold</label>
+                  <div class="relative">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">$</span>
+                    <input type="number" value="35.00" class="w-full bg-black/20 border border-white/10 rounded-xl py-2 pl-8 pr-4 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+                  </div>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-zinc-300">Notify via Email</span>
+                  <button class="w-10 h-6 rounded-full bg-indigo-600 relative transition-colors">
+                    <span class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></span>
+                  </button>
+                </div>
+
+                <div class="pt-4 flex gap-3">
+                  <button class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors">
+                    Buy Now
+                  </button>
+                  <button class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded-xl transition-colors border border-white/10">
+                    <i data-lucide="bell-off" class="w-5 h-5"></i>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    // Mock Data
+    const games = [
+      {
+        title: "Cyberpunk 2077",
+        price: "$29.99",
+        original: "$59.99",
+        discount: "-50%",
+        image: "https://upload.wikimedia.org/wikipedia/en/9/9f/Cyberpunk_2077_box_art.jpg",
+        history: [59.99, 59.99, 49.99, 59.99, 29.99, 29.99, 29.99]
+      },
+      {
+        title: "Elden Ring",
+        price: "$59.99",
+        original: "$59.99",
+        discount: null,
+        image: "https://platform.theverge.com/wp-content/uploads/sites/2/chorus/uploads/chorus_asset/file/24076850/elden_ring_bandai_namco.jpg?quality=90&strip=all&crop=21.458333333333,0,57.083333333333,100",
+        history: [59.99, 59.99, 59.99, 59.99, 59.99, 54.99, 59.99]
+      },
+      {
+        title: "God of War",
+        price: "$24.99",
+        original: "$49.99",
+        discount: "-50%",
+        image: "https://assets-prd.ignimgs.com/2021/09/09/god-of-war-ragnarok-button-1631231879154.jpg?crop=1%3A1%2Csmart&format=jpg&auto=webp&quality=80",
+        history: [49.99, 39.99, 49.99, 24.99, 24.99, 49.99, 24.99]
+      },
+      {
+        title: "Red Dead Redemption 2",
+        price: "$19.99",
+        original: "$59.99",
+        discount: "-67%",
+        image: "https://static0.gamerantimages.com/wordpress/wp-content/uploads/2024/12/mixcollage-24-dec-2024-11-35-pm-1494.jpg?q=50&fit=crop&w=480&h=600&dpr=1.5",
+        history: [59.99, 59.99, 29.99, 19.99, 19.99, 29.99, 19.99]
+      }
+    ];
+
+    let chartInstance = null;
+
+    function initChart(data) {
+      const ctx = document.getElementById('priceHistoryChart').getContext('2d');
+      
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+      gradient.addColorStop(0, 'rgba(99, 102, 241, 0.2)');
+      gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+          datasets: [{
+            label: 'Price',
+            data: data,
+            borderColor: '#6366f1',
+            backgroundColor: gradient,
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: '#6366f1',
+            pointBorderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: '#18181b',
+              titleColor: '#fff',
+              bodyColor: '#a1a1aa',
+              borderColor: 'rgba(255,255,255,0.1)',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            y: {
+              grid: { color: '#27272a' },
+              ticks: { color: '#71717a', callback: (value) => '$' + value }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#71717a' }
+            }
+          },
+          interaction: {
+            mode: 'nearest',
+            axis: 'x',
+            intersect: false
+          }
+        }
+      });
+    }
+
+    function selectGame(index) {
+      const game = games[index];
+      
+      // Update details
+      document.getElementById('detail-title').textContent = game.title;
+      document.getElementById('detail-img').src = game.image;
+      document.getElementById('detail-price').textContent = game.price;
+      document.getElementById('detail-original').textContent = game.original;
+      
+      // Update chart
+      initChart(game.history);
+    }
+
+    // Initialize with first game
+    window.addEventListener('DOMContentLoaded', () => {
+      selectGame(0);
+    });
+
+  </script>
+</body>
+</html>
