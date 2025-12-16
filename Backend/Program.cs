@@ -6,6 +6,7 @@ using PlayLinker.Data;
 using PlayLinker.Services;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using System.Text;
+using PlayLinker.Models.DTOs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +58,13 @@ builder.Services.AddScoped<IPsnService, PsnService>();
 builder.Services.AddScoped<IGogService, GogService>();
 builder.Services.AddScoped<ReportGenerationService>();
 
+// 注册认证和用户管理服务
+builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddMemoryCache();
+
 // 添加控制器
 builder.Services.AddControllers();
 
@@ -68,16 +76,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "PlayLinker API - 统一游戏管理平台",
         Version = "v1",
-        Description = @"PlayLinker 统一游戏管理平台完整API文档
-
-📦 API模块列表：
-• 开发者A：账号绑定与数据接入 (AuthController, SteamController, XboxController, PsnController, GogController)
-• 开发者B：游戏数据与元数据 (GamesController, MetadataController, AchievementsController, LibraryController, WishlistController, NewsController, PreferencesController)
-• 开发者C：本地游戏管理、存档管理、云存档、Mod管理、报表系统、数据分析 (LocalGamesController, SavesController, CloudController, ModsController, ReportsController, AnalyticsController)
-• 开发者D：家长监管与社交功能 (待实现)
-
-🔐 认证说明：
-大部分API需要JWT认证，请先调用 POST /api/v1/auth/token 获取Token",
+        Description = @"PlayLinker 统一游戏管理平台完整API文档\n\n模块：认证、用户管理、平台绑定、通知中心、家长监管。",
         Contact = new OpenApiContact
         {
             Name = "PlayLinker Team",
@@ -85,10 +84,19 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
+    // 启用注解与XML注释
+    c.EnableAnnotations();
+    var xmlFile = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name + ".xml";
+    var xmlPath = System.IO.Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (System.IO.File.Exists(xmlPath))
+    {
+        c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
+
     // 添加JWT认证支持
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. 请先调用 POST /api/v1/auth/token 获取Token,然后在此处输入: Bearer {token}",
+        Description = "JWT Authorization header using the Bearer scheme. 在此输入: Bearer {token}",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
@@ -124,6 +132,37 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// 启动时初始化数据库与基础数据（角色等）
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<PlayLinker.Data.PlayLinkerDbContext>();
+        // 自动应用迁移（如无需迁移可移除此行）
+        db.Database.Migrate();
+
+        // 初始化默认角色
+        if (!db.Roles.Any(r => r.RoleName == "user"))
+        {
+            db.Roles.Add(new PlayLinker.Models.Entities.Role { RoleName = "user", RoleDesc = "普通用户" });
+        }
+        if (!db.Roles.Any(r => r.RoleName == "parent"))
+        {
+            db.Roles.Add(new PlayLinker.Models.Entities.Role { RoleName = "parent", RoleDesc = "家长" });
+        }
+        if (!db.Roles.Any(r => r.RoleName == "admin"))
+        {
+            db.Roles.Add(new PlayLinker.Models.Entities.Role { RoleName = "admin", RoleDesc = "管理员" });
+        }
+        db.SaveChanges();
+    }
+    catch (Exception seedingEx)
+    {
+        var seedingLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        seedingLogger.LogError(seedingEx, "启动时种子数据初始化失败");
+    }
+}
 
 // 配置HTTP请求管道
 // 启用Swagger UI (在所有环境下都可用)

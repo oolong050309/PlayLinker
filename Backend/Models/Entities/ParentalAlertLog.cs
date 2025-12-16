@@ -35,6 +35,9 @@ public partial class ParentalAlertLog
     [Column("notification_id")]
     public long? NotificationId { get; set; }
 
+    [Column("severity", TypeName = "enum('info','warning','alert')")]
+    public string? Severity { get; set; }
+
     [ForeignKey("ChildUserId")]
     [InverseProperty("ParentalAlertLogs")]
     public virtual User ChildUser { get; set; } = null!;

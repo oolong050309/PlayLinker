@@ -96,7 +96,7 @@ public class AuthController : ControllerBase
     /// <summary>
     /// 验证Token是否有效
     /// </summary>
-    /// <param name="token">JWT Token</param>
+    /// <param name="request">包含待验证的JWT Token</param>
     [HttpPost("validate")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     public ActionResult<ApiResponse<object>> ValidateToken([FromBody] ValidateTokenRequestDto request)

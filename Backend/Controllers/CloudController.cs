@@ -162,12 +162,17 @@ public class CloudController : ControllerBase
             var cloudBackupId = $"cloud_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}";
             var relativePath = $"user_{userId}\\game_{save.Install.GameId}\\{cloudBackupId}.dat";
             
-            var localPath = _configuration["CloudStorage:LocalPath"];
+            var localPath = _configuration["CloudStorage:LocalPath"] ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(localPath))
+            {
+                _logger.LogError("CloudStorage:LocalPath is not configured");
+                return StatusCode(500, ApiResponse<UploadToCloudResponse>.ErrorResponse("ERR_STORAGE_PATH", "存储路径未配置"));
+            }
             var fullPath = Path.Combine(localPath, relativePath);
             
             // 4. 创建目录
             var directory = Path.GetDirectoryName(fullPath);
-            if (!Directory.Exists(directory))
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
                 _logger.LogInformation("Created directory: {Directory}", directory);
