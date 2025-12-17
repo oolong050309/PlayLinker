@@ -1,0 +1,29 @@
+export default [
+  {
+    path: '/discover',
+    name: 'Discover',
+    component: () => import('@/views/ComingSoon.vue'),
+    meta: {
+      title: '游戏发现',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/game/:id',
+    name: 'GameDetail',
+    component: () => import('@/views/ComingSoon.vue'),
+    meta: {
+      title: '游戏详情',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/store/:id',
+    name: 'StoreDetail',
+    component: () => import('@/views/ComingSoon.vue'),
+    meta: {
+      title: '商店详情',
+      requiresAuth: true
+    }
+  }
+]
