@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlayLinker.Data;
 using PlayLinker.Models;
-using PlayLinker.Models.DTOs;
+using PlayLinker.Models.DTOs; // [修复] 引用 DTO
 using PlayLinker.Models.Entities;
 
 namespace PlayLinker.Controllers;
@@ -26,11 +26,8 @@ public class WishlistController : ControllerBase
         return int.TryParse(userIdClaim, out var userId) ? userId : 1;
     }
 
-    // GET /api/v1/wishlist
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<object>>> GetWishlist(
-        [FromQuery] int page = 1, 
-        [FromQuery] int pageSize = 20)
+    public async Task<ActionResult<ApiResponse<object>>> GetWishlist([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
         var userId = GetCurrentUserId();
         var query = _context.PriceAlertSubscriptions
@@ -39,16 +36,11 @@ public class WishlistController : ControllerBase
             .Include(s => s.Platform);
 
         var total = await query.CountAsync();
-        var list = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        var list = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
 
-        // 模拟获取当前价格 (实际应从 PriceHistory 获取最新一条)
         var items = new List<WishlistItemDto>();
         foreach (var sub in list)
         {
-            // 获取最新价格记录
             var latestPrice = await _context.PriceHistories
                 .Where(ph => ph.GameId == sub.GameId && ph.PlatformId == sub.PlatformId)
                 .OrderByDescending(ph => ph.RecordDate)
@@ -78,20 +70,14 @@ public class WishlistController : ControllerBase
         }));
     }
 
-    // POST /api/v1/wishlist
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> AddToWishlist([FromBody] AddWishlistDto request)
     {
         var userId = GetCurrentUserId();
-
-        // 检查是否已存在
         var exists = await _context.PriceAlertSubscriptions
             .AnyAsync(s => s.UserId == userId && s.GameId == request.GameId && s.PlatformId == request.PlatformId);
 
-        if (exists)
-        {
-            return Conflict(ApiResponse<object>.ErrorResponse("ERR_DUPLICATE", "该游戏已在愿望单中"));
-        }
+        if (exists) return Conflict(ApiResponse<object>.ErrorResponse("ERR_DUPLICATE", "该游戏已在愿望单中"));
 
         var sub = new PriceAlertSubscription
         {
@@ -109,7 +95,6 @@ public class WishlistController : ControllerBase
         return Created("", ApiResponse<object>.SuccessResponse(new { sub.SubscriptionId }, "已添加到愿望单"));
     }
 
-    // DELETE /api/v1/wishlist/{id}
     [HttpDelete("{id}")]
     public async Task<ActionResult<ApiResponse<object>>> RemoveFromWishlist(long id)
     {
@@ -117,15 +102,29 @@ public class WishlistController : ControllerBase
         var sub = await _context.PriceAlertSubscriptions
             .FirstOrDefaultAsync(s => s.SubscriptionId == id && s.UserId == userId);
 
-        if (sub == null)
-        {
-            return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "愿望单记录不存在"));
-        }
+        if (sub == null) return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "愿望单记录不存在"));
 
-        // 软删除，标记为非活动
         sub.IsActive = false;
         await _context.SaveChangesAsync();
 
         return Ok(ApiResponse<object>.SuccessResponse(new { }, "已从愿望单移除"));
+    }
+
+    [HttpPatch("{id}")]
+    public async Task<ActionResult<ApiResponse<object>>> UpdateWishlist(long id, [FromBody] UpdateWishlistDto request)
+    {
+        var userId = GetCurrentUserId();
+        var sub = await _context.PriceAlertSubscriptions
+            .FirstOrDefaultAsync(s => s.SubscriptionId == id && s.UserId == userId);
+
+        if (sub == null) return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "愿望单记录不存在"));
+
+        if (request.TargetPrice.HasValue) sub.TargetPrice = request.TargetPrice.Value;
+        if (request.TargetDiscount.HasValue) sub.TargetDiscount = request.TargetDiscount.Value;
+        
+        sub.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(ApiResponse<object>.SuccessResponse(new { sub.SubscriptionId, sub.UpdatedAt }, "愿望单设置已更新"));
     }
 }
