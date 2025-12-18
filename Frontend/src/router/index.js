@@ -15,18 +15,89 @@ import recommendationRoutes from './modules/recommendation'
 const routes = [
   {
     path: '/',
-    redirect: '/discover'
+    name: 'Landing',
+    component: () => import('@/views/Landing.vue'),
+    meta: {
+      title: '首页'
+    }
+  },
+  {
+    path: '/app',
+    component: () => import('@/views/Home.vue'),
+    redirect: '/app/discover',
+    children: [
+      {
+        path: 'list',
+        name: 'GameList',
+        component: () => import('@/views/GameList.vue'),
+        meta: {
+          title: '游戏列表',
+          requiresAuth: true
+        }
+      },
+      ...gameRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...libraryRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...localManageRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...analyticsRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...priceRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...recommendationRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      {
+        path: 'ranking',
+        name: 'GameRanking',
+        component: () => import('@/views/GameRanking.vue'),
+        meta: {
+          title: '排行榜',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'achievements',
+        name: 'Achievements',
+        component: () => import('@/views/Achievements.vue'),
+        meta: {
+          title: '成就',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'news',
+        name: 'News',
+        component: () => import('@/views/News.vue'),
+        meta: {
+          title: '新闻',
+          requiresAuth: true
+        }
+      }
+    ]
   },
   ...authRoutes,
   ...platformRoutes,
   ...notificationRoutes,
   ...parentalRoutes,
-  ...gameRoutes,
-  ...libraryRoutes,
-  ...localManageRoutes,
-  ...analyticsRoutes,
-  ...priceRoutes,
-  ...recommendationRoutes,
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
@@ -62,8 +133,11 @@ router.beforeEach((to, from, next) => {
       query: { redirect: to.fullPath }
     })
   } else if (to.path === '/login' && token) {
-    // 已登录用户访问登录页，跳转到发现页
-    next('/discover')
+    // 已登录用户访问登录页，跳转到应用首页
+    next('/app/discover')
+  } else if (to.path === '/register' && token) {
+    // 已登录用户访问注册页，跳转到应用首页
+    next('/app/discover')
   } else {
     next()
   }
