@@ -8,11 +8,48 @@ const api = axios.create({
   }
 })
 
+/**
+ * 解析 JWT 并检查是否过期
+ * @param {string} token - JWT token
+ * @returns {boolean} true 表示有效，false 表示过期或无效
+ */
+function isTokenValid(token) {
+  if (!token) return false
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return false
+    const payload = JSON.parse(atob(parts[1]))
+    // exp 是秒级时间戳
+    if (!payload.exp) return true // 没有过期时间则认为有效
+    return payload.exp * 1000 > Date.now()
+  } catch (e) {
+    return false
+  }
+}
+
+/**
+ * 清除登录状态并跳转登录页
+ */
+function clearAuthAndRedirect() {
+  sessionStorage.removeItem('token')
+  sessionStorage.removeItem('refreshToken')
+  sessionStorage.removeItem('user')
+  // 避免重复跳转
+  if (!window.location.pathname.includes('/login')) {
+    window.location.href = '/login'
+  }
+}
+
 // 请求拦截器
 api.interceptors.request.use(
   config => {
-    const token = localStorage.getItem('token')
+    const token = sessionStorage.getItem('token')
     if (token) {
+      // 检查 token 是否过期
+      if (!isTokenValid(token)) {
+        clearAuthAndRedirect()
+        return Promise.reject(new Error('Token已过期，请重新登录'))
+      }
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
@@ -47,8 +84,7 @@ api.interceptors.response.use(
       switch (status) {
         case 401:
           console.error('未授权，请重新登录')
-          localStorage.removeItem('token')
-          window.location.href = '/login'
+          clearAuthAndRedirect()
           break
         case 403:
           console.error('没有权限访问')

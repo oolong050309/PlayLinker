@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
@@ -17,16 +18,22 @@ namespace PlayLinker.Controllers;
 [Authorize]
 public class UsersController : ControllerBase
 {
-    private readonly PlayLinkerDbContext _dbContext;
-    private readonly IPasswordHasher _passwordHasher;
-    private readonly ILogger<UsersController> _logger;
+  private readonly PlayLinkerDbContext _dbContext;
+  private readonly IPasswordHasher _passwordHasher;
+  private readonly ILogger<UsersController> _logger;
+  private readonly IAliyunOssService _ossService;
 
-    public UsersController(PlayLinkerDbContext dbContext, IPasswordHasher passwordHasher, ILogger<UsersController> logger)
-    {
-        _dbContext = dbContext;
-        _passwordHasher = passwordHasher;
-        _logger = logger;
-    }
+  public UsersController(
+      PlayLinkerDbContext dbContext,
+      IPasswordHasher passwordHasher,
+      ILogger<UsersController> logger,
+      IAliyunOssService ossService)
+  {
+      _dbContext = dbContext;
+      _passwordHasher = passwordHasher;
+      _logger = logger;
+      _ossService = ossService;
+  }
 
     /// <summary>
     /// 获取个人信息
@@ -229,6 +236,64 @@ public class UsersController : ControllerBase
         bool hasSpecial = password.Any(c => !char.IsLetterOrDigit(c));
 
         return hasUpper && hasLower && hasDigit && hasSpecial;
+    }
+
+    /// <summary>
+    /// 上传头像（上传到阿里云 OSS，并更新用户 AvatarUrl）
+    /// </summary>
+    [SwaggerOperation(Summary = "上传头像", Description = "上传用户头像文件到阿里云 OSS，返回头像访问地址并更新用户头像URL。")]
+    [HttpPost("avatar")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponse<object>>> UploadAvatar([FromForm] IFormFile file)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_FILE_EMPTY", "文件不能为空"));
+            }
+
+            // 调用 OSS 服务上传
+            string avatarUrl;
+            try
+            {
+                avatarUrl = await _ossService.UploadUserAvatarAsync(userId, file);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // 配置或业务校验错误
+                _logger.LogWarning(ex, "Upload avatar validation/config error for user {UserId}", userId);
+                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_UPLOAD_FAILED", ex.Message));
+            }
+
+            // 更新数据库中的 AvatarUrl
+            var user = _dbContext.Users.FirstOrDefault(u => u.UserId == userId);
+            if (user == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "用户不存在"));
+            }
+
+            user.AvatarUrl = avatarUrl;
+            _dbContext.Users.Update(user);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("User {UserId} avatar updated: {AvatarUrl}", userId, avatarUrl);
+
+            return Ok(ApiResponse<object>.SuccessResponse(new { avatarUrl }, "上传成功"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading avatar");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
     }
 }
 

@@ -6,7 +6,7 @@ namespace PlayLinker.Services;
 public interface IAuthService
 {
     Task<(bool success, string message, User? user)> RegisterAsync(RegisterRequestDto request);
-    Task<(bool success, string message, User? user)> LoginAsync(LoginRequestDto request);
+    Task<(bool success, string message, User? user)> LoginAsync(LoginRequestDto request, string? clientIp = null);
     Task<(bool success, string message)> LogoutAsync(int userId, bool allDevices = false);
 
     // 发送重置验证码到邮箱

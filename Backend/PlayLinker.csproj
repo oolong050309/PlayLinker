@@ -20,11 +20,11 @@
     <PackageReference Include="QuestPDF" Version="2025.7.4" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="6.5.0" />
-    
+
+    <!-- 阿里云 OSS SDK -->
+    <PackageReference Include="Aliyun.OSS.SDK.NetCore" Version="2.13.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
-    
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.5.1" />
-    
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 

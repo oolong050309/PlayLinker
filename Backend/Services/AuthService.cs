@@ -92,7 +92,7 @@ public class AuthService : IAuthService
         }
     }
 
-    public async Task<(bool success, string message, User? user)> LoginAsync(LoginRequestDto request)
+    public async Task<(bool success, string message, User? user)> LoginAsync(LoginRequestDto request, string? clientIp = null)
     {
         try
         {
@@ -117,12 +117,16 @@ public class AuthService : IAuthService
                 return (false, "ERR_INVALID_CREDENTIALS", null);
             }
 
-            // 更新最后登录时间
+            // 更新最后登录时间和IP地址
             user.LastLoginTime = DateTime.UtcNow;
+            if (!string.IsNullOrWhiteSpace(clientIp))
+            {
+                user.LoginIp = clientIp;
+            }
             _dbContext.Users.Update(user);
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation($"User logged in successfully: {user.UserId}");
+            _logger.LogInformation($"User logged in successfully: {user.UserId}, IP: {clientIp ?? "N/A"}");
             return (true, "登录成功", user);
         }
         catch (Exception ex)

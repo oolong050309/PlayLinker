@@ -81,15 +81,15 @@ const handleLogin = async () => {
     })
 
     if (response.success && response.data) {
-      // 保存 token
-      localStorage.setItem('token', response.data.token)
+      // 保存 token（使用 sessionStorage，关闭浏览器后自动退出）
+      sessionStorage.setItem('token', response.data.token)
       if (response.data.refreshToken) {
-        localStorage.setItem('refreshToken', response.data.refreshToken)
+        sessionStorage.setItem('refreshToken', response.data.refreshToken)
       }
 
       // 保存用户信息
       if (response.data.user) {
-        localStorage.setItem('user', JSON.stringify(response.data.user))
+        sessionStorage.setItem('user', JSON.stringify(response.data.user))
       }
 
       // 跳转到应用首页或之前要访问的页面

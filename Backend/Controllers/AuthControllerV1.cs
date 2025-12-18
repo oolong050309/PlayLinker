@@ -137,7 +137,10 @@ public class AuthControllerV1 : ControllerBase
                 return BadRequest(ApiResponse<object>.ErrorResponse("ERR_VALIDATION", string.Join(", ", errors)));
             }
 
-            var (success, message, user) = await _authService.LoginAsync(request);
+            // 获取客户端IP地址
+            var clientIp = GetClientIpAddress();
+
+            var (success, message, user) = await _authService.LoginAsync(request, clientIp);
 
             if (!success)
             {
@@ -384,6 +387,50 @@ public class AuthControllerV1 : ControllerBase
             return $"{localPart[0]}***@{domain}";
 
         return $"{localPart[0]}{new string('*', localPart.Length - 2)}{localPart[^1]}@{domain}";
+    }
+
+    /// <summary>
+    /// 获取客户端IP地址
+    /// </summary>
+    private string? GetClientIpAddress()
+    {
+        // 优先从X-Forwarded-For头获取（适用于反向代理场景）
+        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            // X-Forwarded-For可能包含多个IP，取第一个
+            var ips = forwardedFor.Split(',');
+            if (ips.Length > 0)
+            {
+                return ips[0].Trim();
+            }
+        }
+
+        // 其次从X-Real-IP头获取
+        var realIp = Request.Headers["X-Real-IP"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(realIp))
+        {
+            return realIp.Trim();
+        }
+
+        // 最后从HttpContext.Connection.RemoteIpAddress获取
+        var remoteIp = HttpContext.Connection.RemoteIpAddress;
+        if (remoteIp != null)
+        {
+            // 如果是IPv6映射的IPv4地址，转换为IPv4格式
+            if (remoteIp.IsIPv4MappedToIPv6)
+            {
+                return remoteIp.MapToIPv4().ToString();
+            }
+            // 本地回环地址统一显示为127.0.0.1
+            if (System.Net.IPAddress.IsLoopback(remoteIp))
+            {
+                return "127.0.0.1";
+            }
+            return remoteIp.ToString();
+        }
+
+        return null;
     }
 }
 

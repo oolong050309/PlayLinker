@@ -122,8 +122,8 @@ router.beforeEach((to, from, next) => {
   // 动态设置页面标题
   document.title = to.meta.title ? `${to.meta.title} - PlayLinker` : 'PlayLinker'
   
-  // 检查是否需要认证
-  const token = localStorage.getItem('token')
+  // 检查是否需要认证（使用 sessionStorage）
+  const token = sessionStorage.getItem('token')
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
   
   if (requiresAuth && !token) {

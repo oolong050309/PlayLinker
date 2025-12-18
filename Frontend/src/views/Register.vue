@@ -146,10 +146,10 @@ const handleRegister = async () => {
     const response = await authApi.register(registerData)
 
     if (response.success && response.data) {
-      // 保存 token
-      localStorage.setItem('token', response.data.token)
+      // 保存 token（使用 sessionStorage，关闭浏览器后自动退出）
+      sessionStorage.setItem('token', response.data.token)
       if (response.data.refreshToken) {
-        localStorage.setItem('refreshToken', response.data.refreshToken)
+        sessionStorage.setItem('refreshToken', response.data.refreshToken)
       }
 
       success.value = '注册成功！正在跳转...'

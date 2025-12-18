@@ -7,6 +7,7 @@ using PlayLinker.Services;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using System.Text;
 using PlayLinker.Models.DTOs;
+using PlayLinker.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -65,6 +66,10 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddMemoryCache();
 
+// --- 阿里云 OSS 存储服务 ---
+builder.Services.Configure<AliyunOssOptions>(builder.Configuration.GetSection("AliyunOss"));
+builder.Services.AddScoped<IAliyunOssService, AliyunOssService>();
+
 // --- AI 服务 (来自 Incoming) ---
 builder.Services.AddHttpClient(); // 通用 HttpClient
 builder.Services.AddScoped<IAiService, AiService>();
@@ -80,7 +85,16 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "PlayLinker API - 统一游戏管理平台",
         Version = "v1",
-        Description = "PlayLinker 统一游戏管理平台完整API文档。\n\n模块：认证、用户管理、平台绑定、通知中心、家长监管。",
+        Description = @"PlayLinker 统一游戏管理平台完整API文档
+
+📦 API模块列表：
+• 开发者A：账号绑定与数据接入 (AuthController, SteamController, XboxController, PsnController, GogController)
+• 开发者B：游戏数据与元数据 (GamesController, MetadataController, AchievementsController, LibraryController, WishlistController, NewsController, PreferencesController)
+• 开发者C：本地游戏管理、存档管理、云存档、Mod管理、报表系统、数据分析 (LocalGamesController, SavesController, CloudController, ModsController, ReportsController, AnalyticsController)
+• 开发者D：家长监管与社交功能 (待实现)
+
+🔐 认证说明：
+大部分API需要JWT认证，请先调用 POST /api/v1/auth/token 获取Token",
         Contact = new OpenApiContact
         {
             Name = "PlayLinker Team",
