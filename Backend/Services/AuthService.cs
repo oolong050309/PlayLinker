@@ -96,9 +96,34 @@ public class AuthService : IAuthService
     {
         try
         {
-            var user = await _dbContext.Users
-                .Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.Username == request.Username);
+            // 判断输入是邮箱格式还是用户名格式
+            // 如果包含@符号且@后面有域名（包含点），则认为是邮箱
+            bool isEmail = !string.IsNullOrWhiteSpace(request.Username) 
+                && request.Username.Contains('@', StringComparison.Ordinal);
+            
+            if (isEmail)
+            {
+                var atIndex = request.Username.IndexOf('@');
+                isEmail = atIndex > 0 
+                    && atIndex < request.Username.Length - 1 
+                    && request.Username.Substring(atIndex + 1).Contains('.', StringComparison.Ordinal);
+            }
+            
+            User? user;
+            if (isEmail)
+            {
+                // 使用邮箱查询
+                user = await _dbContext.Users
+                    .Include(u => u.Role)
+                    .FirstOrDefaultAsync(u => u.Email == request.Username);
+            }
+            else
+            {
+                // 使用用户名查询
+                user = await _dbContext.Users
+                    .Include(u => u.Role)
+                    .FirstOrDefaultAsync(u => u.Username == request.Username);
+            }
 
             if (user == null)
             {
