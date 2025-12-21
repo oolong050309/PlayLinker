@@ -1,4 +1,5 @@
 using PlayLinker.Models.DTOs;
+using PlayLinker.Models.Entities;
 using PlayLinker.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
@@ -199,29 +200,110 @@ public class PsnService : IPsnService
     }
 
     /// <summary>
-    /// 保存令牌到数据库
+    /// 保存令牌到数据库（如果绑定不存在则创建）
     /// </summary>
-    private async Task<bool> SaveTokenToDatabase(int userId, int platformId, string tokenJson)
+    private async Task<bool> SaveTokenToDatabase(int userId, int platformId, string tokenJson, string? onlineId = null)
     {
         try
         {
             var binding = await _context.UserPlatformBindings
                 .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == platformId);
             
-            if (binding == null)
+            if (binding != null)
             {
-                _logger.LogWarning("未找到绑定记录: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+                // 更新现有绑定
+                var encryptedToken = _encryptionService.EncryptToken(tokenJson);
+                binding.AccessToken = encryptedToken;
+                binding.LastSyncTime = DateTime.UtcNow;
+                binding.ExpireTime = DateTime.UtcNow.AddYears(1);
+                binding.BindingStatus = true;
+                
+                // 如果提供了OnlineId，更新PlatformUserId
+                if (!string.IsNullOrEmpty(onlineId))
+                {
+                    binding.PlatformUserId = onlineId;
+                }
+                
+                await _context.SaveChangesAsync();
+                
+                _logger.LogInformation("令牌已更新到数据库: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+                return true;
+            }
+            
+            // 绑定不存在，需要创建
+            if (string.IsNullOrEmpty(onlineId))
+            {
+                _logger.LogWarning("未找到绑定记录且未提供OnlineId，无法创建绑定: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
                 return false;
             }
             
-            var encryptedToken = _encryptionService.EncryptToken(tokenJson);
-            binding.AccessToken = encryptedToken;
-            binding.LastSyncTime = DateTime.UtcNow;
-            binding.ExpireTime = DateTime.UtcNow.AddYears(1);
-            binding.BindingStatus = true;
-            await _context.SaveChangesAsync();
+            // 先确保PlayerPlatform记录存在（外键约束要求）
+            var playerPlatform = await _context.PlayerPlatforms
+                .FirstOrDefaultAsync(pp => pp.PlatformUserId == onlineId && pp.PlatformId == platformId);
             
-            _logger.LogInformation("令牌已保存到数据库: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+            if (playerPlatform == null)
+            {
+                // 注意：此时令牌还未保存，无法调用GetPsnUser（需要令牌）
+                // 先使用基本信息创建PlayerPlatform记录，后续可以通过同步更新
+                _logger.LogInformation("创建PlayerPlatform记录: OnlineId={OnlineId}", onlineId);
+                playerPlatform = new PlayerPlatform
+                {
+                    PlatformUserId = onlineId,
+                    PlatformId = platformId,
+                    ProfileName = onlineId  // 暂时使用OnlineId作为ProfileName，后续可以更新
+                };
+                _context.PlayerPlatforms.Add(playerPlatform);
+                
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("已创建PlayerPlatform记录: OnlineId={OnlineId}", onlineId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "创建PlayerPlatform记录失败: OnlineId={OnlineId}", onlineId);
+                    throw; // 重新抛出异常，因为这是必需的
+                }
+            }
+            
+            // 确保playerPlatform已保存（重新查询以确保数据一致性）
+            playerPlatform = await _context.PlayerPlatforms
+                .FirstOrDefaultAsync(pp => pp.PlatformUserId == onlineId && pp.PlatformId == platformId);
+
+            if (playerPlatform == null)
+            {
+                _logger.LogError("PlayerPlatform记录不存在，无法创建绑定: OnlineId={OnlineId}, PlatformId={PlatformId}", onlineId, platformId);
+                return false;
+            }
+            
+            // 创建新的绑定记录
+            var encryptedTokenForNewBinding = _encryptionService.EncryptToken(tokenJson);
+            binding = new UserPlatformBinding
+            {
+                UserId = userId,
+                PlatformId = platformId,
+                PlatformUserId = onlineId,  // 必须与playerPlatform.PlatformUserId完全一致
+                AccessToken = encryptedTokenForNewBinding,
+                BindingStatus = true,
+                BindingTime = DateTime.UtcNow,
+                LastSyncTime = DateTime.UtcNow,
+                ExpireTime = DateTime.UtcNow.AddYears(1) // PSN令牌有效期1年
+            };
+            
+            _context.UserPlatformBindings.Add(binding);
+            
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "保存UserPlatformBinding失败: OnlineId={OnlineId}, PlatformId={PlatformId}, PlayerPlatform存在={PlayerPlatformExists}", 
+                    onlineId, platformId, playerPlatform != null);
+                throw;
+            }
+            
+            _logger.LogInformation("已创建绑定记录并保存令牌: UserId={UserId}, PlatformId={PlatformId}, OnlineId={OnlineId}", userId, platformId, onlineId);
             return true;
         }
         catch (Exception ex)
@@ -489,14 +571,24 @@ public class PsnService : IPsnService
                 
                 if (result != null && result.ContainsKey("success") && result["success"].GetBoolean())
                 {
-                    // 认证成功，读取令牌文件并保存到数据库
+                    // 获取OnlineId（用于创建绑定）
+                    string? onlineId = result.ContainsKey("onlineId") ? result["onlineId"].GetString() : null;
+                    
+                    // 认证成功，读取令牌文件并保存到数据库（需要onlineId来创建绑定记录）
                     if (File.Exists(tempTokenPath))
                     {
                         try
                         {
                             var tokenJson = await File.ReadAllTextAsync(tempTokenPath);
-                            await SaveTokenToDatabase(userId, 6, tokenJson);
-                            _logger.LogInformation("令牌已保存到数据库");
+                            var saveSuccess = await SaveTokenToDatabase(userId, 6, tokenJson, onlineId);
+                            if (saveSuccess)
+                            {
+                                _logger.LogInformation("令牌已保存到数据库: OnlineId={OnlineId}", onlineId);
+                            }
+                            else
+                            {
+                                _logger.LogWarning("令牌保存失败，但认证已成功");
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -509,7 +601,7 @@ public class PsnService : IPsnService
                         Success = true,
                         Message = result.ContainsKey("message") ? result["message"].GetString() ?? "认证成功" : "认证成功",
                         AccountId = result.ContainsKey("accountId") ? result["accountId"].GetString() : null,
-                        OnlineId = result.ContainsKey("onlineId") ? result["onlineId"].GetString() : null,
+                        OnlineId = onlineId,
                         TokenExists = true
                     };
                 }

@@ -1,4 +1,5 @@
 using PlayLinker.Models.DTOs;
+using PlayLinker.Models.Entities;
 using PlayLinker.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
@@ -83,9 +84,9 @@ public class XboxService : IXboxService
     }
 
     /// <summary>
-    /// 保存令牌到数据库
+    /// 保存令牌到数据库（如果绑定不存在则创建）
     /// </summary>
-    private async Task<bool> SaveTokenToDatabase(int userId, int platformId, string tokenJson)
+    private async Task<bool> SaveTokenToDatabase(int userId, int platformId, string tokenJson, string? xuid = null)
     {
         try
         {
@@ -94,19 +95,99 @@ public class XboxService : IXboxService
             
             if (binding != null)
             {
-                // 加密令牌
+                // 更新现有绑定
                 var encryptedToken = _encryptionService.EncryptToken(tokenJson);
                 binding.AccessToken = encryptedToken;
                 binding.LastSyncTime = DateTime.UtcNow;
                 binding.ExpireTime = DateTime.UtcNow.AddYears(1); // Xbox令牌有效期1年
+                
+                // 如果提供了XUID，更新PlatformUserId
+                if (!string.IsNullOrEmpty(xuid))
+                {
+                    binding.PlatformUserId = xuid;
+                }
+                
                 await _context.SaveChangesAsync();
                 
-                _logger.LogInformation("令牌已保存到数据库: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+                _logger.LogInformation("令牌已更新到数据库: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
                 return true;
             }
             
-            _logger.LogWarning("未找到绑定记录: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
-            return false;
+            // 绑定不存在，需要创建
+            if (string.IsNullOrEmpty(xuid))
+            {
+                _logger.LogWarning("未找到绑定记录且未提供XUID，无法创建绑定: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+                return false;
+            }
+            
+            // 先确保PlayerPlatform记录存在（外键约束要求）
+            var playerPlatform = await _context.PlayerPlatforms
+                .FirstOrDefaultAsync(pp => pp.PlatformUserId == xuid && pp.PlatformId == platformId);
+            
+            if (playerPlatform == null)
+            {
+                // 注意：此时令牌还未保存，无法调用GetXboxUser（需要令牌）
+                // 先使用基本信息创建PlayerPlatform记录，后续可以通过同步更新
+                _logger.LogInformation("创建PlayerPlatform记录: Xuid={Xuid}", xuid);
+                playerPlatform = new PlayerPlatform
+                {
+                    PlatformUserId = xuid,
+                    PlatformId = platformId,
+                    ProfileName = xuid  // 暂时使用XUID作为ProfileName，后续可以更新
+                };
+                _context.PlayerPlatforms.Add(playerPlatform);
+                
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("已创建PlayerPlatform记录: Xuid={Xuid}", xuid);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "创建PlayerPlatform记录失败: Xuid={Xuid}", xuid);
+                    throw; // 重新抛出异常，因为这是必需的
+                }
+            }
+            
+            // 确保playerPlatform已保存（重新查询以确保数据一致性）
+            playerPlatform = await _context.PlayerPlatforms
+                .FirstOrDefaultAsync(pp => pp.PlatformUserId == xuid && pp.PlatformId == platformId);
+            
+            if (playerPlatform == null)
+            {
+                _logger.LogError("PlayerPlatform记录不存在，无法创建绑定: Xuid={Xuid}, PlatformId={PlatformId}", xuid, platformId);
+                return false;
+            }
+            
+            // 创建新的绑定记录
+            var encryptedTokenForNewBinding = _encryptionService.EncryptToken(tokenJson);
+            binding = new UserPlatformBinding
+            {
+                UserId = userId,
+                PlatformId = platformId,
+                PlatformUserId = xuid,  // 必须与playerPlatform.PlatformUserId完全一致
+                AccessToken = encryptedTokenForNewBinding,
+                BindingStatus = true,
+                BindingTime = DateTime.UtcNow,
+                LastSyncTime = DateTime.UtcNow,
+                ExpireTime = DateTime.UtcNow.AddYears(1) // Xbox令牌有效期1年
+            };
+            
+            _context.UserPlatformBindings.Add(binding);
+            
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "保存UserPlatformBinding失败: Xuid={Xuid}, PlatformId={PlatformId}, PlayerPlatform存在={PlayerPlatformExists}", 
+                    xuid, platformId, playerPlatform != null);
+                throw;
+            }
+            
+            _logger.LogInformation("已创建绑定记录并保存令牌: UserId={UserId}, PlatformId={PlatformId}, Xuid={Xuid}", userId, platformId, xuid);
+            return true;
         }
         catch (Exception ex)
         {
@@ -462,13 +543,13 @@ public class XboxService : IXboxService
                 
                 if (xboxData != null && xboxData.RootElement.TryGetProperty("success", out var success) && success.GetBoolean())
                 {
-                    var xuid = xboxData.RootElement.TryGetProperty("xuid", out var xuidProp) ? xuidProp.GetString() : null;
+                    var refreshedXuid = xboxData.RootElement.TryGetProperty("xuid", out var xuidProp) ? xuidProp.GetString() : null;
                     return new XboxAuthResponseDto
                     {
                         Success = true,
                         Message = "令牌刷新成功",
                         TokenExists = true,
-                        Xuid = xuid,
+                        Xuid = refreshedXuid,
                         NeedsBrowserAuth = false
                     };
                 }
@@ -565,22 +646,8 @@ public class XboxService : IXboxService
                 };
             }
 
-            // 认证成功，读取令牌文件并保存到数据库
-            if (File.Exists(tempTokenPath))
-            {
-                try
-                {
-                    var tokenJson = await File.ReadAllTextAsync(tempTokenPath);
-                    await SaveTokenToDatabase(userId, 7, tokenJson);
-                    _logger.LogInformation("令牌已保存到数据库");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "保存令牌到数据库失败");
-                }
-            }
-
             // 解析输出
+            string? xuid = null;
             try
             {
                 // 输出可能包含多行，取最后一行JSON
@@ -596,11 +663,35 @@ public class XboxService : IXboxService
                 
                 if (result != null && result.ContainsKey("success") && result["success"].GetBoolean())
                 {
+                    xuid = result.ContainsKey("xuid") ? result["xuid"].GetString() : null;
+                    
+                    // 认证成功，读取令牌文件并保存到数据库（需要xuid来创建绑定记录）
+                    if (File.Exists(tempTokenPath))
+                    {
+                        try
+                        {
+                            var tokenJson = await File.ReadAllTextAsync(tempTokenPath);
+                            var saveSuccess = await SaveTokenToDatabase(userId, 7, tokenJson, xuid);
+                            if (saveSuccess)
+                            {
+                                _logger.LogInformation("令牌已保存到数据库: Xuid={Xuid}", xuid);
+                            }
+                            else
+                            {
+                                _logger.LogWarning("令牌保存失败，但认证已成功");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "保存令牌到数据库失败");
+                        }
+                    }
+                    
                     return new XboxAuthResponseDto
                     {
                         Success = true,
                         Message = result.ContainsKey("message") ? result["message"].GetString() ?? "认证成功" : "认证成功",
-                        Xuid = result.ContainsKey("xuid") ? result["xuid"].GetString() : null,
+                        Xuid = xuid,
                         TokenExists = true,
                         NeedsBrowserAuth = false
                     };
