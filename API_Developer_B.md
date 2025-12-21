@@ -52,7 +52,16 @@
 - 示例: `2024-11-27T10:00:00Z`
 
 ### 枚举定义
-- `platform`: steam | epic | origin | uplay | gog
+- `platform`: steam | epic | origin | uplay | gog | psn | xbox | nintendo
+- `platformId`: 平台ID对应关系
+  - `1` = Steam
+  - `2` = Epic Games
+  - `3` = Origin
+  - `4` = Uplay
+  - `5` = GOG
+  - `6` = PSN
+  - `7` = Xbox
+  - `8` = Nintendo Switch
 - `sort_by`: popularity | release_date | name | price
 
 ---
@@ -540,6 +549,11 @@
 
 **字段说明**:
 - `platformId`: 平台ID
+  - `1` = Steam
+  - `2` = Epic Games
+  - `3` = Origin
+  - `4` = Uplay
+  - `5` = GOG
 - `fullSync`: true=完全同步, false=增量同步
 
 **成功响应** (200):
@@ -679,6 +693,33 @@
 ### 4.2 GET `/api/v1/library/achievements` - 用户成就总览
 **认证**: 必需
 
+**查询参数**:
+- `userId` (必需) - 用户ID，必须是数据库中已存在的有效用户ID（对应 `user` 表的 `user_id`）
+
+**请求示例**:
+```
+GET /api/v1/library/achievements?userId=1001
+```
+
+**错误响应** (400):
+- 当 `userId` 无效或不存在时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "用户ID 1001 不存在，请先创建用户"
+}
+```
+
+- 当 `userId` 参数无效时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "userId 参数无效，必须提供有效的用户ID"
+}
+```
+
 **成功响应** (200):
 ```json
 {
@@ -774,27 +815,76 @@
 **请求体**:
 ```json
 {
+  "userId": 1000,
   "platformId": 1,
   "gameId": 10001
 }
 ```
 
 **字段说明**:
-- `platformId`: 平台ID（可选，不传则同步所有平台）
-- `gameId`: 游戏ID（可选，不传则同步所有游戏）
+- `userId`: 需要同步的用户ID（必需）
+  - 必须是有效的用户ID，如果用户不存在将返回错误
+- `platformId`: 平台ID（可选）
+  - `0` 或 `null` = 同步该用户已绑定平台的所有游戏
+  - `1` = Steam
+  - `2` = Epic Games
+  - `3` = Origin
+  - `4` = Uplay
+  - `5` = GOG
+  - `6` = PSN
+  - `7` = Xbox
+  - `8` = Nintendo Switch
+- `gameId`: 游戏ID（可选）
+  - `0` 或 `null` = 同步所有游戏
+  - 其他值 = 同步指定游戏
+
+**操作逻辑**:
+1. 验证 `userId` 是否合法，若非法直接返回错误
+2. 若 `platformId` 或 `gameId == 0`，则选择同步该用户已绑定平台的所有游戏
+3. 根据用户绑定的平台账号（例如 Steam ID），调用平台 API 获取最新成就数据
+4. 更新数据库中已有的该用户该平台该游戏的成就数据
+5. 返回同步结果
 
 **成功响应** (200):
+返回本次同步的实际结果：
 ```json
 {
   "success": true,
   "code": "OK",
   "message": "成就同步成功",
   "data": {
-    "syncedGames": 1,
+    "syncedGames": 5,
     "newUnlocks": 3,
     "totalUnlocked": 48,
     "syncTime": "2024-11-27T10:00:00Z"
   }
+}
+```
+
+**响应字段说明**:
+- `syncedGames`: 本次同步的游戏数量（实际值）
+- `newUnlocks`: 本次新解锁的成就数量（实际值）
+- `totalUnlocked`: 同步后用户总解锁成就数（实际值）
+- `syncTime`: 同步完成时间（ISO 8601格式）
+
+**错误响应** (400):
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "userId 参数无效，必须提供有效的用户ID",
+  "data": null
+}
+```
+
+或
+
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "用户ID 1000 不存在，请先创建用户",
+  "data": null
 }
 ```
 
@@ -893,14 +983,378 @@
 
 ---
 
-## 6. Steam API 集成
+### 5.4 POST `/api/v1/news/steam/sync-all` - 同步所有游戏的Steam新闻
+**认证**: 不需要
 
-### 6.1 POST `/api/v1/steam/import` - 导入Steam数据
+**请求体**:
+```json
+{
+  "count": 20
+}
+```
+
+**字段说明**:
+- `count`: 每个游戏获取的新闻数量（可选，默认20）
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Steam新闻同步完成",
+  "data": {
+    "processedGames": 150,
+    "totalGames": 200,
+    "totalNews": 3000,
+    "errors": []
+  }
+}
+```
+
+**响应字段说明**:
+- `processedGames`: 成功处理的游戏数量
+- `totalGames`: 总游戏数量（有Steam平台映射的游戏）
+- `totalNews`: 获取到的新闻总数
+- `errors`: 处理过程中的错误列表
+
+**错误响应** (500):
+```json
+{
+  "success": false,
+  "code": "ERR_INTERNAL",
+  "message": "服务器内部错误"
+}
+```
+
+---
+
+### 5.5 POST `/api/v1/news/steam/sync` - 同步指定游戏的Steam新闻
+**认证**: 不需要
+
+**请求体**:
+```json
+{
+  "gameId": 10001,
+  "count": 20
+}
+```
+
+**字段说明**:
+- `gameId`: **必需** - 游戏ID（对应 `games` 表的 `game_id`）
+- `count`: 获取的新闻数量（可选，默认20）
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Steam新闻获取成功",
+  "data": {
+    "gameId": 10001,
+    "gameName": "Counter-Strike 2",
+    "appId": 730,
+    "news": [
+      {
+        "gid": "12345678",
+        "title": "CS2 重大更新发布",
+        "url": "https://store.steampowered.com/news/...",
+        "isExternalUrl": false,
+        "author": "Valve",
+        "contents": "更新内容包括新地图、武器平衡调整...",
+        "feedLabel": "更新",
+        "date": 1732694400,
+        "feedName": "steam_community_announcements",
+        "feedType": 0,
+        "appId": 730
+      }
+    ],
+    "total": 20
+  }
+}
+```
+
+**响应字段说明**:
+- `gameId`: 游戏ID
+- `gameName`: 游戏名称
+- `appId`: Steam AppID
+- `news`: 新闻列表
+  - `gid`: 新闻全局ID
+  - `title`: 新闻标题
+  - `url`: 新闻链接
+  - `isExternalUrl`: 是否为外部链接
+  - `author`: 作者
+  - `contents`: 新闻内容
+  - `feedLabel`: 新闻源标签
+  - `date`: 发布日期（Unix时间戳）
+  - `feedName`: 新闻源名称
+  - `feedType`: 新闻源类型
+  - `appId`: Steam AppID
+- `total`: 新闻总数
+
+**错误响应** (404):
+- 当游戏不存在时：
+```json
+{
+  "success": false,
+  "code": "ERR_GAME_NOT_FOUND",
+  "message": "游戏不存在"
+}
+```
+
+**错误响应** (400):
+- 当游戏没有Steam平台映射时：
+```json
+{
+  "success": false,
+  "code": "ERR_NO_STEAM_MAPPING",
+  "message": "游戏 10001 没有Steam平台映射"
+}
+```
+
+- 当Steam API返回空数据时：
+```json
+{
+  "success": false,
+  "code": "ERR_STEAM_API_FAILED",
+  "message": "Steam API返回空数据"
+}
+```
+
+---
+
+## 6. 平台绑定 API
+
+### 6.0 POST `/api/v1/platforms/bind` - 通用平台绑定接口
+**认证**: 必需
+
+**说明**: 统一的平台绑定接口，根据 `PlatformId` 自动选择绑定逻辑。系统会首先检查并初始化平台数据，确保所有8个平台按照标准ID存储在数据库中。
+
+**请求体**:
+```json
+{
+  "platformId": 1,
+  "steamId": "76561198000000000",
+  "apiKey": "YOUR_STEAM_API_KEY",
+  "xboxUserId": null,
+  "psnOnlineId": null,
+  "gogUserId": null,
+  "accessToken": null,
+  "refreshToken": null
+}
+```
+
+**字段说明**:
+- `platformId`: **必需** - 平台ID，按照以下对应关系：
+  - `1` = Steam
+  - `2` = Epic Games (暂不支持)
+  - `3` = Origin (暂不支持)
+  - `4` = Uplay (暂不支持)
+  - `5` = GOG
+  - `6` = PSN
+  - `7` = Xbox
+  - `8` = Nintendo Switch (暂不支持)
+
+**各平台所需参数**:
+
+#### Steam (PlatformId = 1)
+- `steamId`: **必需** - Steam 64位用户ID
+- `apiKey`: **必需** - Steam Web API Key（系统会验证其有效性）
+
+**获取Steam API Key**:
+1. 访问 https://steamcommunity.com/dev/apikey
+2. 登录Steam账号
+3. 填写域名（可填写 localhost）
+4. 获取API Key
+
+**示例请求**:
+```json
+{
+  "platformId": 1,
+  "steamId": "76561198000000000",
+  "apiKey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+}
+```
+
+#### Xbox (PlatformId = 7)
+- `xboxUserId`: **必需** - Xbox用户ID（XUID格式）
+- `accessToken`: 可选 - OAuth访问令牌
+- `refreshToken`: 可选 - OAuth刷新令牌
+
+**示例请求**:
+```json
+{
+  "platformId": 7,
+  "xboxUserId": "2535445389016675",
+  "accessToken": "EwAoA8l6BAAURSN/FHlDW5xN9NVEiEJIed...",
+  "refreshToken": "M.R3_BAY.-CXeW4VLz1g..."
+}
+```
+
+#### PSN (PlatformId = 6)
+- `psnOnlineId`: **必需** - PSN在线ID
+- `accessToken`: 可选 - OAuth访问令牌
+- `refreshToken`: 可选 - OAuth刷新令牌
+
+**示例请求**:
+```json
+{
+  "platformId": 6,
+  "psnOnlineId": "PlayerOne",
+  "accessToken": "Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...",
+  "refreshToken": "ff57acc0-4c67-4f1f-b1c3..."
+}
+```
+
+#### GOG (PlatformId = 5)
+- `gogUserId`: **必需** - GOG用户ID
+- `accessToken`: 可选 - OAuth访问令牌
+- `refreshToken`: 可选 - OAuth刷新令牌
+
+**示例请求**:
+```json
+{
+  "platformId": 5,
+  "gogUserId": "48628605863528448",
+  "accessToken": "bx6qsUM0Keg...",
+  "refreshToken": "tFnH_xxxxxx..."
+}
+```
+
+**成功响应** (201):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Steam平台绑定成功",
+  "data": {
+    "bindingId": 123,
+    "platformName": "Steam",
+    "platformUserId": "76561198000000000",
+    "bindingTime": "2024-11-27T10:00:00Z"
+  }
+}
+```
+
+**错误响应** (400):
+- 当平台不存在时：
+```json
+{
+  "success": false,
+  "code": "ERR_PLATFORM_NOT_FOUND",
+  "message": "平台不存在"
+}
+```
+
+- 当必需参数缺失时：
+```json
+{
+  "success": false,
+  "code": "ERR_INTERNAL",
+  "message": "Steam绑定需要提供SteamId和ApiKey"
+}
+```
+
+- 当Steam API Key无效时：
+```json
+{
+  "success": false,
+  "code": "ERR_INTERNAL",
+  "message": "Steam API Key无效或Steam用户不存在"
+}
+```
+
+**错误响应** (409):
+- 当平台已绑定时：
+```json
+{
+  "success": false,
+  "code": "ERR_ALREADY_BOUND",
+  "message": "平台已绑定，请先解绑后再重新绑定"
+}
+```
+
+**绑定逻辑说明**:
+1. 系统会自动检查并初始化平台数据表，确保8个平台按照标准ID存储
+2. Steam平台会验证API Key的有效性
+3. 所有令牌（ApiKey、AccessToken、RefreshToken）都会使用AES-256加密后存储
+4. 绑定记录保存在 `user_platform_binding` 表中
+5. Steam API Key默认10年有效，OAuth令牌默认30天有效
+
+**使用流程**:
+1. 用户获取对应平台的认证信息（API Key或OAuth令牌）
+2. 调用此接口进行绑定
+3. 系统验证并加密存储认证信息
+4. 后续调用平台数据导入接口时，系统会自动使用已绑定的认证信息
+
+---
+
+### 6.1 GET `/api/v1/platforms/bindings` - 获取绑定列表
+**认证**: 必需
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "获取成功",
+  "data": {
+    "bindings": [
+      {
+        "bindingId": 123,
+        "platformName": "Steam",
+        "platformUserId": "76561198000000000",
+        "profileName": "Steam",
+        "bindingTime": "2024-11-27T10:00:00Z"
+      },
+      {
+        "bindingId": 124,
+        "platformName": "Xbox",
+        "platformUserId": "2535445389016675",
+        "profileName": "Xbox",
+        "bindingTime": "2024-11-27T11:00:00Z"
+      }
+    ],
+    "totalCount": 2
+  }
+}
+```
+
+---
+
+### 6.2 DELETE `/api/v1/platforms/bindings/{id}` - 解绑平台
+**认证**: 必需  
+**路径参数**: id = 绑定ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Steam平台解绑成功",
+  "data": {}
+}
+```
+
+**错误响应** (404):
+```json
+{
+  "success": false,
+  "code": "ERR_NOT_FOUND",
+  "message": "绑定记录不存在"
+}
+```
+
+---
+
+## 7. Steam API 集成
+
+### 7.1 POST `/api/v1/steam/import` - 导入Steam数据
 **认证**: 必需
 
 **请求体**:
 ```json
 {
+  "userId": 1000,
   "steamId": "76561198000000000",
   "importGames": true,
   "importAchievements": true,
@@ -909,10 +1363,38 @@
 ```
 
 **字段说明**:
+- `userId`: **必需** - 用户ID，必须是数据库中已存在的有效用户ID（对应 `user` 表的 `user_id`）
 - `steamId`: Steam用户ID
 - `importGames`: 是否导入游戏库
 - `importAchievements`: 是否导入成就数据
 - `importFriends`: 是否导入好友列表
+
+**数据插入表说明**:
+该API会将数据插入/更新到以下数据库表：
+
+1. **`platforms`** - 初始化平台数据（如果Steam平台不存在）
+2. **`player_platform`** - 存储/更新Steam用户平台账号信息（profile_name, profile_url, account_created, country等）
+3. **`user_platform_binding`** - **创建/更新用户与Steam平台的绑定关系**（user_id, platform_id, platform_user_id, binding_status, last_sync_time等）
+4. **`games`** - 创建新游戏记录（如果游戏不存在）
+5. **`developers`** - 创建开发商记录（如果不存在）
+6. **`game_developers`** - 关联游戏和开发商
+7. **`publishers`** - 创建发行商记录（如果不存在）
+8. **`game_publishers`** - 关联游戏和发行商
+9. **`game_platform`** - 关联游戏和Steam平台（存储Steam AppID和商店链接）
+10. **`achievements`** - **自动创建游戏中不存在的成就记录**（如果Steam API返回的成就在数据库中不存在，会自动创建）
+11. **`user_platform_library`** - 存储用户在Steam平台上的游戏记录（playtime_minutes, last_played等）
+12. **`user_achievements`** - 存储用户的成就解锁记录（unlocked, unlock_time等）
+13. **`user_game_library`** - **更新用户游戏库统计信息（统计该用户在所有8个平台的数据，而不仅仅是Steam）**
+
+**重要说明**: 
+- **`user_platform_binding` 表绑定**：该API会在 `user_platform_binding` 表中创建或更新 `userId` 和 `steamId` 的绑定关系，这是 `userId` 参数的主要用途
+- **`user_game_library` 统计逻辑**：该表存储的是用户在所有平台（8个平台：Steam, Epic Games, Origin, Uplay, GOG, PSN, Xbox, Nintendo Switch）的游戏数据统计，而不仅仅是Steam平台。更新时会：
+  - 从 `user_platform_binding` 表获取该用户绑定的所有平台账号
+  - 从 `user_platform_library` 表统计所有平台的游戏数据
+  - 从 `user_achievements` 表统计所有平台的成就数据
+  - 计算去重后的游戏数量、总游戏时长、成就统计等
+- **`achievements` 表自动创建**：该API会自动创建数据库中不存在的成就记录。当从Steam API获取成就数据时，如果某个成就在 `achievements` 表中不存在，会自动创建该成就记录（包括 `achievement_name`, `displayName`, `description` 等字段）
+- 所有数据都会关联到指定的 `userId`，因此 `userId` 必须在 `user` 表中存在
 
 **成功响应** (200):
 ```json
@@ -930,6 +1412,25 @@
       "friends": 0
     }
   }
+}
+```
+
+**错误响应** (400):
+- 当 `userId` 无效或不存在时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "用户ID 1000 不存在，请先创建用户"
+}
+```
+
+- 当 `userId` 参数无效时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "userId 参数无效，必须提供有效的用户ID"
 }
 ```
 
@@ -1001,6 +1502,785 @@
     "recommendations": {
       "total": 5000000
     }
+  }
+}
+```
+
+---
+
+## 8. Epic Games API 集成
+
+### 8.1 POST `/api/v1/epic/import` - 导入Epic Games数据
+**认证**: 必需
+
+**请求体**:
+```json
+{
+  "userId": 1000,
+  "epicAccountId": "1234567890abcdef",
+  "importGames": true,
+  "importAchievements": true
+}
+```
+
+**字段说明**:
+- `userId`: **必需** - 用户ID，必须是数据库中已存在的有效用户ID（对应 `user` 表的 `user_id`）
+- `epicAccountId`: Epic Games账户ID
+- `importGames`: 是否导入游戏库
+- `importAchievements`: 是否导入成就数据
+
+**数据插入表说明**:
+该API会将数据插入/更新到以下数据库表（与Steam导入类似）：
+- `platforms` - 初始化Epic Games平台数据（platformId = 2）
+- `player_platform` - 存储Epic Games用户平台账号信息
+- `games` - 创建新游戏记录
+- `developers`, `publishers` - 创建开发商和发行商记录
+- `game_platform` - 关联游戏和Epic Games平台
+- `user_platform_library` - 存储用户在Epic Games平台上的游戏记录
+- `user_achievements` - 存储用户的成就解锁记录（如果支持）
+- `user_game_library` - 更新用户游戏库统计信息
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Epic Games数据导入任务已启动",
+  "data": {
+    "taskId": "epic_import_20241127_100000",
+    "status": "processing",
+    "estimatedTime": 60,
+    "items": {
+      "games": 58,
+      "achievements": 0
+    }
+  }
+}
+```
+
+**错误响应** (400):
+- 当 `userId` 无效或不存在时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "用户ID 1000 不存在，请先创建用户"
+}
+```
+
+---
+
+### 8.2 GET `/api/v1/epic/user/{epicAccountId}` - 获取Epic Games用户信息
+**认证**: 必需  
+**路径参数**: epicAccountId = Epic Games账户ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "epicAccountId": "1234567890abcdef",
+    "displayName": "PlayerABC",
+    "profileUrl": "https://www.epicgames.com/account/personal",
+    "avatarUrl": "https://cdn.epicgames.com/avatar.jpg",
+    "accountCreated": "2018-03-15T00:00:00Z",
+    "country": "US",
+    "gamesOwned": 58,
+    "isPublic": true
+  }
+}
+```
+
+---
+
+### 8.3 GET `/api/v1/epic/games/{epicGameId}` - 获取Epic Games游戏信息
+**认证**: 必需  
+**路径参数**: epicGameId = Epic Games游戏ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "epicGameId": "502001",
+    "name": "Fortnite",
+    "type": "game",
+    "isFree": true,
+    "shortDescription": "免费大逃杀游戏",
+    "detailedDescription": "详细描述...",
+    "headerImage": "https://cdn.epicgames.com/fortnite/header.jpg",
+    "developers": ["Epic Games"],
+    "publishers": ["Epic Games"],
+    "platforms": {
+      "windows": true,
+      "mac": true,
+      "linux": false
+    },
+    "categories": ["Multi-player", "Battle Royale"],
+    "genres": ["Action", "Shooter"],
+    "releaseDate": "2017-07-21",
+    "requiredAge": 12,
+    "priceOverview": {
+      "currency": "USD",
+      "initial": 0,
+      "final": 0,
+      "discountPercent": 0
+    },
+    "achievements": {
+      "total": 0
+    }
+  }
+}
+```
+
+---
+
+### 8.4 GET `/api/v1/epic/user/{epicAccountId}/achievements` - 获取Epic Games用户成就
+**认证**: 必需  
+**路径参数**: epicAccountId = Epic Games账户ID  
+**说明**: Epic Games部分游戏支持成就系统
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "items": [
+      {
+        "achievementId": "achv123",
+        "gameId": 502001,
+        "gameName": "Fortnite",
+        "achievementName": "first_win",
+        "displayName": "First Win",
+        "description": "Earn a Victory Royale",
+        "unlocked": true,
+        "unlockTime": "2024-11-27T10:00:00Z",
+        "iconUnlocked": "url",
+        "iconLocked": "url"
+      }
+    ],
+    "total": 30
+  }
+}
+```
+
+---
+
+## 9. GOG API 集成
+
+### 9.1 POST `/api/v1/gog/import` - 导入GOG数据
+**认证**: 必需
+
+**请求体**:
+```json
+{
+  "userId": 1000,
+  "gogUserId": "7654321",
+  "importGames": true
+}
+```
+
+**字段说明**:
+- `userId`: **必需** - 用户ID，必须是数据库中已存在的有效用户ID（对应 `user` 表的 `user_id`）
+- `gogUserId`: GOG用户ID
+- `importGames`: 是否导入游戏库
+
+**数据插入表说明**:
+该API会将数据插入/更新到以下数据库表（platformId = 5）：
+- `platforms` - 初始化GOG平台数据
+- `player_platform` - 存储GOG用户平台账号信息
+- `games` - 创建新游戏记录
+- `game_platform` - 关联游戏和GOG平台
+- `user_platform_library` - 存储用户在GOG平台上的游戏记录
+- `user_game_library` - 更新用户游戏库统计信息
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "GOG数据导入任务已启动",
+  "data": {
+    "taskId": "gog_import_20241127_100000",
+    "status": "processing",
+    "estimatedTime": 45,
+    "items": {
+      "games": 42,
+      "achievements": 0
+    }
+  }
+}
+```
+
+**错误响应** (400):
+- 当 `userId` 无效或不存在时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "用户ID 1000 不存在，请先创建用户"
+}
+```
+
+---
+
+### 9.2 GET `/api/v1/gog/user/{gogUserId}` - 获取GOG用户信息
+**认证**: 必需  
+**路径参数**: gogUserId = GOG用户ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "gogUserId": "7654321",
+    "username": "GOGPlayer",
+    "profileUrl": "https://www.gog.com/u/gogplayer",
+    "avatarUrl": "https://gog.com/avatar.jpg",
+    "accountCreated": "2012-05-10T00:00:00Z",
+    "country": "DE",
+    "gamesOwned": 42,
+    "isPublic": true
+  }
+}
+```
+
+---
+
+### 9.3 GET `/api/v1/gog/games/{gogGameId}` - 获取GOG游戏信息
+**认证**: 必需  
+**路径参数**: gogGameId = GOG游戏ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "gogGameId": "1207659045",
+    "name": "The Witcher 3: Wild Hunt",
+    "type": "game",
+    "isFree": false,
+    "shortDescription": "开放世界RPG杰作",
+    "detailedDescription": "详细描述...",
+    "headerImage": "https://images.gog.com/witcher3/header.jpg",
+    "developers": ["CD Projekt RED"],
+    "publishers": ["CD Projekt"],
+    "platforms": {
+      "windows": true,
+      "mac": false,
+      "linux": false
+    },
+    "categories": ["Single-player", "RPG"],
+    "genres": ["RPG", "Open World"],
+    "releaseDate": "2015-05-19",
+    "requiredAge": 18,
+    "priceOverview": {
+      "currency": "USD",
+      "initial": 3999,
+      "final": 1999,
+      "discountPercent": 50
+    }
+  }
+}
+```
+
+---
+
+## 10. Xbox API 集成
+
+### 10.1 POST `/api/v1/xbox/import` - 导入Xbox数据
+**认证**: 必需
+
+**请求体**:
+```json
+{
+  "userId": 1000,
+  "xboxUserId": "XUID1234567890",
+  "importGames": true,
+  "importAchievements": true
+}
+```
+
+**字段说明**:
+- `userId`: **必需** - 用户ID，必须是数据库中已存在的有效用户ID（对应 `user` 表的 `user_id`）
+- `xboxUserId`: Xbox用户ID（XUID格式）
+- `importGames`: 是否导入游戏库
+- `importAchievements`: 是否导入成就数据
+
+**数据插入表说明**:
+该API会将数据插入/更新到以下数据库表（platformId = 7）：
+- `platforms` - 初始化Xbox平台数据
+- `player_platform` - 存储Xbox用户平台账号信息
+- `games` - 创建新游戏记录
+- `game_platform` - 关联游戏和Xbox平台
+- `user_platform_library` - 存储用户在Xbox平台上的游戏记录
+- `user_achievements` - 存储用户的成就解锁记录
+- `user_game_library` - 更新用户游戏库统计信息
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Xbox数据导入任务已启动",
+  "data": {
+    "taskId": "xbox_import_20241127_100000",
+    "status": "processing",
+    "estimatedTime": 90,
+    "items": {
+      "games": 134,
+      "achievements": 2500
+    }
+  }
+}
+```
+
+**错误响应** (400):
+- 当 `userId` 无效或不存在时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "用户ID 1000 不存在，请先创建用户"
+}
+```
+
+---
+
+### 10.2 GET `/api/v1/xbox/user/{xuid}` - 获取Xbox用户信息
+**认证**: 必需  
+**路径参数**: xuid = Xbox用户ID（XUID格式）
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "xuid": "XUID1234567890",
+    "gamertag": "ProGamer007",
+    "profileUrl": "https://account.xbox.com/Profile?Gamertag=ProGamer007",
+    "avatarUrl": "https://avatar-ssl.xboxlive.com/avatar/ProGamer007/avatar-body.png",
+    "accountCreated": "2014-11-22T00:00:00Z",
+    "country": "US",
+    "gamerscore": 15420,
+    "tier": "Gold",
+    "gamesOwned": 134,
+    "isPublic": true
+  }
+}
+```
+
+---
+
+### 10.3 GET `/api/v1/xbox/games/{titleId}` - 获取Xbox游戏信息
+**认证**: 必需  
+**路径参数**: titleId = Xbox游戏标题ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "titleId": "2194530",
+    "name": "Halo Infinite",
+    "type": "game",
+    "isFree": false,
+    "shortDescription": "标志性射击游戏系列的最新作品",
+    "detailedDescription": "详细描述...",
+    "headerImage": "https://storeedgefd.dsx.mp.microsoft.com/v9/images/halo-infinite-header.jpg",
+    "developers": ["343 Industries"],
+    "publishers": ["Xbox Game Studios"],
+    "platforms": {
+      "windows": true,
+      "mac": false,
+      "linux": false
+    },
+    "categories": ["Multi-player", "Online Co-op"],
+    "genres": ["FPS", "Sci-Fi"],
+    "releaseDate": "2021-12-08",
+    "requiredAge": 17,
+    "priceOverview": {
+      "currency": "USD",
+      "initial": 5999,
+      "final": 5999,
+      "discountPercent": 0
+    },
+    "achievements": {
+      "total": 150
+    }
+  }
+}
+```
+
+---
+
+### 10.4 GET `/api/v1/xbox/user/{xuid}/achievements` - 获取Xbox用户成就
+**认证**: 必需  
+**路径参数**: xuid = Xbox用户ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "items": [
+      {
+        "achievementId": "123-abc-def",
+        "gameId": 220055,
+        "gameName": "Halo Infinite",
+        "achievementName": "finish_tutorial",
+        "displayName": "Finish the Tutorial",
+        "description": "Complete the opening mission",
+        "score": 10,
+        "unlocked": true,
+        "unlockTime": "2024-10-08T11:00:00Z",
+        "iconUnlocked": "url",
+        "iconLocked": "url"
+      }
+    ],
+    "total": 2500
+  }
+}
+```
+
+---
+
+## 11. PlayStation (PSN) API 集成
+
+### 11.1 POST `/api/v1/psn/import` - 导入PSN数据
+**认证**: 必需
+
+**请求体**:
+```json
+{
+  "userId": 1000,
+  "psnOnlineId": "Player_001",
+  "importGames": true,
+  "importTrophies": true
+}
+```
+
+**字段说明**:
+- `userId`: **必需** - 用户ID，必须是数据库中已存在的有效用户ID（对应 `user` 表的 `user_id`）
+- `psnOnlineId`: PSN在线ID
+- `importGames`: 是否导入游戏库
+- `importTrophies`: 是否导入奖杯数据（PSN的成就系统）
+
+**数据插入表说明**:
+该API会将数据插入/更新到以下数据库表（platformId = 6）：
+- `platforms` - 初始化PSN平台数据
+- `player_platform` - 存储PSN用户平台账号信息
+- `games` - 创建新游戏记录
+- `game_platform` - 关联游戏和PSN平台
+- `user_platform_library` - 存储用户在PSN平台上的游戏记录
+- `user_achievements` - 存储用户的奖杯解锁记录（PSN奖杯映射为成就）
+- `user_game_library` - 更新用户游戏库统计信息
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "PSN数据导入任务已启动",
+  "data": {
+    "taskId": "psn_import_20241127_100000",
+    "status": "processing",
+    "estimatedTime": 75,
+    "items": {
+      "games": 90,
+      "achievements": 1800
+    }
+  }
+}
+```
+
+**错误响应** (400):
+- 当 `userId` 无效或不存在时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "用户ID 1000 不存在，请先创建用户"
+}
+```
+
+---
+
+### 11.2 GET `/api/v1/psn/user/{onlineId}` - 获取PSN用户信息
+**认证**: 必需  
+**路径参数**: onlineId = PSN在线ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "onlineId": "Player_001",
+    "profileUrl": "https://psnprofiles.com/Player_001",
+    "avatarUrl": "https://psn-avatar.com/Player_001.png",
+    "accountCreated": "2013-11-15T00:00:00Z",
+    "country": "JP",
+    "gamesOwned": 90,
+    "trophySummary": {
+      "bronze": 240,
+      "silver": 80,
+      "gold": 20,
+      "platinum": 5,
+      "total": 345
+    },
+    "level": 12,
+    "isPublic": true
+  }
+}
+```
+
+---
+
+### 11.3 GET `/api/v1/psn/games/{titleId}` - 获取PSN游戏信息
+**认证**: 必需  
+**路径参数**: titleId = PSN游戏标题ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "titleId": "CUSA12345",
+    "name": "God of War",
+    "type": "game",
+    "isFree": false,
+    "shortDescription": "史诗级动作冒险游戏",
+    "detailedDescription": "详细描述...",
+    "headerImage": "https://store.playstation.com/god-of-war-header.jpg",
+    "developers": ["Santa Monica Studio"],
+    "publishers": ["Sony Interactive Entertainment"],
+    "platforms": {
+      "windows": false,
+      "mac": false,
+      "linux": false
+    },
+    "categories": ["Single-player", "Action"],
+    "genres": ["Action", "Adventure"],
+    "releaseDate": "2018-04-20",
+    "requiredAge": 18,
+    "priceOverview": {
+      "currency": "USD",
+      "initial": 1999,
+      "final": 1999,
+      "discountPercent": 0
+    },
+    "achievements": {
+      "total": 37
+    }
+  }
+}
+```
+
+---
+
+### 11.4 GET `/api/v1/psn/user/{onlineId}/trophies` - 获取PSN用户奖杯
+**认证**: 必需  
+**路径参数**: onlineId = PSN在线ID  
+**说明**: PSN使用奖杯系统（Trophies），映射为成就系统
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "items": [
+      {
+        "trophyId": "t-001",
+        "gameId": 30001,
+        "gameName": "God of War",
+        "achievementName": "first_blood",
+        "displayName": "First Blood",
+        "description": "Defeat your first enemy",
+        "type": "bronze",
+        "score": 15,
+        "unlocked": true,
+        "unlockTime": "2024-11-20T08:00:00Z",
+        "iconUnlocked": "url",
+        "iconLocked": "url",
+        "rarity": "common"
+      }
+    ],
+    "total": 1800
+  }
+}
+```
+
+---
+
+## 12. Nintendo Switch API 集成
+
+### 12.1 POST `/api/v1/nintendo/import` - 导入Nintendo Switch数据
+**认证**: 必需
+
+**请求体**:
+```json
+{
+  "userId": 1000,
+  "nintendoAccountId": "abcd1234",
+  "sessionToken": "xxxxxxx",
+  "importGames": true
+}
+```
+
+**字段说明**:
+- `userId`: **必需** - 用户ID，必须是数据库中已存在的有效用户ID（对应 `user` 表的 `user_id`）
+- `nintendoAccountId`: Nintendo账户ID
+- `sessionToken`: Nintendo会话令牌（用于访问NSO API）
+- `importGames`: 是否导入游戏库
+
+**数据插入表说明**:
+该API会将数据插入/更新到以下数据库表（platformId = 8）：
+- `platforms` - 初始化Nintendo Switch平台数据
+- `player_platform` - 存储Nintendo用户平台账号信息
+- `games` - 创建新游戏记录
+- `game_platform` - 关联游戏和Nintendo Switch平台
+- `user_platform_library` - 存储用户在Nintendo Switch平台上的游戏记录（包含游戏时长）
+- `user_game_library` - 更新用户游戏库统计信息
+
+**注意**: Nintendo Switch没有官方公共API，需要通过NSO（Nintendo Switch Online）会话令牌或Web代理方式获取数据
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Nintendo Switch数据导入任务已启动",
+  "data": {
+    "taskId": "nintendo_import_20241127_100000",
+    "status": "processing",
+    "estimatedTime": 60,
+    "items": {
+      "games": 67,
+      "achievements": 0
+    }
+  }
+}
+```
+
+**错误响应** (400):
+- 当 `userId` 无效或不存在时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "用户ID 1000 不存在，请先创建用户"
+}
+```
+
+- 当 `sessionToken` 无效时：
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "Nintendo会话令牌无效或已过期"
+}
+```
+
+---
+
+### 12.2 GET `/api/v1/nintendo/user/{accountId}` - 获取Nintendo用户信息
+**认证**: 必需  
+**路径参数**: accountId = Nintendo账户ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "nintendoAccountId": "abcd1234",
+    "nickname": "SwitchUser",
+    "profileUrl": "https://accounts.nintendo.com/profile",
+    "avatarUrl": "https://switch/avatar.png",
+    "accountCreated": "2017-03-03T00:00:00Z",
+    "country": "TW",
+    "gamesOwned": 67,
+    "isPublic": true
+  }
+}
+```
+
+---
+
+### 12.3 GET `/api/v1/nintendo/games/{id}` - 获取Nintendo游戏信息
+**认证**: 必需  
+**路径参数**: id = Nintendo游戏ID
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "nintendoGameId": "70010000012345",
+    "name": "The Legend of Zelda: Tears of the Kingdom",
+    "type": "game",
+    "isFree": false,
+    "shortDescription": "开放世界动作冒险游戏",
+    "detailedDescription": "详细描述...",
+    "headerImage": "https://cdn.nintendo.com/zelda-totk-header.jpg",
+    "developers": ["Nintendo EPD"],
+    "publishers": ["Nintendo"],
+    "platforms": {
+      "windows": false,
+      "mac": false,
+      "linux": false
+    },
+    "categories": ["Single-player", "Adventure"],
+    "genres": ["Action", "Adventure"],
+    "releaseDate": "2023-05-12",
+    "requiredAge": 10,
+    "priceOverview": {
+      "currency": "USD",
+      "initial": 6999,
+      "final": 6999,
+      "discountPercent": 0
+    }
+  }
+}
+```
+
+---
+
+### 12.4 GET `/api/v1/nintendo/user/{accountId}/playtime` - 获取Nintendo用户游戏时长
+**认证**: 必需  
+**路径参数**: accountId = Nintendo账户ID  
+**说明**: Nintendo Switch没有成就系统，因此只提供游戏时长数据
+
+**成功响应** (200):
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": {
+    "items": [
+      {
+        "gameId": 33001,
+        "gameName": "The Legend of Zelda: Tears of the Kingdom",
+        "playtimeMinutes": 1820,
+        "firstPlayed": "2023-05-12T00:00:00Z",
+        "lastPlayed": "2024-11-20T10:00:00Z",
+        "daysSinceFirstPlayed": 558,
+        "averagePlaytimePerDay": 3.26
+      }
+    ],
+    "total": 67
   }
 }
 ```

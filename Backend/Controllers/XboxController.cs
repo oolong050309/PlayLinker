@@ -31,6 +31,13 @@ public class XboxController : ControllerBase
         _logger = logger;
     }
 
+    // 获取当前用户ID
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : 1;
+    }
+
     /// <summary>
     /// 初始化平台数据
     /// </summary>
@@ -108,9 +115,10 @@ public class XboxController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("检查Xbox令牌状态");
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("检查Xbox令牌状态: userId={UserId}", userId);
 
-            var result = await _xboxService.CheckTokenStatus();
+            var result = await _xboxService.CheckTokenStatus(userId, 7);
 
             return Ok(ApiResponse<XboxAuthResponseDto>.SuccessResponse(result, 
                 result.Success ? "令牌有效" : "令牌无效或不存在"));
@@ -164,9 +172,10 @@ public class XboxController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("开始Xbox认证, OpenBrowser={OpenBrowser}", request.OpenBrowser);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("开始Xbox认证: userId={UserId}, OpenBrowser={OpenBrowser}", userId, request.OpenBrowser);
 
-            var result = await _xboxService.AuthenticateXbox(request);
+            var result = await _xboxService.AuthenticateXbox(request, userId);
 
             if (!result.Success)
             {
@@ -222,14 +231,14 @@ public class XboxController : ControllerBase
                 return BadRequest(ApiResponse<object>.ErrorResponse("BAD_REQUEST", $"用户ID {request.UserId} 不存在，请先创建用户"));
             }
 
-            var userId = request.UserId;
+            var userId = (int)request.UserId;
             _logger.LogInformation("导入Xbox数据: userId={UserId}, xboxUserId={XboxUserId}", userId, request.XboxUserId);
 
             // 初始化平台数据
             await InitializePlatformsAsync();
 
             // 获取Xbox用户信息
-            var xboxUser = await _xboxService.GetXboxUser(request.XboxUserId);
+            var xboxUser = await _xboxService.GetXboxUser(request.XboxUserId, userId);
             if (xboxUser == null)
             {
                 return BadRequest(ApiResponse<XboxImportResponseDto>.ErrorResponse("ERR_XBOX_USER_NOT_FOUND", "Xbox用户不存在或令牌无效，请先进行认证"));
@@ -297,7 +306,7 @@ public class XboxController : ControllerBase
                     // 获取完整的Xbox游戏数据
                     _logger.LogInformation("开始导入Xbox游戏数据...");
                     
-                    var xboxGames = await _xboxService.GetXboxUserGames(request.XboxUserId);
+                    var xboxGames = await _xboxService.GetXboxUserGames(request.XboxUserId, userId);
                     
                     foreach (var xboxGame in xboxGames)
                     {
@@ -471,9 +480,10 @@ public class XboxController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取Xbox用户信息: xuid={Xuid}", xuid);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取Xbox用户信息: xuid={Xuid}, userId={UserId}", xuid, userId);
 
-            var result = await _xboxService.GetXboxUser(xuid);
+            var result = await _xboxService.GetXboxUser(xuid, userId);
 
             if (result == null)
             {
@@ -500,9 +510,10 @@ public class XboxController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取Xbox游戏信息: titleId={TitleId}", titleId);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取Xbox游戏信息: titleId={TitleId}, userId={UserId}", titleId, userId);
 
-            var result = await _xboxService.GetXboxGame(titleId);
+            var result = await _xboxService.GetXboxGame(titleId, userId);
 
             if (result == null)
             {
@@ -528,9 +539,10 @@ public class XboxController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取Xbox用户成就: xuid={Xuid}", xuid);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取Xbox用户成就: xuid={Xuid}, userId={UserId}", xuid, userId);
 
-            var result = await _xboxService.GetXboxUserAchievements(xuid);
+            var result = await _xboxService.GetXboxUserAchievements(xuid, userId);
 
             return Ok(ApiResponse<List<XboxUserAchievementDto>>.SuccessResponse(result));
         }

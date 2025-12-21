@@ -30,21 +30,21 @@ public partial class UserPlatformBinding
     /// 第三方平台用户ID（如SteamID）
     /// </summary>
     [Column("platform_user_id")]
-    [StringLength(128)]
+    [StringLength(512)]
     public string PlatformUserId { get; set; } = null!;
 
     /// <summary>
     /// AES-256加密存储
     /// </summary>
     [Column("access_token")]
-    [StringLength(128)]
+    [StringLength(4096)]
     public string? AccessToken { get; set; }
 
     /// <summary>
     /// AES-256加密存储
     /// </summary>
     [Column("refresh_token")]
-    [StringLength(128)]
+    [StringLength(4096)]
     public string? RefreshToken { get; set; }
 
     /// <summary>

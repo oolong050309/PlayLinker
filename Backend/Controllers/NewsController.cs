@@ -19,12 +19,61 @@ public class NewsController : ControllerBase
     private readonly PlayLinkerDbContext _context;
     private readonly ILogger<NewsController> _logger;
     private readonly ISteamService _steamService;
+    private readonly ITokenEncryptionService _encryptionService;
 
-    public NewsController(PlayLinkerDbContext context, ILogger<NewsController> logger, ISteamService steamService)
+    public NewsController(
+        PlayLinkerDbContext context, 
+        ILogger<NewsController> logger, 
+        ISteamService steamService,
+        ITokenEncryptionService encryptionService)
     {
         _context = context;
         _logger = logger;
         _steamService = steamService;
+        _encryptionService = encryptionService;
+    }
+
+    // 获取当前用户ID（如果已认证）
+    private int? GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : null;
+    }
+
+    // 获取Steam API Key（优先从当前用户，否则从数据库获取第一个有效的）
+    private async Task<string?> GetSteamApiKeyAsync(int? userId = null)
+    {
+        try
+        {
+            // 如果提供了userId，优先使用该用户的API Key
+            if (userId.HasValue)
+            {
+                var binding = await _context.UserPlatformBindings
+                    .FirstOrDefaultAsync(b => b.UserId == userId.Value && b.PlatformId == 1 && b.BindingStatus == true);
+                
+                if (binding != null && !string.IsNullOrEmpty(binding.AccessToken))
+                {
+                    return _encryptionService.DecryptToken(binding.AccessToken);
+                }
+            }
+            
+            // 否则从数据库获取第一个有效的API Key
+            var firstBinding = await _context.UserPlatformBindings
+                .FirstOrDefaultAsync(b => b.PlatformId == 1 && b.BindingStatus == true && !string.IsNullOrEmpty(b.AccessToken));
+            
+            if (firstBinding != null && !string.IsNullOrEmpty(firstBinding.AccessToken))
+            {
+                return _encryptionService.DecryptToken(firstBinding.AccessToken);
+            }
+            
+            _logger.LogWarning("未找到任何Steam API Key");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "从数据库获取Steam API Key失败");
+            return null;
+        }
     }
 
     /// <summary>
@@ -182,7 +231,13 @@ public class NewsController : ControllerBase
                     }
 
                     // 调用Steam API获取新闻
-                    var newsData = await _steamService.GetGameNews(appId, count);
+                    var apiKey = await GetSteamApiKeyAsync();
+                    if (string.IsNullOrEmpty(apiKey))
+                    {
+                        _logger.LogWarning("未找到Steam API Key，跳过游戏 {GameId}", gamePlatform.GameId);
+                        continue;
+                    }
+                    var newsData = await _steamService.GetGameNews(appId, count, apiKey);
                     if (newsData == null)
                     {
                         _logger.LogWarning("Steam API返回空数据: gameId={GameId}, appId={AppId}", 
@@ -261,7 +316,13 @@ public class NewsController : ControllerBase
 
             // 调用Steam API获取新闻
             var count = request.Count ?? 20;
-            var newsData = await _steamService.GetGameNews(appId, count);
+            var userId = GetCurrentUserId();
+            var apiKey = await GetSteamApiKeyAsync(userId);
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                return BadRequest(ApiResponse<SteamGameNewsResponseDto>.ErrorResponse("ERR_STEAM_API_KEY_NOT_FOUND", "未找到Steam API Key，请先绑定Steam平台"));
+            }
+            var newsData = await _steamService.GetGameNews(appId, count, apiKey);
 
             if (newsData == null)
             {

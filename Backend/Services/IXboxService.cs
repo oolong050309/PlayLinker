@@ -9,38 +9,38 @@ namespace PlayLinker.Services;
 public interface IXboxService
 {
     /// <summary>
-    /// 导入Xbox数据
+    /// 导入Xbox数据（需要用户ID以获取令牌）
     /// </summary>
-    Task<XboxImportResponseDto> ImportXboxData(XboxImportRequestDto request);
+    Task<XboxImportResponseDto> ImportXboxData(XboxImportRequestDto request, int userId);
 
     /// <summary>
-    /// 获取Xbox用户信息
+    /// 获取Xbox用户信息（需要用户ID以获取令牌）
     /// </summary>
-    Task<XboxUserDto?> GetXboxUser(string xuid);
+    Task<XboxUserDto?> GetXboxUser(string xuid, int userId);
 
     /// <summary>
-    /// 获取Xbox游戏信息
+    /// 获取Xbox游戏信息（需要用户ID以获取令牌）
     /// </summary>
-    Task<XboxGameDto?> GetXboxGame(string titleId);
+    Task<XboxGameDto?> GetXboxGame(string titleId, int userId);
 
     /// <summary>
-    /// 获取Xbox用户成就
+    /// 获取Xbox用户成就（需要用户ID以获取令牌）
     /// </summary>
-    Task<List<XboxUserAchievementDto>> GetXboxUserAchievements(string xuid);
+    Task<List<XboxUserAchievementDto>> GetXboxUserAchievements(string xuid, int userId);
 
     /// <summary>
-    /// 获取Xbox用户的游戏列表（用于导入）
+    /// 获取Xbox用户的游戏列表（用于导入）（需要用户ID以获取令牌）
     /// </summary>
-    Task<List<XboxGameDto>> GetXboxUserGames(string xuid);
+    Task<List<XboxGameDto>> GetXboxUserGames(string xuid, int userId);
 
     /// <summary>
-    /// 执行Xbox认证
+    /// 执行Xbox认证（首次认证，创建令牌）
     /// </summary>
-    Task<XboxAuthResponseDto> AuthenticateXbox(XboxAuthRequestDto request);
+    Task<XboxAuthResponseDto> AuthenticateXbox(XboxAuthRequestDto request, int userId);
 
     /// <summary>
-    /// 检查令牌状态
+    /// 检查令牌状态（需要用户ID）
     /// </summary>
-    Task<XboxAuthResponseDto> CheckTokenStatus(string? tokensPath = null);
+    Task<XboxAuthResponseDto> CheckTokenStatus(int userId, int platformId = 7);
 }
 

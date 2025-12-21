@@ -30,6 +30,13 @@ public class PsnController : ControllerBase
         _logger = logger;
     }
 
+    // 获取当前用户ID
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : 1;
+    }
+
     /// <summary>
     /// 初始化平台数据
     /// </summary>
@@ -107,9 +114,10 @@ public class PsnController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("检查PSN令牌状态");
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("检查PSN令牌状态: userId={UserId}", userId);
 
-            var result = await _psnService.CheckTokenStatus();
+            var result = await _psnService.CheckTokenStatus(userId, 6);
 
             return Ok(ApiResponse<PsnAuthResponseDto>.SuccessResponse(result, 
                 result.Success ? "令牌有效" : "令牌无效或不存在"));
@@ -163,9 +171,10 @@ public class PsnController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("开始PSN认证");
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("开始PSN认证: userId={UserId}", userId);
 
-            var result = await _psnService.AuthenticatePsn(request);
+            var result = await _psnService.AuthenticatePsn(request, userId);
 
             if (!result.Success)
             {
@@ -221,14 +230,14 @@ public class PsnController : ControllerBase
                 return BadRequest(ApiResponse<object>.ErrorResponse("BAD_REQUEST", $"用户ID {request.UserId} 不存在,请先创建用户"));
             }
 
-            var userId = request.UserId;
+            var userId = (int)request.UserId;
             _logger.LogInformation("导入PSN数据: userId={UserId}, psnOnlineId={OnlineId}", userId, request.PsnOnlineId);
 
             // 初始化平台数据
             await InitializePlatformsAsync();
 
             // 获取PSN用户信息
-            var psnUser = await _psnService.GetPsnUser(request.PsnOnlineId);
+            var psnUser = await _psnService.GetPsnUser(request.PsnOnlineId, userId);
             if (psnUser == null)
             {
                 return BadRequest(ApiResponse<PsnImportResponseDto>.ErrorResponse("ERR_PSN_USER_NOT_FOUND", "PSN用户不存在或令牌无效,请先进行认证"));
@@ -296,7 +305,7 @@ public class PsnController : ControllerBase
                     // 获取完整的PSN游戏数据
                     _logger.LogInformation("开始导入PSN游戏数据...");
                     
-                    var psnGames = await _psnService.GetPsnUserGames(request.PsnOnlineId);
+                    var psnGames = await _psnService.GetPsnUserGames(request.PsnOnlineId, userId);
                     
                     foreach (var psnGame in psnGames)
                     {
@@ -464,9 +473,10 @@ public class PsnController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取PSN用户信息: onlineId={OnlineId}", onlineId);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取PSN用户信息: onlineId={OnlineId}, userId={UserId}", onlineId, userId);
 
-            var result = await _psnService.GetPsnUser(onlineId);
+            var result = await _psnService.GetPsnUser(onlineId, userId);
 
             if (result == null)
             {
@@ -493,9 +503,10 @@ public class PsnController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取PSN游戏信息: titleId={TitleId}", titleId);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取PSN游戏信息: titleId={TitleId}, userId={UserId}", titleId, userId);
 
-            var result = await _psnService.GetPsnGame(titleId);
+            var result = await _psnService.GetPsnGame(titleId, userId);
 
             if (result == null)
             {
@@ -521,9 +532,10 @@ public class PsnController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取PSN用户奖杯: onlineId={OnlineId}", onlineId);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取PSN用户奖杯: onlineId={OnlineId}, userId={UserId}", onlineId, userId);
 
-            var result = await _psnService.GetPsnUserTrophies(onlineId);
+            var result = await _psnService.GetPsnUserTrophies(onlineId, userId);
 
             return Ok(ApiResponse<PsnUserTrophiesResponseDto>.SuccessResponse(result));
         }

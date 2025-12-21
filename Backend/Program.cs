@@ -7,7 +7,6 @@ using PlayLinker.Services;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using System.Text;
 using PlayLinker.Models.DTOs;
-using PlayLinker.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,6 +50,9 @@ builder.Services.AddAuthentication(options =>
 });
 
 // 3. 注册应用服务 (依赖注入)
+// --- 令牌加密服务 (新增) ---
+builder.Services.AddScoped<ITokenEncryptionService, TokenEncryptionService>();
+
 // --- 游戏平台服务 ---
 builder.Services.AddScoped<ISteamService, SteamService>();
 builder.Services.AddHttpClient<ISteamService, SteamService>();

@@ -1,4 +1,6 @@
 using PlayLinker.Models.DTOs;
+using PlayLinker.Data;
+using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -12,14 +14,23 @@ public class GogService : IGogService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<GogService> _logger;
+    private readonly ITokenEncryptionService _encryptionService;
+    private readonly PlayLinkerDbContext _context;
     private readonly string _pythonPath;
     private readonly string _scriptsPath;
     private readonly string _tokensPath;
 
-    public GogService(IConfiguration configuration, ILogger<GogService> logger, IWebHostEnvironment environment)
+    public GogService(
+        IConfiguration configuration, 
+        ILogger<GogService> logger, 
+        IWebHostEnvironment environment,
+        ITokenEncryptionService encryptionService,
+        PlayLinkerDbContext context)
     {
         _configuration = configuration;
         _logger = logger;
+        _encryptionService = encryptionService;
+        _context = context;
 
         // 获取Python路径(从配置或环境变量)
         _pythonPath = configuration["GogAPI:PythonPath"] ?? "python";
@@ -171,6 +182,88 @@ public class GogService : IGogService
     }
 
     /// <summary>
+    /// 从数据库加载令牌到临时文件
+    /// </summary>
+    private async Task<string?> LoadTokenFromDatabase(int userId, int platformId)
+    {
+        try
+        {
+            var binding = await _context.UserPlatformBindings
+                .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == platformId && b.BindingStatus == true);
+            
+            if (binding == null || string.IsNullOrEmpty(binding.AccessToken))
+            {
+                _logger.LogWarning("用户{UserId}未绑定平台{PlatformId}或令牌为空", userId, platformId);
+                return null;
+            }
+            
+            var decryptedToken = _encryptionService.DecryptToken(binding.AccessToken);
+            var tempFilePath = Path.Combine(_tokensPath, $"gog_tokens_{userId}_{Guid.NewGuid():N}.json");
+            await File.WriteAllTextAsync(tempFilePath, decryptedToken);
+            
+            _logger.LogInformation("令牌已从数据库加载到临时文件: {TempFile}", tempFilePath);
+            return tempFilePath;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "从数据库加载令牌失败");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 保存令牌到数据库
+    /// </summary>
+    private async Task<bool> SaveTokenToDatabase(int userId, int platformId, string tokenJson)
+    {
+        try
+        {
+            var binding = await _context.UserPlatformBindings
+                .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == platformId);
+            
+            if (binding == null)
+            {
+                _logger.LogWarning("未找到绑定记录: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+                return false;
+            }
+            
+            var encryptedToken = _encryptionService.EncryptToken(tokenJson);
+            binding.AccessToken = encryptedToken;
+            binding.LastSyncTime = DateTime.UtcNow;
+            binding.ExpireTime = DateTime.UtcNow.AddYears(1);
+            binding.BindingStatus = true;
+            await _context.SaveChangesAsync();
+            
+            _logger.LogInformation("令牌已保存到数据库: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "保存令牌到数据库失败");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 清理临时令牌文件
+    /// </summary>
+    private void CleanupTempTokenFile(string? tempFilePath)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(tempFilePath) && File.Exists(tempFilePath))
+            {
+                File.Delete(tempFilePath);
+                _logger.LogInformation("临时令牌文件已删除: {TempFile}", tempFilePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "删除临时令牌文件失败: {TempFile}", tempFilePath);
+        }
+    }
+
+    /// <summary>
     /// 测试Python环境
     /// </summary>
     private async Task<(bool success, string message)> TestPythonEnvironment()
@@ -224,40 +317,38 @@ public class GogService : IGogService
     }
 
     /// <summary>
-    /// 检查令牌状态
+    /// 检查令牌状态（从数据库）
     /// </summary>
-    public async Task<GogAuthResponseDto> CheckTokenStatus(string? tokensPath = null)
+    public async Task<GogAuthResponseDto> CheckTokenStatus(int userId, int platformId = 5)
     {
         try
         {
-            var tokenPath = GetTokenFilePath(tokensPath);
-            var tokenExists = File.Exists(tokenPath);
+            var binding = await _context.UserPlatformBindings
+                .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == platformId && b.BindingStatus == true);
 
-            if (!tokenExists)
+            if (binding == null || string.IsNullOrEmpty(binding.AccessToken))
             {
                 return new GogAuthResponseDto
                 {
                     Success = false,
-                    Message = "令牌文件不存在,需要首次认证",
+                    Message = "用户未绑定GOG平台或令牌不存在，需要首次认证",
                     TokenExists = false,
-                    TokensPath = tokenPath,
                     NeedsBrowserAuth = true
                 };
             }
 
-            // 尝试使用令牌获取数据(验证令牌有效性)
-            var gogData = await GetGogDataFromPython(tokensPath);
+            // 尝试使用令牌获取数据（验证令牌有效性）
+            var gogData = await GetGogDataFromPython(userId, platformId);
             
             if (gogData != null && gogData.RootElement.TryGetProperty("success", out var success) && success.GetBoolean())
             {
-                var userId = gogData.RootElement.TryGetProperty("userId", out var userIdProp) ? userIdProp.GetString() : null;
+                var gogUserId = gogData.RootElement.TryGetProperty("userId", out var userIdProp) ? userIdProp.GetString() : null;
                 return new GogAuthResponseDto
                 {
                     Success = true,
                     Message = "令牌有效",
                     TokenExists = true,
-                    TokensPath = tokenPath,
-                    UserId = userId,
+                    UserId = gogUserId,
                     NeedsBrowserAuth = false
                 };
             }
@@ -266,9 +357,8 @@ public class GogService : IGogService
                 return new GogAuthResponseDto
                 {
                     Success = false,
-                    Message = "令牌已过期或无效,需要重新认证",
+                    Message = "令牌已过期或无效，需要重新认证",
                     TokenExists = true,
-                    TokensPath = tokenPath,
                     NeedsBrowserAuth = true
                 };
             }
@@ -317,40 +407,51 @@ public class GogService : IGogService
     /// <summary>
     /// 执行GOG认证
     /// </summary>
-    public async Task<GogAuthResponseDto> AuthenticateGog(GogAuthRequestDto request)
+    public async Task<GogAuthResponseDto> AuthenticateGog(GogAuthRequestDto request, int userId)
     {
+        string? tempTokenPath = null;
         try
         {
-            _logger.LogInformation("开始GOG认证, HasRedirectUrl={HasRedirectUrl}", !string.IsNullOrEmpty(request.RedirectUrl));
+            _logger.LogInformation("开始GOG认证: userId={UserId}, HasRedirectUrl={HasRedirectUrl}", userId, !string.IsNullOrEmpty(request.RedirectUrl));
 
-            var tokenPath = GetTokenFilePath(request.TokensPath);
+            // 使用临时文件进行认证
+            tempTokenPath = Path.Combine(_tokensPath, $"gog_tokens_auth_{userId}_{Guid.NewGuid():N}.json");
             
-            // 如果强制重新认证,删除旧令牌
-            if (request.ForceReauth && File.Exists(tokenPath))
+            // 如果强制重新认证，删除数据库中的旧令牌
+            if (request.ForceReauth)
             {
-                File.Delete(tokenPath);
-                _logger.LogInformation("已删除旧令牌文件");
+                var binding = await _context.UserPlatformBindings
+                    .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 5);
+                if (binding != null)
+            {
+                    binding.AccessToken = null;
+                    binding.BindingStatus = false;
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("已删除数据库中的旧令牌");
+                }
             }
 
             // 如果没有提供重定向URL,先尝试刷新现有令牌或返回认证URL
             if (string.IsNullOrEmpty(request.RedirectUrl))
             {
-                // 如果有现有令牌,尝试刷新
-                if (File.Exists(tokenPath) && !request.ForceReauth)
+                // 尝试从数据库加载令牌并刷新
+                var binding = await _context.UserPlatformBindings
+                    .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 5 && b.BindingStatus == true);
+                
+                if (binding != null && !string.IsNullOrEmpty(binding.AccessToken) && !request.ForceReauth)
                 {
                     _logger.LogInformation("尝试刷新现有令牌");
-                    var gogData = await GetGogDataFromPython(tokenPath);
+                    var gogData = await GetGogDataFromPython(userId, 5);
                     
                     if (gogData != null && gogData.RootElement.TryGetProperty("success", out var success) && success.GetBoolean())
                     {
-                        var userId = gogData.RootElement.TryGetProperty("userId", out var userIdProp) ? userIdProp.GetString() : null;
+                        var gogUserId = gogData.RootElement.TryGetProperty("userId", out var userIdProp) ? userIdProp.GetString() : null;
                         return new GogAuthResponseDto
                         {
                             Success = true,
                             Message = "令牌刷新成功",
                             TokenExists = true,
-                            TokensPath = tokenPath,
-                            UserId = userId,
+                            UserId = gogUserId,
                             NeedsBrowserAuth = false
                         };
                     }
@@ -365,7 +466,6 @@ public class GogService : IGogService
                     Success = false,
                     Message = "请在浏览器中打开authUrl完成登录，登录成功后，将浏览器地址栏的完整URL复制下来，作为redirectUrl参数再次调用此接口",
                     TokenExists = false,
-                    TokensPath = tokenPath,
                     AuthUrl = authUrl,
                     NeedsBrowserAuth = true
                 };
@@ -381,8 +481,7 @@ public class GogService : IGogService
                 {
                     Success = false,
                     Message = "无法从提供的URL中提取授权码，请确保URL格式正确。正确格式示例: https://embed.gog.com/on_login_success?origin=client&code=xxxxx",
-                    TokenExists = File.Exists(tokenPath),
-                    TokensPath = tokenPath,
+                    TokenExists = false,
                     NeedsBrowserAuth = true
                 };
             }
@@ -399,14 +498,13 @@ public class GogService : IGogService
                 {
                     Success = false,
                     Message = $"Python环境问题: {envMessage}",
-                    TokenExists = File.Exists(tokenPath),
-                    TokensPath = tokenPath,
+                    TokenExists = false,
                     NeedsBrowserAuth = true
                 };
             }
             _logger.LogInformation("Python环境检查通过");
             
-            var arguments = $"--tokens \"{tokenPath}\" --auth-code \"{authCode}\"";
+            var arguments = $"--tokens \"{tempTokenPath}\" --auth-code \"{authCode}\"";
             
             int exitCode;
             string output;
@@ -447,8 +545,7 @@ public class GogService : IGogService
                     {
                         Success = false,
                         Message = errorMessage,
-                        TokenExists = File.Exists(tokenPath),
-                        TokensPath = tokenPath,
+                        TokenExists = false,
                         NeedsBrowserAuth = true
                     };
                 }
@@ -460,8 +557,7 @@ public class GogService : IGogService
                 {
                     Success = false,
                     Message = $"执行认证脚本失败: {ex.Message}",
-                    TokenExists = File.Exists(tokenPath),
-                    TokensPath = tokenPath,
+                    TokenExists = false,
                     NeedsBrowserAuth = true
                 };
             }
@@ -482,12 +578,26 @@ public class GogService : IGogService
                 
                 if (result != null && result.ContainsKey("success") && result["success"].GetBoolean())
                 {
+                    // 认证成功，读取令牌文件并保存到数据库
+                    if (File.Exists(tempTokenPath))
+                    {
+                        try
+                        {
+                            var tokenJson = await File.ReadAllTextAsync(tempTokenPath);
+                            await SaveTokenToDatabase(userId, 5, tokenJson);
+                            _logger.LogInformation("令牌已保存到数据库");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "保存令牌到数据库失败");
+                        }
+                    }
+                    
                     return new GogAuthResponseDto
                     {
                         Success = true,
                         Message = result.ContainsKey("message") ? result["message"].GetString() ?? "认证成功" : "认证成功",
                         UserId = result.ContainsKey("userId") ? result["userId"].GetString() : null,
-                        TokensPath = tokenPath,
                         TokenExists = true,
                         NeedsBrowserAuth = false
                     };
@@ -498,8 +608,7 @@ public class GogService : IGogService
                     {
                         Success = false,
                         Message = result?.ContainsKey("message") == true ? result["message"].GetString() ?? "认证失败" : "认证失败",
-                        TokenExists = File.Exists(tokenPath),
-                        TokensPath = tokenPath,
+                        TokenExists = false,
                         NeedsBrowserAuth = true
                     };
                 }
@@ -511,8 +620,7 @@ public class GogService : IGogService
                 {
                     Success = false,
                     Message = $"解析认证结果失败: {ex.Message}",
-                    TokenExists = File.Exists(tokenPath),
-                    TokensPath = tokenPath,
+                    TokenExists = false,
                     NeedsBrowserAuth = true
                 };
             }
@@ -528,24 +636,31 @@ public class GogService : IGogService
                 NeedsBrowserAuth = true
             };
         }
+        finally
+        {
+            // 清理临时文件
+            CleanupTempTokenFile(tempTokenPath);
+        }
     }
 
     /// <summary>
-    /// 获取GOG数据
+    /// 获取GOG数据（支持用户级令牌）
     /// </summary>
-    private async Task<JsonDocument?> GetGogDataFromPython(string? tokensPath = null)
+    private async Task<JsonDocument?> GetGogDataFromPython(int userId, int platformId = 5)
     {
+        string? tempFilePath = null;
         try
         {
-            var tokenPath = GetTokenFilePath(tokensPath);
+            // 从数据库加载令牌到临时文件
+            tempFilePath = await LoadTokenFromDatabase(userId, platformId);
             
-            if (!File.Exists(tokenPath))
+            if (tempFilePath == null)
             {
-                _logger.LogWarning("令牌文件不存在: {TokenPath}", tokenPath);
+                _logger.LogWarning("无法加载用户{UserId}的令牌", userId);
                 return null;
             }
 
-            var arguments = $"--tokens \"{tokenPath}\"";
+            var arguments = $"--tokens \"{tempFilePath}\"";
             var (exitCode, output, error) = await RunPythonScript("gog_get_data.py", arguments);
 
             _logger.LogInformation("Python脚本执行完成: ExitCode={ExitCode}", exitCode);
@@ -642,6 +757,21 @@ public class GogService : IGogService
                 }
                 
                 _logger.LogInformation("成功解析GOG数据JSON");
+                
+                // 成功后保存更新的令牌
+                if (File.Exists(tempFilePath))
+                {
+                    try
+                    {
+                        var updatedToken = await File.ReadAllTextAsync(tempFilePath);
+                        await SaveTokenToDatabase(userId, platformId, updatedToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "保存更新的令牌失败，但数据获取成功");
+                    }
+                }
+                
                 return doc;
             }
             catch (JsonException ex)
@@ -664,22 +794,27 @@ public class GogService : IGogService
             _logger.LogError(ex, "获取GOG数据时发生错误");
             return null;
         }
+        finally
+        {
+            // 清理临时文件
+            CleanupTempTokenFile(tempFilePath);
+        }
     }
 
     /// <summary>
     /// 导入GOG数据
     /// </summary>
-    public async Task<GogImportResponseDto> ImportGogData(GogImportRequestDto request)
+    public async Task<GogImportResponseDto> ImportGogData(GogImportRequestDto request, int userId)
     {
         try
         {
-            _logger.LogInformation("开始导入GOG数据: gogUserId={GogUserId}", request.GogUserId);
+            _logger.LogInformation("开始导入GOG数据: gogUserId={GogUserId}, userId={UserId}", request.GogUserId, userId);
 
             var taskId = $"gog_import_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
             
             // 获取GOG数据
             _logger.LogInformation("正在调用Python脚本获取GOG数据...");
-            var gogData = await GetGogDataFromPython();
+            var gogData = await GetGogDataFromPython(userId, 5);
             
             if (gogData == null)
             {
@@ -773,13 +908,13 @@ public class GogService : IGogService
     /// <summary>
     /// 获取GOG用户信息
     /// </summary>
-    public async Task<GogUserDto?> GetGogUser(string gogUserId)
+    public async Task<GogUserDto?> GetGogUser(string gogUserId, int userId)
     {
         try
         {
-            _logger.LogInformation("获取GOG用户信息: gogUserId={GogUserId}", gogUserId);
+            _logger.LogInformation("获取GOG用户信息: gogUserId={GogUserId}, userId={UserId}", gogUserId, userId);
 
-            var gogData = await GetGogDataFromPython();
+            var gogData = await GetGogDataFromPython(userId, 5);
             
             if (gogData == null)
             {
@@ -824,13 +959,13 @@ public class GogService : IGogService
     /// <summary>
     /// 获取GOG游戏信息
     /// </summary>
-    public async Task<GogGameDto?> GetGogGame(string gogGameId)
+    public async Task<GogGameDto?> GetGogGame(string gogGameId, int userId)
     {
         try
         {
-            _logger.LogInformation("获取GOG游戏信息: gogGameId={GogGameId}", gogGameId);
+            _logger.LogInformation("获取GOG游戏信息: gogGameId={GogGameId}, userId={UserId}", gogGameId, userId);
 
-            var gogData = await GetGogDataFromPython();
+            var gogData = await GetGogDataFromPython(userId, 5);
             
             if (gogData == null)
             {
@@ -890,13 +1025,13 @@ public class GogService : IGogService
     /// <summary>
     /// 获取GOG用户的游戏列表(用于导入)
     /// </summary>
-    public async Task<List<GogGameDto>> GetGogUserGames(string gogUserId)
+    public async Task<List<GogGameDto>> GetGogUserGames(string gogUserId, int userId)
     {
         try
         {
-            _logger.LogInformation("获取GOG用户游戏列表: gogUserId={GogUserId}", gogUserId);
+            _logger.LogInformation("获取GOG用户游戏列表: gogUserId={GogUserId}, userId={UserId}", gogUserId, userId);
 
-            var gogData = await GetGogDataFromPython();
+            var gogData = await GetGogDataFromPython(userId, 5);
             
             if (gogData == null)
             {

@@ -26,15 +26,23 @@ public class SteamController : ControllerBase
     private readonly ILogger<SteamController> _logger;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ITokenEncryptionService _encryptionService;
     private const int STEAM_PLATFORM_ID = 1; // Steam平台ID
 
-    public SteamController(ISteamService steamService, PlayLinkerDbContext context, ILogger<SteamController> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public SteamController(
+        ISteamService steamService, 
+        PlayLinkerDbContext context, 
+        ILogger<SteamController> logger, 
+        IConfiguration configuration, 
+        IHttpClientFactory httpClientFactory,
+        ITokenEncryptionService encryptionService)
     {
         _steamService = steamService;
         _context = context;
         _logger = logger;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
+        _encryptionService = encryptionService;
     }
 
     // 获取当前用户ID
@@ -42,6 +50,29 @@ public class SteamController : ControllerBase
     {
         var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
         return int.TryParse(userIdClaim, out var userId) ? userId : 1;
+    }
+
+    // 从数据库获取Steam API Key
+    private async Task<string?> GetSteamApiKeyAsync(int userId)
+    {
+        try
+        {
+            var binding = await _context.UserPlatformBindings
+                .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == STEAM_PLATFORM_ID && b.BindingStatus == true);
+            
+            if (binding == null || string.IsNullOrEmpty(binding.AccessToken))
+            {
+                _logger.LogWarning("用户{UserId}未绑定Steam平台或API Key不存在", userId);
+                return null;
+            }
+            
+            return _encryptionService.DecryptToken(binding.AccessToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "从数据库获取Steam API Key失败");
+            return null;
+        }
     }
 
     /// <summary>
@@ -152,7 +183,7 @@ public class SteamController : ControllerBase
                 return BadRequest(ApiResponse<object>.ErrorResponse("BAD_REQUEST", $"用户ID {request.UserId} 不存在，请先创建用户"));
             }
 
-            var userId = request.UserId;
+            var userId = (int)request.UserId;
             _logger.LogInformation("导入Steam数据: userId={UserId}, steamId={SteamId}", userId, request.SteamId);
 
             // 初始化平台数据（确保Steam平台存在）
@@ -166,7 +197,12 @@ public class SteamController : ControllerBase
             int friendsCount = 0;
 
             // 1. 获取并存储Steam用户信息
-            var steamUser = await _steamService.GetSteamUser(request.SteamId);
+            var apiKey = await GetSteamApiKeyAsync(userId);
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                return BadRequest(ApiResponse<SteamImportResponseDto>.ErrorResponse("ERR_STEAM_API_KEY_NOT_FOUND", "未找到Steam API Key，请先绑定Steam平台"));
+            }
+            var steamUser = await _steamService.GetSteamUser(request.SteamId, apiKey);
             if (steamUser == null)
             {
                 return BadRequest(ApiResponse<SteamImportResponseDto>.ErrorResponse("ERR_STEAM_USER_NOT_FOUND", "Steam用户不存在或资料为私密状态"));
@@ -229,141 +265,149 @@ public class SteamController : ControllerBase
             {
                 try
                 {
-                    var apiKey = _configuration["SteamAPI:ApiKey"] ?? "";
-                    var gamesUrl = $"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={apiKey}&steamid={request.SteamId}&include_appinfo=true&include_played_free_games=true";
-                    var httpClient = _httpClientFactory.CreateClient();
-                    var gamesResponse = await httpClient.GetAsync(gamesUrl);
-
-                    if (gamesResponse.IsSuccessStatusCode)
+                    // 使用已获取的apiKey
+                    if (string.IsNullOrEmpty(apiKey))
                     {
-                        var gamesContent = await gamesResponse.Content.ReadAsStringAsync();
-                        var gamesDoc = JsonDocument.Parse(gamesContent);
+                        _logger.LogWarning("Steam API Key 未找到，跳过游戏导入");
+                        gamesCount = 0;
+                    }
+                    else
+                    {
+                        var gamesUrl = $"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={apiKey}&steamid={request.SteamId}&include_appinfo=true&include_played_free_games=true";
+                        var httpClient = _httpClientFactory.CreateClient();
+                        var gamesResponse = await httpClient.GetAsync(gamesUrl);
 
-                        if (gamesDoc.RootElement.TryGetProperty("response", out var gamesResponseData))
+                        if (gamesResponse.IsSuccessStatusCode)
                         {
-                            if (gamesResponseData.TryGetProperty("games", out var gamesArray))
+                            var gamesContent = await gamesResponse.Content.ReadAsStringAsync();
+                            var gamesDoc = JsonDocument.Parse(gamesContent);
+
+                            if (gamesDoc.RootElement.TryGetProperty("response", out var gamesResponseData))
                             {
-                                foreach (var gameElement in gamesArray.EnumerateArray())
+                                if (gamesResponseData.TryGetProperty("games", out var gamesArray))
                                 {
-                                    if (!gameElement.TryGetProperty("appid", out var appIdElement)) continue;
-                                    var appId = appIdElement.GetInt32();
-
-                                    // 获取游戏详细信息
-                                    var steamGame = await _steamService.GetSteamGame(appId);
-                                    if (steamGame == null) continue;
-
-                                    // 查找或创建游戏
-                                    var game = await _context.Games
-                                        .FirstOrDefaultAsync(g => g.Name == steamGame.Name);
-
-                                    if (game == null)
+                                    foreach (var gameElement in gamesArray.EnumerateArray())
                                     {
-                                        // 创建新游戏
-                                        game = new Game
-                                        {
-                                            Name = steamGame.Name,
-                                            IsFree = steamGame.IsFree,
-                                            RequireAge = (byte?)steamGame.RequiredAge,
-                                            ShortDescription = steamGame.ShortDescription,
-                                            DetailedDescription = steamGame.DetailedDescription,
-                                            HeaderImage = steamGame.HeaderImage,
-                                            CapsuleImage = steamGame.HeaderImage, // 使用headerImage作为capsule
-                                            Background = steamGame.HeaderImage, // 使用headerImage作为background
-                                            Windows = steamGame.Platforms.Windows,
-                                            Mac = steamGame.Platforms.Mac,
-                                            Linux = steamGame.Platforms.Linux,
-                                            ReleaseDate = DateTime.TryParse(steamGame.ReleaseDate, out var releaseDate) ? releaseDate : DateTime.UtcNow,
-                                            ReviewScore = 0,
-                                            ReviewScoreDesc = "",
-                                            NumReviews = 0,
-                                            TotalPositive = 0
-                                        };
-                                        _context.Games.Add(game);
-                                        await _context.SaveChangesAsync();
+                                        if (!gameElement.TryGetProperty("appid", out var appIdElement)) continue;
+                                        var appId = appIdElement.GetInt32();
 
-                                        // 添加开发商
-                                        foreach (var devName in steamGame.Developers)
+                                        // 获取游戏详细信息
+                                        var steamGame = await _steamService.GetSteamGame(appId, apiKey);
+                                        if (steamGame == null) continue;
+
+                                        // 查找或创建游戏
+                                        var game = await _context.Games
+                                            .FirstOrDefaultAsync(g => g.Name == steamGame.Name);
+
+                                        if (game == null)
                                         {
-                                            if (string.IsNullOrEmpty(devName)) continue;
-                                            // 截断名称到20个字符（数据库限制）
-                                            var truncatedName = devName.Length > 20 ? devName.Substring(0, 20) : devName;
-                                            var developer = await _context.Developers.FirstOrDefaultAsync(d => d.Name == truncatedName);
-                                            if (developer == null)
+                                            // 创建新游戏
+                                            game = new Game
                                             {
-                                                developer = new Developer { Name = truncatedName };
-                                                _context.Developers.Add(developer);
-                                                await _context.SaveChangesAsync();
+                                                Name = steamGame.Name,
+                                                IsFree = steamGame.IsFree,
+                                                RequireAge = (byte?)steamGame.RequiredAge,
+                                                ShortDescription = steamGame.ShortDescription,
+                                                DetailedDescription = steamGame.DetailedDescription,
+                                                HeaderImage = steamGame.HeaderImage,
+                                                CapsuleImage = steamGame.HeaderImage, // 使用headerImage作为capsule
+                                                Background = steamGame.HeaderImage, // 使用headerImage作为background
+                                                Windows = steamGame.Platforms.Windows,
+                                                Mac = steamGame.Platforms.Mac,
+                                                Linux = steamGame.Platforms.Linux,
+                                                ReleaseDate = DateTime.TryParse(steamGame.ReleaseDate, out var releaseDate) ? releaseDate : DateTime.UtcNow,
+                                                ReviewScore = 0,
+                                                ReviewScoreDesc = "",
+                                                NumReviews = 0,
+                                                TotalPositive = 0
+                                            };
+                                            _context.Games.Add(game);
+                                            await _context.SaveChangesAsync();
+
+                                            // 添加开发商
+                                            foreach (var devName in steamGame.Developers)
+                                            {
+                                                if (string.IsNullOrEmpty(devName)) continue;
+                                                // 截断名称到20个字符（数据库限制）
+                                                var truncatedName = devName.Length > 20 ? devName.Substring(0, 20) : devName;
+                                                var developer = await _context.Developers.FirstOrDefaultAsync(d => d.Name == truncatedName);
+                                                if (developer == null)
+                                                {
+                                                    developer = new Developer { Name = truncatedName };
+                                                    _context.Developers.Add(developer);
+                                                    await _context.SaveChangesAsync();
+                                                }
+                                                if (!await _context.GameDevelopers.AnyAsync(gd => gd.GameId == game.GameId && gd.DeveloperId == developer.DeveloperId))
+                                                {
+                                                    _context.GameDevelopers.Add(new GameDeveloper { GameId = game.GameId, DeveloperId = developer.DeveloperId });
+                                                }
                                             }
-                                            if (!await _context.GameDevelopers.AnyAsync(gd => gd.GameId == game.GameId && gd.DeveloperId == developer.DeveloperId))
+
+                                            // 添加发行商
+                                            foreach (var pubName in steamGame.Publishers)
                                             {
-                                                _context.GameDevelopers.Add(new GameDeveloper { GameId = game.GameId, DeveloperId = developer.DeveloperId });
+                                                if (string.IsNullOrEmpty(pubName)) continue;
+                                                // 截断名称到20个字符（数据库限制）
+                                                var truncatedName = pubName.Length > 20 ? pubName.Substring(0, 20) : pubName;
+                                                var publisher = await _context.Publishers.FirstOrDefaultAsync(p => p.Name == truncatedName);
+                                                if (publisher == null)
+                                                {
+                                                    publisher = new Publisher { Name = truncatedName };
+                                                    _context.Publishers.Add(publisher);
+                                                    await _context.SaveChangesAsync();
+                                                }
+                                                if (!await _context.GamePublishers.AnyAsync(gp => gp.GameId == game.GameId && gp.PublisherId == publisher.PublisherId))
+                                                {
+                                                    _context.GamePublishers.Add(new GamePublisher { GameId = game.GameId, PublisherId = publisher.PublisherId });
+                                                }
                                             }
                                         }
 
-                                        // 添加发行商
-                                        foreach (var pubName in steamGame.Publishers)
+                                        // 创建或更新游戏平台映射
+                                        if (!await _context.GamePlatforms.AnyAsync(gp => gp.GameId == game.GameId && gp.PlatformId == STEAM_PLATFORM_ID))
                                         {
-                                            if (string.IsNullOrEmpty(pubName)) continue;
-                                            // 截断名称到20个字符（数据库限制）
-                                            var truncatedName = pubName.Length > 20 ? pubName.Substring(0, 20) : pubName;
-                                            var publisher = await _context.Publishers.FirstOrDefaultAsync(p => p.Name == truncatedName);
-                                            if (publisher == null)
+                                            _context.GamePlatforms.Add(new GamePlatform
                                             {
-                                                publisher = new Publisher { Name = truncatedName };
-                                                _context.Publishers.Add(publisher);
-                                                await _context.SaveChangesAsync();
-                                            }
-                                            if (!await _context.GamePublishers.AnyAsync(gp => gp.GameId == game.GameId && gp.PublisherId == publisher.PublisherId))
-                                            {
-                                                _context.GamePublishers.Add(new GamePublisher { GameId = game.GameId, PublisherId = publisher.PublisherId });
-                                            }
+                                                GameId = game.GameId,
+                                                PlatformId = STEAM_PLATFORM_ID,
+                                                PlatformGameId = appId.ToString(),
+                                                GamePlatformUrl = $"https://store.steampowered.com/app/{appId}"
+                                            });
                                         }
-                                    }
 
-                                    // 创建或更新游戏平台映射
-                                    if (!await _context.GamePlatforms.AnyAsync(gp => gp.GameId == game.GameId && gp.PlatformId == STEAM_PLATFORM_ID))
-                                    {
-                                        _context.GamePlatforms.Add(new GamePlatform
+                                        // 创建或更新用户平台游戏库记录
+                                        var playtimeMinutes = gameElement.TryGetProperty("playtime_forever", out var playtime) ? playtime.GetInt32() : 0;
+                                        var lastPlayed = gameElement.TryGetProperty("rtime_last_played", out var rtime) && rtime.GetInt64() > 0
+                                            ? DateTimeOffset.FromUnixTimeSeconds(rtime.GetInt64()).DateTime
+                                            : (DateTime?)null;
+
+                                        var userGame = await _context.UserPlatformLibraries
+                                            .FirstOrDefaultAsync(upl => upl.PlatformUserId == request.SteamId 
+                                                && upl.PlatformId == STEAM_PLATFORM_ID 
+                                                && upl.GameId == game.GameId);
+
+                                        if (userGame == null)
                                         {
-                                            GameId = game.GameId,
-                                            PlatformId = STEAM_PLATFORM_ID,
-                                            PlatformGameId = appId.ToString(),
-                                            GamePlatformUrl = $"https://store.steampowered.com/app/{appId}"
-                                        });
-                                    }
-
-                                    // 创建或更新用户平台游戏库记录
-                                    var playtimeMinutes = gameElement.TryGetProperty("playtime_forever", out var playtime) ? playtime.GetInt32() : 0;
-                                    var lastPlayed = gameElement.TryGetProperty("rtime_last_played", out var rtime) && rtime.GetInt64() > 0
-                                        ? DateTimeOffset.FromUnixTimeSeconds(rtime.GetInt64()).DateTime
-                                        : (DateTime?)null;
-
-                                    var userGame = await _context.UserPlatformLibraries
-                                        .FirstOrDefaultAsync(upl => upl.PlatformUserId == request.SteamId 
-                                            && upl.PlatformId == STEAM_PLATFORM_ID 
-                                            && upl.GameId == game.GameId);
-
-                                    if (userGame == null)
-                                    {
-                                        _context.UserPlatformLibraries.Add(new UserPlatformLibrary
+                                            _context.UserPlatformLibraries.Add(new UserPlatformLibrary
+                                            {
+                                                PlatformUserId = request.SteamId,
+                                                PlatformId = STEAM_PLATFORM_ID,
+                                                GameId = game.GameId,
+                                                PlaytimeMinutes = playtimeMinutes,
+                                                LastPlayed = lastPlayed
+                                            });
+                                        }
+                                        else
                                         {
-                                            PlatformUserId = request.SteamId,
-                                            PlatformId = STEAM_PLATFORM_ID,
-                                            GameId = game.GameId,
-                                            PlaytimeMinutes = playtimeMinutes,
-                                            LastPlayed = lastPlayed
-                                        });
-                                    }
-                                    else
-                                    {
-                                        userGame.PlaytimeMinutes = playtimeMinutes;
-                                        userGame.LastPlayed = lastPlayed;
+                                            userGame.PlaytimeMinutes = playtimeMinutes;
+                                            userGame.LastPlayed = lastPlayed;
+                                        }
+
+                                        gamesCount++;
                                     }
 
-                                    gamesCount++;
+                                    await _context.SaveChangesAsync();
                                 }
-
-                                await _context.SaveChangesAsync();
                             }
                         }
                     }
@@ -384,7 +428,7 @@ public class SteamController : ControllerBase
                         .Where(upl => upl.PlatformUserId == request.SteamId && upl.PlatformId == STEAM_PLATFORM_ID)
                         .ToListAsync();
 
-                    var apiKey = _configuration["SteamAPI:ApiKey"] ?? "";
+                    // 使用已获取的apiKey
                     if (string.IsNullOrEmpty(apiKey))
                     {
                         _logger.LogWarning("Steam API Key 未配置");
@@ -676,9 +720,15 @@ public class SteamController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取Steam用户信息: steamId={SteamId}", steamId);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取Steam用户信息: steamId={SteamId}, userId={UserId}", steamId, userId);
 
-            var result = await _steamService.GetSteamUser(steamId);
+            var apiKey = await GetSteamApiKeyAsync(userId);
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_STEAM_API_KEY_NOT_FOUND", "未找到Steam API Key，请先绑定Steam平台"));
+            }
+            var result = await _steamService.GetSteamUser(steamId, apiKey);
 
             if (result == null)
             {
@@ -705,9 +755,15 @@ public class SteamController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取Steam游戏信息: appId={AppId}", appId);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取Steam游戏信息: appId={AppId}, userId={UserId}", appId, userId);
 
-            var result = await _steamService.GetSteamGame(appId);
+            var apiKey = await GetSteamApiKeyAsync(userId);
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_STEAM_API_KEY_NOT_FOUND", "未找到Steam API Key，请先绑定Steam平台"));
+            }
+            var result = await _steamService.GetSteamGame(appId, apiKey);
 
             if (result == null)
             {

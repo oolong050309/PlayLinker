@@ -9,37 +9,37 @@ namespace PlayLinker.Services;
 public interface IPsnService
 {
     /// <summary>
-    /// 导入PSN数据
+    /// 导入PSN数据（需要用户ID）
     /// </summary>
-    Task<PsnImportResponseDto> ImportPsnData(PsnImportRequestDto request);
+    Task<PsnImportResponseDto> ImportPsnData(PsnImportRequestDto request, int userId);
 
     /// <summary>
-    /// 获取PSN用户信息
+    /// 获取PSN用户信息（需要用户ID）
     /// </summary>
-    Task<PsnUserDto?> GetPsnUser(string onlineId);
+    Task<PsnUserDto?> GetPsnUser(string onlineId, int userId);
 
     /// <summary>
-    /// 获取PSN游戏信息
+    /// 获取PSN游戏信息（需要用户ID）
     /// </summary>
-    Task<PsnGameDto?> GetPsnGame(string titleId);
+    Task<PsnGameDto?> GetPsnGame(string titleId, int userId);
 
     /// <summary>
-    /// 获取PSN用户奖杯
+    /// 获取PSN用户奖杯（需要用户ID）
     /// </summary>
-    Task<PsnUserTrophiesResponseDto> GetPsnUserTrophies(string onlineId);
+    Task<PsnUserTrophiesResponseDto> GetPsnUserTrophies(string onlineId, int userId);
 
     /// <summary>
-    /// 获取PSN用户的游戏列表(用于导入)
+    /// 获取PSN用户的游戏列表(用于导入)（需要用户ID）
     /// </summary>
-    Task<List<PsnGameDto>> GetPsnUserGames(string onlineId);
+    Task<List<PsnGameDto>> GetPsnUserGames(string onlineId, int userId);
 
     /// <summary>
     /// 执行PSN认证
     /// </summary>
-    Task<PsnAuthResponseDto> AuthenticatePsn(PsnAuthRequestDto request);
+    Task<PsnAuthResponseDto> AuthenticatePsn(PsnAuthRequestDto request, int userId);
 
     /// <summary>
-    /// 检查令牌状态
+    /// 检查令牌状态（需要用户ID）
     /// </summary>
-    Task<PsnAuthResponseDto> CheckTokenStatus(string? tokensPath = null);
+    Task<PsnAuthResponseDto> CheckTokenStatus(int userId, int platformId = 6);
 }

@@ -30,6 +30,13 @@ public class GogController : ControllerBase
         _logger = logger;
     }
 
+    // 获取当前用户ID
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : 1;
+    }
+
     /// <summary>
     /// 初始化平台数据
     /// </summary>
@@ -107,9 +114,10 @@ public class GogController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("检查GOG令牌状态");
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("检查GOG令牌状态: userId={UserId}", userId);
 
-            var result = await _gogService.CheckTokenStatus();
+            var result = await _gogService.CheckTokenStatus(userId, 5);
 
             return Ok(ApiResponse<GogAuthResponseDto>.SuccessResponse(result, 
                 result.Success ? "令牌有效" : "令牌无效或不存在"));
@@ -181,9 +189,10 @@ public class GogController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("开始GOG认证, HasRedirectUrl={HasRedirectUrl}", !string.IsNullOrEmpty(request.RedirectUrl));
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("开始GOG认证: userId={UserId}, HasRedirectUrl={HasRedirectUrl}", userId, !string.IsNullOrEmpty(request.RedirectUrl));
 
-            var result = await _gogService.AuthenticateGog(request);
+            var result = await _gogService.AuthenticateGog(request, userId);
 
             if (!result.Success)
             {
@@ -239,14 +248,14 @@ public class GogController : ControllerBase
                 return BadRequest(ApiResponse<object>.ErrorResponse("BAD_REQUEST", $"用户ID {request.UserId} 不存在,请先创建用户"));
             }
 
-            var userId = request.UserId;
+            var userId = (int)request.UserId;
             _logger.LogInformation("导入GOG数据: userId={UserId}, gogUserId={GogUserId}", userId, request.GogUserId);
 
             // 初始化平台数据
             await InitializePlatformsAsync();
 
             // 获取GOG用户信息
-            var gogUser = await _gogService.GetGogUser(request.GogUserId);
+            var gogUser = await _gogService.GetGogUser(request.GogUserId, userId);
             if (gogUser == null)
             {
                 return BadRequest(ApiResponse<GogImportResponseDto>.ErrorResponse("ERR_GOG_USER_NOT_FOUND", "GOG用户不存在或令牌无效,请先进行认证"));
@@ -314,7 +323,7 @@ public class GogController : ControllerBase
                     // 获取完整的GOG游戏数据
                     _logger.LogInformation("开始导入GOG游戏数据...");
                     
-                    var gogGames = await _gogService.GetGogUserGames(request.GogUserId);
+                    var gogGames = await _gogService.GetGogUserGames(request.GogUserId, userId);
                     
                     foreach (var gogGame in gogGames)
                     {
@@ -483,9 +492,10 @@ public class GogController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取GOG用户信息: gogUserId={GogUserId}", gogUserId);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取GOG用户信息: gogUserId={GogUserId}, userId={UserId}", gogUserId, userId);
 
-            var result = await _gogService.GetGogUser(gogUserId);
+            var result = await _gogService.GetGogUser(gogUserId, userId);
 
             if (result == null)
             {
@@ -512,9 +522,10 @@ public class GogController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("获取GOG游戏信息: gogGameId={GogGameId}", gogGameId);
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取GOG游戏信息: gogGameId={GogGameId}, userId={UserId}", gogGameId, userId);
 
-            var result = await _gogService.GetGogGame(gogGameId);
+            var result = await _gogService.GetGogGame(gogGameId, userId);
 
             if (result == null)
             {

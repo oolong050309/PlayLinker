@@ -5,6 +5,7 @@ using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
+using PlayLinker.Services;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace PlayLinker.Controllers;
@@ -19,66 +20,107 @@ public class PlatformsController : ControllerBase
 {
     private readonly PlayLinkerDbContext _dbContext;
     private readonly ILogger<PlatformsController> _logger;
+    private readonly ITokenEncryptionService _encryptionService;
+    private readonly ISteamService _steamService;
+    private readonly IXboxService _xboxService;
+    private readonly IPsnService _psnService;
+    private readonly IGogService _gogService;
 
-    public PlatformsController(PlayLinkerDbContext dbContext, ILogger<PlatformsController> logger)
+    public PlatformsController(
+        PlayLinkerDbContext dbContext, 
+        ILogger<PlatformsController> logger,
+        ITokenEncryptionService encryptionService,
+        ISteamService steamService,
+        IXboxService xboxService,
+        IPsnService psnService,
+        IGogService gogService)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _encryptionService = encryptionService;
+        _steamService = steamService;
+        _xboxService = xboxService;
+        _psnService = psnService;
+        _gogService = gogService;
+    }
+
+    /// <summary>
+    /// 初始化平台数据，确保所有平台都已存在
+    /// </summary>
+    private async Task InitializePlatformsAsync()
+    {
+        var platforms = new[]
+        {
+            new { Id = 1, Name = "Steam", Description = "Valve旗下游戏平台" },
+            new { Id = 2, Name = "Epic Games", Description = "Epic Games商店" },
+            new { Id = 3, Name = "Origin", Description = "EA游戏平台" },
+            new { Id = 4, Name = "Uplay", Description = "Ubisoft游戏平台" },
+            new { Id = 5, Name = "GOG", Description = "GOG游戏平台" },
+            new { Id = 6, Name = "PSN", Description = "PlayStation Network" },
+            new { Id = 7, Name = "Xbox", Description = "Xbox游戏平台" },
+            new { Id = 8, Name = "Nintendo Switch", Description = "任天堂Switch平台" }
+        };
+
+        var connection = _dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync();
+        }
+
+        foreach (var platformInfo in platforms)
+        {
+            var exists = await _dbContext.Platforms
+                .AnyAsync(p => p.PlatformId == platformInfo.Id || p.PlatformName == platformInfo.Name);
+
+            if (!exists)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = @"
+                    INSERT INTO platforms (platform_id, platform_name, description, status) 
+                    VALUES (@id, @name, @desc, 1)
+                    ON DUPLICATE KEY UPDATE platform_name = VALUES(platform_name), description = VALUES(description)";
+                
+                var idParam = command.CreateParameter();
+                idParam.ParameterName = "@id";
+                idParam.Value = platformInfo.Id;
+                command.Parameters.Add(idParam);
+
+                var nameParam = command.CreateParameter();
+                nameParam.ParameterName = "@name";
+                nameParam.Value = platformInfo.Name;
+                command.Parameters.Add(nameParam);
+
+                var descParam = command.CreateParameter();
+                descParam.ParameterName = "@desc";
+                descParam.Value = platformInfo.Description ?? "";
+                command.Parameters.Add(descParam);
+
+                try
+                {
+                    await command.ExecuteNonQueryAsync();
+                    _logger.LogInformation("创建平台: {PlatformName} (ID: {PlatformId})", platformInfo.Name, platformInfo.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "创建平台失败: {PlatformName} (ID: {PlatformId})", platformInfo.Name, platformInfo.Id);
+                }
+            }
+        }
     }
 
     /// <summary>
     /// 获取OAuth URL
     /// </summary>
     /// <param name="platform">平台名称 (steam|epic|origin|uplay|gog)</param>
-    [SwaggerOperation(Summary = "获取OAuth URL", Description = "生成第三方平台OAuth认证URL以及state，用于后续绑定。平台支持：steam|epic|origin|uplay|gog。需要JWT认证。")]
-    [HttpGet("oauth/{platform}")]
-    [ProducesResponseType(typeof(ApiResponse<OAuthUrlResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-    public ActionResult<ApiResponse<OAuthUrlResponseDto>> GetOAuthUrl(string platform)
-    {
-        try
-        {
-            var userIdClaim = User.FindFirst("user_id");
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-            {
-                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
-            }
-
-            // 验证平台
-            var validPlatforms = new[] { "steam", "epic", "origin", "uplay", "gog" };
-            if (!validPlatforms.Contains(platform.ToLower()))
-            {
-                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_INVALID_PLATFORM", "无效的平台"));
-            }
-
-            // 生成OAuth URL和State
-            var state = Guid.NewGuid().ToString();
-            var authUrl = GenerateOAuthUrl(platform, state);
-
-            var response = new OAuthUrlResponseDto
-            {
-                Platform = platform,
-                AuthUrl = authUrl,
-                State = state,
-                ExpiresIn = 600
-            };
-
-            _logger.LogInformation($"OAuth URL generated for platform: {platform}, user: {userId}");
-            return Ok(ApiResponse<OAuthUrlResponseDto>.SuccessResponse(response, "获取成功"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating OAuth URL");
-            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
-        }
-    }
-
     /// <summary>
     /// 绑定平台
     /// </summary>
     /// <param name="request">绑定请求</param>
-    [SwaggerOperation(Summary = "绑定平台", Description = "使用OAuth授权码完成平台绑定，创建绑定记录并返回绑定信息。冲突错误：ERR_ALREADY_BOUND。")]
+    [SwaggerOperation(Summary = "绑定平台", Description = "统一平台绑定接口，根据PlatformId自动选择绑定逻辑。\n\n" +
+        "**Steam (PlatformId=1)**: 需要SteamId + ApiKey\n" +
+        "**Xbox (PlatformId=7)**: 需要XboxUserId + AccessToken + RefreshToken\n" +
+        "**PSN (PlatformId=6)**: 需要PsnOnlineId + AccessToken + RefreshToken\n" +
+        "**GOG (PlatformId=5)**: 需要GogUserId + AccessToken + RefreshToken")]
     [HttpPost("bind")]
     [ProducesResponseType(typeof(ApiResponse<PlatformBindResponseDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
@@ -100,57 +142,391 @@ public class PlatformsController : ControllerBase
                 return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
             }
 
+            // 初始化平台数据
+            await InitializePlatformsAsync();
+
             // 验证平台是否存在
-            var platform = _dbContext.Platforms.FirstOrDefault(p => p.PlatformId == request.PlatformId);
+            var platform = await _dbContext.Platforms.FirstOrDefaultAsync(p => p.PlatformId == request.PlatformId);
             if (platform == null)
             {
                 return BadRequest(ApiResponse<object>.ErrorResponse("ERR_PLATFORM_NOT_FOUND", "平台不存在"));
             }
 
             // 检查是否已绑定
-            var existingBinding = _dbContext.UserPlatformBindings
-                .FirstOrDefault(b => b.UserId == userId && b.PlatformId == request.PlatformId && b.BindingStatus == true);
+            var existingBinding = await _dbContext.UserPlatformBindings
+                .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == request.PlatformId && b.BindingStatus == true);
 
             if (existingBinding != null)
             {
-                return Conflict(ApiResponse<object>.ErrorResponse("ERR_ALREADY_BOUND", "平台已绑定"));
+                return Conflict(ApiResponse<object>.ErrorResponse("ERR_ALREADY_BOUND", "平台已绑定，请先解绑后再重新绑定"));
             }
 
-            // 这里应该调用第三方API验证授权码
-            // 简化处理，直接创建绑定记录
-            var platformUserId = $"platform_user_{Guid.NewGuid().ToString().Substring(0, 8)}";
-
-            var binding = new UserPlatformBinding
+            // 根据平台ID选择绑定逻辑
+            PlatformBindResponseDto? response = null;
+            
+            switch (request.PlatformId)
             {
-                UserId = userId,
-                PlatformId = request.PlatformId,
-                PlatformUserId = platformUserId,
-                AccessToken = "encrypted_token",
-                RefreshToken = "encrypted_refresh_token",
-                BindingStatus = true,
-                BindingTime = DateTime.UtcNow,
-                ExpireTime = DateTime.UtcNow.AddDays(30)
-            };
+                case 1: // Steam
+                    response = await BindSteamPlatform(userId, request);
+                    break;
+                case 7: // Xbox
+                    response = await BindXboxPlatform(userId, request);
+                    break;
+                case 6: // PSN
+                    response = await BindPsnPlatform(userId, request);
+                    break;
+                case 5: // GOG
+                    response = await BindGogPlatform(userId, request);
+                    break;
+                default:
+                    return BadRequest(ApiResponse<object>.ErrorResponse("ERR_PLATFORM_NOT_SUPPORTED", 
+                        $"平台 {platform.PlatformName} 暂不支持通过此接口绑定"));
+            }
 
-            _dbContext.UserPlatformBindings.Add(binding);
-            await _dbContext.SaveChangesAsync();
-
-            var response = new PlatformBindResponseDto
+            if (response == null)
             {
-                BindingId = binding.BindingId,
-                PlatformName = platform.PlatformName ?? "Unknown",
-                PlatformUserId = platformUserId,
-                BindingTime = binding.BindingTime ?? DateTime.UtcNow
-            };
+                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_BIND_FAILED", "平台绑定失败"));
+            }
 
-            _logger.LogInformation($"Platform bound: user {userId}, platform {request.PlatformId}");
+            _logger.LogInformation("平台绑定成功: user {UserId}, platform {PlatformId}", userId, request.PlatformId);
             return CreatedAtAction(nameof(BindPlatform), ApiResponse<PlatformBindResponseDto>.SuccessResponse(response, $"{platform.PlatformName}平台绑定成功"));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error binding platform");
+            _logger.LogError(ex, "绑定平台时发生错误");
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
+    }
+
+    /// <summary>
+    /// 绑定Steam平台
+    /// </summary>
+    private async Task<PlatformBindResponseDto?> BindSteamPlatform(int userId, PlatformBindRequestDto request)
+    {
+        // 验证必需参数
+        if (string.IsNullOrEmpty(request.SteamId) || string.IsNullOrEmpty(request.ApiKey))
+        {
+            throw new ArgumentException("Steam绑定需要提供SteamId和ApiKey");
+        }
+
+        // 验证Steam API Key是否有效
+        var testUser = await _steamService.GetSteamUser(request.SteamId, request.ApiKey);
+        if (testUser == null)
+        {
+            throw new ArgumentException("Steam API Key无效或Steam用户不存在");
+        }
+
+        // 先创建或更新PlayerPlatform记录（外键约束要求）
+        var playerPlatform = await _dbContext.PlayerPlatforms
+            .FirstOrDefaultAsync(pp => pp.PlatformUserId == request.SteamId && pp.PlatformId == 1);
+
+        if (playerPlatform == null)
+        {
+            playerPlatform = new PlayerPlatform
+            {
+                PlatformUserId = request.SteamId,
+                PlatformId = 1, // Steam
+                ProfileName = testUser.ProfileName ?? request.SteamId,
+                ProfileUrl = testUser.ProfileUrl,
+                AccountCreated = DateTime.TryParse(testUser.AccountCreated, out var created) ? created : null,
+                Country = testUser.Country
+            };
+            _dbContext.PlayerPlatforms.Add(playerPlatform);
+        }
+        else
+        {
+            playerPlatform.ProfileName = testUser.ProfileName ?? request.SteamId;
+            playerPlatform.ProfileUrl = testUser.ProfileUrl;
+            playerPlatform.Country = testUser.Country;
+        }
+        await _dbContext.SaveChangesAsync();
+
+        // 加密API Key
+        var encryptedApiKey = _encryptionService.EncryptToken(request.ApiKey);
+
+        // 创建绑定记录
+        var binding = new UserPlatformBinding
+        {
+            UserId = userId,
+            PlatformId = 1, // Steam
+            PlatformUserId = request.SteamId,
+            AccessToken = encryptedApiKey,
+            BindingStatus = true,
+            BindingTime = DateTime.UtcNow,
+            ExpireTime = DateTime.UtcNow.AddYears(10) // Steam API Key长期有效
+        };
+
+        _dbContext.UserPlatformBindings.Add(binding);
+        await _dbContext.SaveChangesAsync();
+
+        return new PlatformBindResponseDto
+        {
+            BindingId = binding.BindingId,
+            PlatformName = "Steam",
+            PlatformUserId = request.SteamId,
+            BindingTime = binding.BindingTime ?? DateTime.UtcNow
+        };
+    }
+
+    /// <summary>
+    /// 绑定Xbox平台
+    /// </summary>
+    private async Task<PlatformBindResponseDto?> BindXboxPlatform(int userId, PlatformBindRequestDto request)
+    {
+        // 验证必需参数
+        if (string.IsNullOrEmpty(request.XboxUserId))
+        {
+            throw new ArgumentException("Xbox绑定需要提供XboxUserId");
+        }
+
+        // 先创建或更新PlayerPlatform记录（外键约束要求）
+        var playerPlatform = await _dbContext.PlayerPlatforms
+            .FirstOrDefaultAsync(pp => pp.PlatformUserId == request.XboxUserId && pp.PlatformId == 7);
+
+        if (playerPlatform == null)
+        {
+            // 尝试获取Xbox用户信息（如果有令牌）
+            string? profileName = request.XboxUserId;
+            string? profileUrl = null;
+            
+            if (!string.IsNullOrEmpty(request.AccessToken))
+            {
+                try
+                {
+                    var xboxUser = await _xboxService.GetXboxUser(request.XboxUserId, userId);
+                    if (xboxUser != null)
+                    {
+                        profileName = xboxUser.Gamertag ?? request.XboxUserId;
+                        profileUrl = xboxUser.ProfileUrl;
+                    }
+                }
+                catch
+                {
+                    // 如果获取失败，使用默认值
+                }
+            }
+
+            playerPlatform = new PlayerPlatform
+            {
+                PlatformUserId = request.XboxUserId,
+                PlatformId = 7, // Xbox
+                ProfileName = profileName ?? request.XboxUserId,
+                ProfileUrl = profileUrl
+            };
+            _dbContext.PlayerPlatforms.Add(playerPlatform);
+        }
+        await _dbContext.SaveChangesAsync();
+
+        // 如果提供了令牌，加密存储
+        string? encryptedAccessToken = null;
+        string? encryptedRefreshToken = null;
+
+        if (!string.IsNullOrEmpty(request.AccessToken))
+        {
+            encryptedAccessToken = _encryptionService.EncryptToken(request.AccessToken);
+        }
+        if (!string.IsNullOrEmpty(request.RefreshToken))
+        {
+            encryptedRefreshToken = _encryptionService.EncryptToken(request.RefreshToken);
+        }
+
+        // 创建绑定记录
+        var binding = new UserPlatformBinding
+        {
+            UserId = userId,
+            PlatformId = 7, // Xbox
+            PlatformUserId = request.XboxUserId,
+            AccessToken = encryptedAccessToken,
+            RefreshToken = encryptedRefreshToken,
+            BindingStatus = true,
+            BindingTime = DateTime.UtcNow,
+            ExpireTime = DateTime.UtcNow.AddDays(30) // 令牌通常30天过期
+        };
+
+        _dbContext.UserPlatformBindings.Add(binding);
+        await _dbContext.SaveChangesAsync();
+
+        return new PlatformBindResponseDto
+        {
+            BindingId = binding.BindingId,
+            PlatformName = "Xbox",
+            PlatformUserId = request.XboxUserId,
+            BindingTime = binding.BindingTime ?? DateTime.UtcNow
+        };
+    }
+
+    /// <summary>
+    /// 绑定PSN平台
+    /// </summary>
+    private async Task<PlatformBindResponseDto?> BindPsnPlatform(int userId, PlatformBindRequestDto request)
+    {
+        // 验证必需参数
+        if (string.IsNullOrEmpty(request.PsnOnlineId))
+        {
+            throw new ArgumentException("PSN绑定需要提供PsnOnlineId");
+        }
+
+        // 先创建或更新PlayerPlatform记录（外键约束要求）
+        var playerPlatform = await _dbContext.PlayerPlatforms
+            .FirstOrDefaultAsync(pp => pp.PlatformUserId == request.PsnOnlineId && pp.PlatformId == 6);
+
+        if (playerPlatform == null)
+        {
+            // 尝试获取PSN用户信息（如果有令牌）
+            string? profileName = request.PsnOnlineId;
+            string? profileUrl = null;
+            
+            if (!string.IsNullOrEmpty(request.AccessToken))
+            {
+                try
+                {
+                    var psnUser = await _psnService.GetPsnUser(request.PsnOnlineId, userId);
+                    if (psnUser != null)
+                    {
+                        profileName = psnUser.OnlineId ?? request.PsnOnlineId;
+                        profileUrl = psnUser.ProfileUrl;
+                    }
+                }
+                catch
+                {
+                    // 如果获取失败，使用默认值
+                }
+            }
+
+            playerPlatform = new PlayerPlatform
+            {
+                PlatformUserId = request.PsnOnlineId,
+                PlatformId = 6, // PSN
+                ProfileName = profileName ?? request.PsnOnlineId,
+                ProfileUrl = profileUrl
+            };
+            _dbContext.PlayerPlatforms.Add(playerPlatform);
+        }
+        await _dbContext.SaveChangesAsync();
+
+        // 如果提供了令牌，加密存储
+        string? encryptedAccessToken = null;
+        string? encryptedRefreshToken = null;
+
+        if (!string.IsNullOrEmpty(request.AccessToken))
+        {
+            encryptedAccessToken = _encryptionService.EncryptToken(request.AccessToken);
+        }
+        if (!string.IsNullOrEmpty(request.RefreshToken))
+        {
+            encryptedRefreshToken = _encryptionService.EncryptToken(request.RefreshToken);
+        }
+
+        // 创建绑定记录
+        var binding = new UserPlatformBinding
+        {
+            UserId = userId,
+            PlatformId = 6, // PSN
+            PlatformUserId = request.PsnOnlineId,
+            AccessToken = encryptedAccessToken,
+            RefreshToken = encryptedRefreshToken,
+            BindingStatus = true,
+            BindingTime = DateTime.UtcNow,
+            ExpireTime = DateTime.UtcNow.AddDays(30)
+        };
+
+        _dbContext.UserPlatformBindings.Add(binding);
+        await _dbContext.SaveChangesAsync();
+
+        return new PlatformBindResponseDto
+        {
+            BindingId = binding.BindingId,
+            PlatformName = "PSN",
+            PlatformUserId = request.PsnOnlineId,
+            BindingTime = binding.BindingTime ?? DateTime.UtcNow
+        };
+    }
+
+    /// <summary>
+    /// 绑定GOG平台
+    /// </summary>
+    private async Task<PlatformBindResponseDto?> BindGogPlatform(int userId, PlatformBindRequestDto request)
+    {
+        // 验证必需参数
+        if (string.IsNullOrEmpty(request.GogUserId))
+        {
+            throw new ArgumentException("GOG绑定需要提供GogUserId");
+        }
+
+        // 先创建或更新PlayerPlatform记录（外键约束要求）
+        var playerPlatform = await _dbContext.PlayerPlatforms
+            .FirstOrDefaultAsync(pp => pp.PlatformUserId == request.GogUserId && pp.PlatformId == 5);
+
+        if (playerPlatform == null)
+        {
+            // 尝试获取GOG用户信息（如果有令牌）
+            string? profileName = request.GogUserId;
+            string? profileUrl = null;
+            
+            if (!string.IsNullOrEmpty(request.AccessToken))
+            {
+                try
+                {
+                    var gogUser = await _gogService.GetGogUser(request.GogUserId, userId);
+                    if (gogUser != null)
+                    {
+                        profileName = gogUser.Username ?? request.GogUserId;
+                        profileUrl = gogUser.ProfileUrl;
+                    }
+                }
+                catch
+                {
+                    // 如果获取失败，使用默认值
+                }
+            }
+
+            playerPlatform = new PlayerPlatform
+            {
+                PlatformUserId = request.GogUserId,
+                PlatformId = 5, // GOG
+                ProfileName = profileName ?? request.GogUserId,
+                ProfileUrl = profileUrl
+            };
+            _dbContext.PlayerPlatforms.Add(playerPlatform);
+        }
+        await _dbContext.SaveChangesAsync();
+
+        // 如果提供了令牌，加密存储
+        string? encryptedAccessToken = null;
+        string? encryptedRefreshToken = null;
+
+        if (!string.IsNullOrEmpty(request.AccessToken))
+        {
+            encryptedAccessToken = _encryptionService.EncryptToken(request.AccessToken);
+        }
+        if (!string.IsNullOrEmpty(request.RefreshToken))
+        {
+            encryptedRefreshToken = _encryptionService.EncryptToken(request.RefreshToken);
+        }
+
+        // 创建绑定记录
+        var binding = new UserPlatformBinding
+        {
+            UserId = userId,
+            PlatformId = 5, // GOG
+            PlatformUserId = request.GogUserId,
+            AccessToken = encryptedAccessToken,
+            RefreshToken = encryptedRefreshToken,
+            BindingStatus = true,
+            BindingTime = DateTime.UtcNow,
+            ExpireTime = DateTime.UtcNow.AddDays(30)
+        };
+
+        _dbContext.UserPlatformBindings.Add(binding);
+        await _dbContext.SaveChangesAsync();
+
+        return new PlatformBindResponseDto
+        {
+            BindingId = binding.BindingId,
+            PlatformName = "GOG",
+            PlatformUserId = request.GogUserId,
+            BindingTime = binding.BindingTime ?? DateTime.UtcNow
+        };
     }
 
     /// <summary>
@@ -240,19 +616,6 @@ public class PlatformsController : ControllerBase
             _logger.LogError(ex, "Error unbinding platform");
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
-    }
-
-    private string GenerateOAuthUrl(string platform, string state)
-    {
-        return platform.ToLower() switch
-        {
-            "steam" => $"https://steamcommunity.com/openid/login?openid.ns=http://specs.openid.net/auth/2.0&openid.mode=checkid_setup&openid.return_to=http://localhost:5000/api/v1/platforms/oauth/steam/callback&openid.realm=http://localhost:5000&openid.identity=http://specs.openid.net/auth/2.0/identifier_select&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select&state={state}",
-            "epic" => $"https://www.epicgames.com/id/oauth/authorize?client_id=test&response_type=code&scope=openid&redirect_uri=http://localhost:5000/api/v1/platforms/oauth/epic/callback&state={state}",
-            "origin" => $"https://accounts.ea.com/connect/authorize?client_id=test&response_type=code&redirect_uri=http://localhost:5000/api/v1/platforms/oauth/origin/callback&state={state}",
-            "uplay" => $"https://uplay.ubisoft.com/en-US/oauth/authorize?client_id=test&response_type=code&redirect_uri=http://localhost:5000/api/v1/platforms/oauth/uplay/callback&state={state}",
-            "gog" => $"https://auth.gog.com/auth?client_id=test&response_type=code&redirect_uri=http://localhost:5000/api/v1/platforms/oauth/gog/callback&state={state}",
-            _ => string.Empty
-        };
     }
 }
 

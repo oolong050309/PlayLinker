@@ -12,7 +12,6 @@ public class SteamService : ISteamService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SteamService> _logger;
-    private readonly string _apiKey;
     private readonly string _baseUrl;
 
     public SteamService(HttpClient httpClient, IConfiguration configuration, ILogger<SteamService> logger)
@@ -20,7 +19,6 @@ public class SteamService : ISteamService
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
-        _apiKey = configuration["SteamAPI:ApiKey"] ?? "YOUR_STEAM_API_KEY_HERE";
         _baseUrl = configuration["SteamAPI:BaseUrl"] ?? "https://api.steampowered.com";
     }
 
@@ -87,7 +85,7 @@ public class SteamService : ISteamService
     /// <summary>
     /// 导入Steam数据
     /// </summary>
-    public async Task<SteamImportResponseDto> ImportSteamData(SteamImportRequestDto request)
+    public async Task<SteamImportResponseDto> ImportSteamData(SteamImportRequestDto request, string apiKey)
     {
         try
         {
@@ -105,7 +103,7 @@ public class SteamService : ISteamService
             {
                 try
                 {
-                    var gamesUrl = $"{_baseUrl}/IPlayerService/GetOwnedGames/v1/?key={_apiKey}&steamid={request.SteamId}&include_appinfo=true&include_played_free_games=true";
+                    var gamesUrl = $"{_baseUrl}/IPlayerService/GetOwnedGames/v1/?key={apiKey}&steamid={request.SteamId}&include_appinfo=true&include_played_free_games=true";
                     var gamesResponse = await _httpClient.GetAsync(gamesUrl);
                     
                     if (gamesResponse.IsSuccessStatusCode)
@@ -134,7 +132,7 @@ public class SteamService : ISteamService
                 try
                 {
                     // 获取前几个游戏的成就信息来估算总数
-                    var gamesUrl = $"{_baseUrl}/IPlayerService/GetOwnedGames/v1/?key={_apiKey}&steamid={request.SteamId}&include_appinfo=false";
+                    var gamesUrl = $"{_baseUrl}/IPlayerService/GetOwnedGames/v1/?key={apiKey}&steamid={request.SteamId}&include_appinfo=false";
                     var gamesResponse = await _httpClient.GetAsync(gamesUrl);
                     
                     if (gamesResponse.IsSuccessStatusCode)
@@ -159,7 +157,7 @@ public class SteamService : ISteamService
                                         var appId = SafeGetInt32(appIdElement);
                                         try
                                         {
-                                            var schemaUrl = $"{_baseUrl}/ISteamUserStats/GetSchemaForGame/v2/?key={_apiKey}&appid={appId}";
+                                            var schemaUrl = $"{_baseUrl}/ISteamUserStats/GetSchemaForGame/v2/?key={apiKey}&appid={appId}";
                                             var schemaResponse = await _httpClient.GetAsync(schemaUrl);
                                             
                                             if (schemaResponse.IsSuccessStatusCode)
@@ -205,7 +203,7 @@ public class SteamService : ISteamService
             {
                 try
                 {
-                    var friendsUrl = $"{_baseUrl}/ISteamUser/GetFriendList/v1/?key={_apiKey}&steamid={request.SteamId}&relationship=friend";
+                    var friendsUrl = $"{_baseUrl}/ISteamUser/GetFriendList/v1/?key={apiKey}&steamid={request.SteamId}&relationship=friend";
                     var friendsResponse = await _httpClient.GetAsync(friendsUrl);
                     
                     if (friendsResponse.IsSuccessStatusCode)
@@ -253,14 +251,14 @@ public class SteamService : ISteamService
     /// <summary>
     /// 获取Steam用户信息
     /// </summary>
-    public async Task<SteamUserDto?> GetSteamUser(string steamId)
+    public async Task<SteamUserDto?> GetSteamUser(string steamId, string apiKey)
     {
         try
         {
             _logger.LogInformation("获取Steam用户信息: steamId={SteamId}", steamId);
 
             // 调用Steam API: ISteamUser/GetPlayerSummaries
-            var summariesUrl = $"{_baseUrl}/ISteamUser/GetPlayerSummaries/v2/?key={_apiKey}&steamids={steamId}";
+            var summariesUrl = $"{_baseUrl}/ISteamUser/GetPlayerSummaries/v2/?key={apiKey}&steamids={steamId}";
             var summariesResponse = await _httpClient.GetAsync(summariesUrl);
 
             if (!summariesResponse.IsSuccessStatusCode)
@@ -291,7 +289,7 @@ public class SteamService : ISteamService
             int level = 0;
             try
             {
-                var levelUrl = $"{_baseUrl}/IPlayerService/GetSteamLevel/v1/?key={_apiKey}&steamid={steamId}";
+                var levelUrl = $"{_baseUrl}/IPlayerService/GetSteamLevel/v1/?key={apiKey}&steamid={steamId}";
                 var levelResponse = await _httpClient.GetAsync(levelUrl);
                 
                 if (levelResponse.IsSuccessStatusCode)
@@ -317,7 +315,7 @@ public class SteamService : ISteamService
             int gamesOwned = 0;
             try
             {
-                var gamesUrl = $"{_baseUrl}/IPlayerService/GetOwnedGames/v1/?key={_apiKey}&steamid={steamId}&include_appinfo=false";
+                var gamesUrl = $"{_baseUrl}/IPlayerService/GetOwnedGames/v1/?key={apiKey}&steamid={steamId}&include_appinfo=false";
                 var gamesResponse = await _httpClient.GetAsync(gamesUrl);
                 
                 if (gamesResponse.IsSuccessStatusCode)
@@ -343,7 +341,7 @@ public class SteamService : ISteamService
             int badges = 0;
             try
             {
-                var badgesUrl = $"{_baseUrl}/IPlayerService/GetBadges/v1/?key={_apiKey}&steamid={steamId}";
+                var badgesUrl = $"{_baseUrl}/IPlayerService/GetBadges/v1/?key={apiKey}&steamid={steamId}";
                 var badgesResponse = await _httpClient.GetAsync(badgesUrl);
                 
                 if (badgesResponse.IsSuccessStatusCode)
@@ -393,7 +391,7 @@ public class SteamService : ISteamService
     /// <summary>
     /// 获取Steam游戏信息
     /// </summary>
-    public async Task<SteamGameDto?> GetSteamGame(int appId)
+    public async Task<SteamGameDto?> GetSteamGame(int appId, string apiKey)
     {
         try
         {
@@ -569,11 +567,11 @@ public class SteamService : ISteamService
     /// <summary>
     /// 获取最受欢迎的游戏
     /// </summary>
-    public async Task<object?> GetMostPlayedGames(int count = 50)
+    public async Task<object?> GetMostPlayedGames(int count, string apiKey)
     {
         try
         {
-            var url = $"{_baseUrl}/ISteamChartsService/GetMostPlayedGames/v1/?key={_apiKey}&count={count}";
+            var url = $"{_baseUrl}/ISteamChartsService/GetMostPlayedGames/v1/?key={apiKey}&count={count}";
             var response = await _httpClient.GetAsync(url);
 
             if (response.IsSuccessStatusCode)
@@ -619,11 +617,11 @@ public class SteamService : ISteamService
     /// <summary>
     /// 获取游戏成就信息
     /// </summary>
-    public async Task<object?> GetGameAchievements(int appId)
+    public async Task<object?> GetGameAchievements(int appId, string apiKey)
     {
         try
         {
-            var url = $"{_baseUrl}/ISteamUserStats/GetSchemaForGame/v2/?key={_apiKey}&appid={appId}&l=schinese";
+            var url = $"{_baseUrl}/ISteamUserStats/GetSchemaForGame/v2/?key={apiKey}&appid={appId}&l=schinese";
             var response = await _httpClient.GetAsync(url);
 
             if (response.IsSuccessStatusCode)
@@ -644,11 +642,11 @@ public class SteamService : ISteamService
     /// <summary>
     /// 获取游戏新闻
     /// </summary>
-    public async Task<object?> GetGameNews(int appId, int count = 20)
+    public async Task<object?> GetGameNews(int appId, int count, string apiKey)
     {
         try
         {
-            var url = $"{_baseUrl}/ISteamNews/GetNewsForApp/v2/?key={_apiKey}&appid={appId}&count={count}&maxlength=300";
+            var url = $"{_baseUrl}/ISteamNews/GetNewsForApp/v2/?key={apiKey}&appid={appId}&count={count}&maxlength=300";
             var response = await _httpClient.GetAsync(url);
 
             if (response.IsSuccessStatusCode)
