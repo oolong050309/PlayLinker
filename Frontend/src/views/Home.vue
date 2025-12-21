@@ -1,95 +1,145 @@
 <template>
-  <div id="app">
-    <header class="header">
-      <div class="container">
-        <nav class="nav">
-          <div class="logo">
-            <h1>PlayLinker</h1>
-            <p>统一游戏管理平台</p>
-          </div>
-          <ul class="nav-menu">
-            <li><router-link to="/app/list">游戏列表</router-link></li>
-            <li><router-link to="/app/ranking">排行榜</router-link></li>
-            <li><router-link to="/app/library">我的游戏库</router-link></li>
-            <li><router-link to="/app/achievements">成就</router-link></li>
-            <li><router-link to="/app/news">新闻</router-link></li>
-          </ul>
-        </nav>
-      </div>
-    </header>
+  <div class="app-layout">
+    <Sidebar 
+      :collapsed="sidebarCollapsed" 
+      :mobile-open="mobileMenuOpen"
+      @update:collapsed="sidebarCollapsed = $event"
+      @close-mobile="mobileMenuOpen = false"
+    />
+    
+    <div class="main-content" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+      <!-- 移动端菜单按钮 -->
+      <button 
+        v-if="isMobile" 
+        class="mobile-menu-btn"
+        @click="mobileMenuOpen = true"
+        aria-label="打开菜单"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12h18M3 6h18M3 18h18"/>
+        </svg>
+      </button>
 
-    <main>
-      <router-view />
-    </main>
-
-    <footer class="footer">
-      <div class="container">
-        <p>&copy; 2024 PlayLinker. All rights reserved.</p>
+      <div class="content-wrapper">
+        <router-view />
       </div>
-    </footer>
+    </div>
+
+    <!-- 移动端遮罩层 -->
+    <div 
+      v-if="mobileMenuOpen" 
+      class="mobile-overlay"
+      @click="mobileMenuOpen = false"
+    ></div>
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
+import Sidebar from '@/components/common/Sidebar.vue'
+
+const sidebarCollapsed = ref(false)
+const mobileMenuOpen = ref(false)
+const isMobile = ref(false)
+
+const checkMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+  if (!isMobile.value) {
+    mobileMenuOpen.value = false
+  }
+}
+
+onMounted(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
+})
 </script>
 
 <style scoped>
-.header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 20px 0;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--bg-primary);
 }
 
-.nav {
-  display: flex;
-  justify-content: space-between;
+.main-content {
+  margin-left: 260px;
+  flex: 1;
+  transition: margin-left 0.3s ease;
+  min-height: 100vh;
+  position: relative;
+}
+
+.main-content.sidebar-collapsed {
+  margin-left: 80px;
+}
+
+.mobile-menu-btn {
+  position: fixed;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  z-index: 998;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+  display: none;
   align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-md);
 }
 
-.logo h1 {
-  margin: 0;
-  font-size: 28px;
+.mobile-menu-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-color-strong);
 }
 
-.logo p {
-  margin: 0;
-  font-size: 14px;
-  opacity: 0.9;
+.content-wrapper {
+  padding: var(--spacing-lg);
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.nav-menu {
-  display: flex;
-  list-style: none;
-  gap: 30px;
+.mobile-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: none;
 }
 
-.nav-menu a {
-  color: white;
-  text-decoration: none;
-  font-size: 16px;
-  transition: opacity 0.3s;
-}
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+  }
 
-.nav-menu a:hover {
-  opacity: 0.8;
-}
+  .main-content.sidebar-collapsed {
+    margin-left: 0;
+  }
 
-.nav-menu a.router-link-active {
-  font-weight: bold;
-  border-bottom: 2px solid white;
-}
+  .mobile-menu-btn {
+    display: flex;
+  }
 
-main {
-  min-height: calc(100vh - 200px);
-}
+  .mobile-overlay {
+    display: block;
+  }
 
-.footer {
-  background-color: #2c3e50;
-  color: white;
-  text-align: center;
-  padding: 20px 0;
-  margin-top: 40px;
+  .content-wrapper {
+    padding: var(--spacing-md);
+    padding-top: calc(var(--spacing-md) + 50px);
+  }
 }
 </style>
 

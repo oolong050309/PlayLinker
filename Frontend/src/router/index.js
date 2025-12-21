@@ -5,6 +5,7 @@ import authRoutes from './modules/auth'
 import platformRoutes from './modules/platform'
 import notificationRoutes from './modules/notification'
 import parentalRoutes from './modules/parental'
+import settingRoutes from './modules/setting'
 import gameRoutes from './modules/game'
 import libraryRoutes from './modules/library'
 import localManageRoutes from './modules/localManage'
@@ -91,13 +92,30 @@ const routes = [
           title: '新闻',
           requiresAuth: true
         }
-      }
+      },
+      ...platformRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...notificationRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...settingRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...parentalRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      }))
     ]
   },
   ...authRoutes,
-  ...platformRoutes,
-  ...notificationRoutes,
-  ...parentalRoutes,
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',

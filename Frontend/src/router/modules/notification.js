@@ -2,9 +2,9 @@ export default [
   {
     path: '/notifications',
     name: 'Notifications',
-    component: () => import('@/views/ComingSoon.vue'),
+    component: () => import('@/views/Notifications/NotificationsView.vue'),
     meta: {
-      title: '通知中心',
+      title: '消息中心',
       requiresAuth: true
     }
   }
