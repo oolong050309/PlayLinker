@@ -2,7 +2,7 @@ export default [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/Login.vue'),
+    component: () => import('@/views/Auth/Login.vue'),
     meta: {
       title: '登录'
     }
@@ -10,7 +10,7 @@ export default [
   {
     path: '/register',
     name: 'Register',
-    component: () => import('@/views/Register.vue'),
+    component: () => import('@/views/Auth/Register.vue'),
     meta: {
       title: '注册'
     }
@@ -18,7 +18,7 @@ export default [
   {
     path: '/forgot-password',
     name: 'ForgotPassword',
-    component: () => import('@/views/ForgotPassword.vue'),
+    component: () => import('@/views/Auth/ForgotPassword.vue'),
     meta: {
       title: '忘记密码'
     }
