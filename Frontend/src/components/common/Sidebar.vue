@@ -98,13 +98,14 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Gamepad2, Compass, List, Trophy, Library, BarChart2, Newspaper,
   ChevronLeft, ChevronRight, Settings, Bell, Link, LogOut, Shield
 } from 'lucide-vue-next'
 import { authApi } from '@/api/auth'
+import { usersApi } from '@/api/users'
 
 const props = defineProps({
   collapsed: { type: Boolean, default: false },
@@ -120,18 +121,72 @@ const isCollapsed = ref(props.collapsed)
 const defaultAvatar = 'https://picsum.photos/200/200?random=1'
 const isLoggingOut = ref(false)
 
+// 使用 ref 存储用户信息，以便响应式更新
+const userInfo = ref(null)
+
 // 从 sessionStorage 读取用户信息
-const currentUser = computed(() => {
+const loadUserInfo = () => {
   try {
     const userStr = sessionStorage.getItem('user')
     if (userStr) {
-      return JSON.parse(userStr)
+      userInfo.value = JSON.parse(userStr)
+    } else {
+      userInfo.value = null
     }
   } catch (e) {
     console.warn('解析用户信息失败:', e)
+    userInfo.value = null
   }
-  return null
-})
+}
+
+// 监听 sessionStorage 变化（用于跨标签页同步）
+const handleStorageChange = (e) => {
+  if (e.key === 'user' || e.key === null) {
+    loadUserInfo()
+  }
+}
+
+// 监听用户信息更新事件（用于同标签页内同步）
+const handleUserInfoUpdated = (e) => {
+  if (e.detail && e.detail.user) {
+    userInfo.value = e.detail.user
+  } else {
+    // 如果没有传递用户信息，则重新加载
+    loadUserInfo()
+  }
+}
+
+// 主动获取用户信息（如果 sessionStorage 中没有完整信息）
+const fetchUserProfile = async () => {
+  try {
+    const token = sessionStorage.getItem('token')
+    if (!token) return
+
+    const response = await usersApi.getProfile()
+    if (response.success && response.data) {
+      const profile = response.data
+      // 更新 sessionStorage
+      try {
+        const userStr = sessionStorage.getItem('user')
+        const user = userStr ? JSON.parse(userStr) : {}
+        user.username = profile.username
+        user.email = profile.email
+        user.phone = profile.phone
+        user.avatarUrl = profile.avatarUrl
+        user.avatar = profile.avatarUrl // 同时保存 avatar 字段以兼容
+        sessionStorage.setItem('user', JSON.stringify(user))
+        userInfo.value = user
+      } catch (e) {
+        console.warn('更新用户信息失败:', e)
+      }
+    }
+  } catch (error) {
+    // 如果获取失败，使用 sessionStorage 中的数据
+    loadUserInfo()
+  }
+}
+
+const currentUser = computed(() => userInfo.value)
 
 // 计算显示的用户名和头像
 const displayUserName = computed(() => {
@@ -143,7 +198,11 @@ const displayUserAvatar = computed(() => {
   const avatar = props.userAvatar || currentUser.value?.avatarUrl || currentUser.value?.avatar
   if (avatar && typeof avatar === 'string' && avatar.trim() !== '') {
     const trimmedAvatar = avatar.trim()
-    if (trimmedAvatar.startsWith('http://') || trimmedAvatar.startsWith('https://') || trimmedAvatar.startsWith('data:')) {
+    // 验证是否为有效的 URL
+    if (trimmedAvatar.startsWith('http://') || 
+        trimmedAvatar.startsWith('https://') || 
+        trimmedAvatar.startsWith('data:') ||
+        trimmedAvatar.startsWith('/')) {
       return trimmedAvatar
     }
   }
@@ -169,6 +228,38 @@ const extraMenuItems = [
 ]
 
 watch(() => props.collapsed, (newVal) => { isCollapsed.value = newVal }, { immediate: true })
+
+// 组件挂载时加载用户信息
+onMounted(() => {
+  loadUserInfo()
+  // 如果用户信息中没有头像，尝试从 API 获取
+  if (!currentUser.value?.avatarUrl && !currentUser.value?.avatar) {
+    fetchUserProfile()
+  }
+  // 监听 storage 事件（跨标签页同步）
+  window.addEventListener('storage', handleStorageChange)
+  // 监听用户信息更新事件（同标签页内同步）
+  window.addEventListener('userInfoUpdated', handleUserInfoUpdated)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('storage', handleStorageChange)
+  window.removeEventListener('userInfoUpdated', handleUserInfoUpdated)
+})
+
+// 监听路由变化，在登录后刷新用户信息
+watch(() => route.path, (newPath) => {
+  if (newPath.startsWith('/app')) {
+    // 如果当前没有用户信息，尝试加载
+    if (!currentUser.value) {
+      loadUserInfo()
+      // 如果还是没有，尝试从 API 获取
+      if (!currentUser.value) {
+        fetchUserProfile()
+      }
+    }
+  }
+}, { immediate: true })
 
 const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value

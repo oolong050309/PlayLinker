@@ -618,6 +618,11 @@ const loadUserProfile = async () => {
           user.avatar = profile.avatarUrl
           user.avatarUrl = profile.avatarUrl // 同时保存 avatarUrl 字段
           sessionStorage.setItem('user', JSON.stringify(user))
+          
+          // 发送自定义事件通知其他组件更新用户信息
+          window.dispatchEvent(new CustomEvent('userInfoUpdated', { 
+            detail: { user } 
+          }))
         }
       } catch (e) {
         console.warn('更新 sessionStorage 失败:', e)
@@ -691,6 +696,11 @@ const handleAvatarChange = async (event) => {
           user.avatar = avatarUrl
           user.avatarUrl = avatarUrl // 同时保存 avatarUrl 字段
           sessionStorage.setItem('user', JSON.stringify(user))
+          
+          // 发送自定义事件通知其他组件更新用户信息
+          window.dispatchEvent(new CustomEvent('userInfoUpdated', { 
+            detail: { user } 
+          }))
         }
       } catch (e) {
         console.warn('更新 sessionStorage 失败:', e)
@@ -802,8 +812,16 @@ const handleSave = async () => {
           const user = JSON.parse(userStr)
           if (updateData.email) user.email = updateData.email
           if (updateData.phone) user.phone = updateData.phone
-          if (updateData.avatarUrl) user.avatar = updateData.avatarUrl
+          if (updateData.avatarUrl) {
+            user.avatar = updateData.avatarUrl
+            user.avatarUrl = updateData.avatarUrl
+          }
           sessionStorage.setItem('user', JSON.stringify(user))
+          
+          // 发送自定义事件通知其他组件更新用户信息
+          window.dispatchEvent(new CustomEvent('userInfoUpdated', { 
+            detail: { user } 
+          }))
         }
       } catch (e) {
         console.warn('更新 sessionStorage 失败:', e)

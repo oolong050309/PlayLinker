@@ -21,7 +21,7 @@
       </button>
 
       <div class="content-wrapper">
-        <router-view />
+      <router-view />
       </div>
     </div>
 
@@ -126,11 +126,11 @@ onUnmounted(() => {
 
   .main-content.sidebar-collapsed {
     margin-left: 0;
-  }
+}
 
   .mobile-menu-btn {
     display: flex;
-  }
+}
 
   .mobile-overlay {
     display: block;
