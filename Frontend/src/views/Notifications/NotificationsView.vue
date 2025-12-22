@@ -61,8 +61,26 @@
             <span class="notification-time">{{ formatTime(notification.createdAt) }}</span>
           </div>
           <p class="notification-message">{{ notification.message }}</p>
-          <div v-if="notification.action" class="notification-action">
+          <div class="notification-action">
+            <!-- 家长监管邀请：显示“同意 / 拒绝”两个按钮 -->
+            <template v-if="notification.type === 'parental' && notification.action?.kind === 'parental_invite'">
+              <button 
+                class="btn btn-sm btn-primary"
+                @click.stop="handleParentalInvite(notification, true)"
+              >
+                同意
+              </button>
+              <button 
+                class="btn btn-sm btn-secondary"
+                style="margin-left: 8px;"
+                @click.stop="handleParentalInvite(notification, false)"
+              >
+                拒绝
+              </button>
+            </template>
+            <!-- 其他类型通知：保持原来的单按钮行为 -->
             <button 
+              v-else-if="notification.action"
               class="btn btn-sm btn-primary"
               @click.stop="handleAction(notification)"
             >
@@ -99,66 +117,24 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Bell, CheckCircle, AlertCircle, Info, Gift, Trophy } from 'lucide-vue-next'
+import notificationsApi from '@/api/notifications'
+import parentalApi from '@/api/parental'
 
 const router = useRouter()
 
 const activeTab = ref('all')
 const currentPage = ref(1)
 const pageSize = 10
+const loading = ref(false)
+
+const notifications = ref([])
 
 const tabs = computed(() => [
   { key: 'all', label: '全部', count: notifications.value.length },
   { key: 'unread', label: '未读', count: notifications.value.filter(n => !n.read).length },
   { key: 'system', label: '系统', count: notifications.value.filter(n => n.type === 'system').length },
-  { key: 'game', label: '游戏', count: notifications.value.filter(n => n.type === 'game').length }
-])
-
-const notifications = ref([
-  {
-    id: 1,
-    type: 'system',
-    title: '欢迎使用 PlayLinker',
-    message: '感谢您注册 PlayLinker！开始探索您的游戏库吧。',
-    read: false,
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    action: null
-  },
-  {
-    id: 2,
-    type: 'game',
-    title: '新游戏入库',
-    message: '您的 Steam 账号新增了 3 款游戏，已自动同步到游戏库。',
-    read: false,
-    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
-    action: { label: '查看游戏库', path: '/app/library' }
-  },
-  {
-    id: 3,
-    type: 'achievement',
-    title: '成就解锁',
-    message: '恭喜！您在《赛博朋克2077》中解锁了新成就「夜之城传奇」。',
-    read: true,
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    action: { label: '查看成就', path: '/app/achievements' }
-  },
-  {
-    id: 4,
-    type: 'system',
-    title: '平台同步完成',
-    message: 'Steam 平台数据同步已完成，共同步 156 款游戏。',
-    read: true,
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-    action: null
-  },
-  {
-    id: 5,
-    type: 'game',
-    title: '游戏更新提醒',
-    message: '《艾尔登法环》有新版本更新可用，立即更新以获得最佳游戏体验。',
-    read: false,
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    action: { label: '查看详情', path: '/app/list' }
-  }
+  { key: 'game', label: '游戏', count: notifications.value.filter(n => n.type === 'game').length },
+  { key: 'parental', label: '家长监管', count: notifications.value.filter(n => n.type === 'parental').length }
 ])
 
 const filteredNotifications = computed(() => {
@@ -170,6 +146,8 @@ const filteredNotifications = computed(() => {
     filtered = filtered.filter(n => n.type === 'system')
   } else if (activeTab.value === 'game') {
     filtered = filtered.filter(n => n.type === 'game' || n.type === 'achievement')
+  } else if (activeTab.value === 'parental') {
+    filtered = filtered.filter(n => n.type === 'parental')
   }
 
   const start = (currentPage.value - 1) * pageSize
@@ -185,6 +163,8 @@ const totalPages = computed(() => {
     filtered = filtered.filter(n => n.type === 'system')
   } else if (activeTab.value === 'game') {
     filtered = filtered.filter(n => n.type === 'game' || n.type === 'achievement')
+  } else if (activeTab.value === 'parental') {
+    filtered = filtered.filter(n => n.type === 'parental')
   }
   return Math.ceil(filtered.length / pageSize)
 })
@@ -194,6 +174,7 @@ const getIcon = (type) => {
     system: Info,
     game: Gift,
     achievement: Trophy,
+    parental: AlertCircle,
     warning: AlertCircle,
     success: CheckCircle
   }
@@ -214,35 +195,144 @@ const formatTime = (date) => {
   return date.toLocaleDateString('zh-CN')
 }
 
-const handleNotificationClick = (notification) => {
-  if (!notification.read) {
-    notification.read = true
-    // TODO: 调用 API 标记为已读
+// 从后端加载通知
+const loadNotifications = async () => {
+  loading.value = true
+  try {
+    const res = await notificationsApi.getNotifications({ page: 1, pageSize: 50 })
+    if (res.success && res.data) {
+      const data = res.data || {}
+      // 兼容后端 PascalCase / camelCase 命名
+      const items = data.items || data.Items || []
+      notifications.value = items.map(n => {
+        const source = n.sourceModule || n.SourceModule || 'system'
+        let type = 'system'
+        if (source === 'parental_control') {
+          type = 'parental'
+        }
+
+        const rawTitle = n.title || n.Title || ''
+        const rawContent = n.content || n.Content || ''
+        const rawId = n.notificationId || n.NotificationId
+        const rawIsRead = (typeof n.isRead === 'boolean') ? n.isRead : !!n.IsRead
+        const rawCreatedAt = n.createdAt || n.CreatedAt
+
+        let message = rawContent || ''
+        let action = null
+
+        if (source === 'parental_control') {
+          try {
+            const payload = JSON.parse(rawContent || '{}')
+            const parentName = payload.parentUsername || payload.ParentUsername || '家长'
+            const extra = (payload.message || payload.Message) ? `：${payload.message || payload.Message}` : ''
+            const token = payload.token || payload.Token
+
+            message = `${parentName} 想要对你的账号开启家长监管${extra}`
+            // 创建 parental_invite 动作
+            action = {
+              label: '处理邀请',
+              kind: 'parental_invite',
+              token,
+              parentUsername: parentName
+            }
+          } catch (e) {
+            // 内容不是 JSON 时，直接使用原始文本，不创建邀请动作
+          }
+        }
+
+        return {
+          id: rawId,
+          rawId: rawId,
+          type,
+          title: rawTitle,
+          message,
+          read: rawIsRead,
+          createdAt: rawCreatedAt ? new Date(rawCreatedAt) : new Date(),
+          action
+        }
+      })
+    }
+  } catch (error) {
+    console.error('加载通知失败:', error)
+    alert('加载通知失败: ' + (error.message || '未知错误'))
+  } finally {
+    loading.value = false
   }
 }
 
-const handleAction = (notification) => {
+const handleNotificationClick = async (notification) => {
+  if (!notification.read) {
+    notification.read = true
+    try {
+      await notificationsApi.markAsRead(notification.rawId || notification.id)
+    } catch (error) {
+      console.error('标记通知已读失败:', error)
+    }
+  }
+}
+
+const handleParentalInvite = async (notification, accept) => {
+  const token = notification.action?.token
+  if (!token) {
+    alert('邀请信息缺失，无法处理')
+    return
+  }
+
+  try {
+    await parentalApi.respondInvitation({ token, accept })
+    // 标记这条通知为已读
+    notification.read = true
+    try {
+      await notificationsApi.markAsRead(notification.rawId || notification.id)
+    } catch (e) {
+      console.error('标记家长邀请通知已读失败:', e)
+    }
+    alert(accept ? '已同意家长监管邀请' : '已拒绝家长监管邀请')
+    await loadNotifications()
+  } catch (error) {
+    console.error('处理家长邀请失败:', error)
+    alert('处理家长邀请失败: ' + (error.message || '未知错误'))
+  }
+}
+
+const handleAction = async (notification) => {
+  // 其他类型的动作：跳转路由
   if (notification.action?.path) {
     router.push(notification.action.path)
   }
 }
 
-const markAllAsRead = () => {
+const markAllAsRead = async () => {
+  if (notifications.value.length === 0) return
   notifications.value.forEach(n => {
     n.read = true
   })
-  // TODO: 调用 API 标记全部为已读
+  try {
+    await Promise.all(
+      notifications.value.map(n => notificationsApi.markAsRead(n.rawId || n.id).catch(() => null))
+    )
+  } catch (error) {
+    console.error('批量标记已读失败:', error)
+  }
 }
 
-const clearAll = () => {
-  if (confirm('确定要清空所有消息吗？')) {
-    notifications.value = []
-    // TODO: 调用 API 清空消息
+const clearAll = async () => {
+  if (notifications.value.length === 0) return
+  if (!confirm('确定要清空所有消息吗？')) return
+
+  const current = [...notifications.value]
+  notifications.value = []
+  try {
+    await Promise.all(
+      current.map(n => notificationsApi.delete(n.rawId || n.id).catch(() => null))
+    )
+  } catch (error) {
+    console.error('清空消息失败:', error)
   }
 }
 
 onMounted(() => {
-  // TODO: 从 API 加载消息
+  loadNotifications()
 })
 </script>
 

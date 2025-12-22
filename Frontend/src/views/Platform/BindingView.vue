@@ -105,8 +105,8 @@
               </div>
             </div>
           </div>
-        </div>
-      </div>
+            </div>
+          </div>
 
       <!-- 可用平台 -->
       <div class="section" v-if="availablePlatforms.length > 0">
@@ -139,7 +139,7 @@
                 :disabled="loading"
               >
                 <Link class="icon" size="16" /> 连接账号
-              </button>
+                </button>
             </div>
           </div>
         </div>
@@ -148,68 +148,68 @@
       <!-- 同步设置 -->
       <div class="section">
         <div class="settings-card">
-          <h2 class="section-title">
+        <h2 class="section-title">
             <Settings class="icon" size="20" />
             同步设置
-          </h2>
+        </h2>
           <div class="settings-list">
             <div class="setting-item">
               <div class="setting-info">
                 <h3>自动同步游戏库</h3>
                 <p>每小时自动同步你的游戏库</p>
-              </div>
+                </div>
               <div 
                 class="toggle-switch" 
                 :class="{ active: syncSettings.autoSync }"
                 @click="toggleSwitch('autoSync')"
               >
                 <span class="toggle-thumb"></span>
+                </div>
               </div>
-            </div>
             
             <div class="setting-item">
               <div class="setting-info">
                 <h3>同步成就</h3>
                 <p>从已连接平台导入成就和奖杯</p>
-              </div>
+            </div>
               <div 
                 class="toggle-switch" 
                 :class="{ active: syncSettings.achievements }"
                 @click="toggleSwitch('achievements')"
               >
                 <span class="toggle-thumb"></span>
-              </div>
             </div>
-            
+          </div>
+
             <div class="setting-item">
               <div class="setting-info">
                 <h3>同步游玩时长</h3>
                 <p>追踪并汇总所有平台的游玩时长</p>
-              </div>
+                </div>
               <div 
                 class="toggle-switch" 
                 :class="{ active: syncSettings.playtime }"
                 @click="toggleSwitch('playtime')"
               >
                 <span class="toggle-thumb"></span>
+                </div>
               </div>
-            </div>
             
             <div class="setting-item">
               <div class="setting-info">
                 <h3>同步通知</h3>
                 <p>同步完成或失败时收到通知</p>
-              </div>
+            </div>
               <div 
                 class="toggle-switch" 
                 :class="{ active: syncSettings.notify }"
                 @click="toggleSwitch('notify')"
               >
                 <span class="toggle-thumb"></span>
-              </div>
+            </div>
             </div>
           </div>
-          
+
           <div class="settings-actions">
             <button 
               class="btn btn-primary"
@@ -221,9 +221,9 @@
             <button class="btn btn-tertiary">
               查看同步历史
             </button>
-          </div>
-        </div>
-      </div>
+                </div>
+                </div>
+              </div>
     </main>
 
     <!-- 绑定模态框 -->
@@ -233,8 +233,8 @@
           <h3 class="modal-title">绑定{{ selectedPlatform?.name }}</h3>
           <button class="modal-close" @click="closeBindModal">
             <X size="20" />
-          </button>
-        </div>
+              </button>
+            </div>
         <div class="modal-body">
           <div v-if="selectedPlatform?.id === 1" class="form-group">
             <label>Steam ID *</label>
@@ -256,7 +256,7 @@
             />
             <p class="form-hint">在 <a href="https://steamcommunity.com/dev/apikey" target="_blank">Steam API Key页面</a> 申请</p>
           </div>
-          
+
           <div v-if="selectedPlatform?.id === 7" class="form-group">
             <label>Xbox用户ID *</label>
             <input 
@@ -265,7 +265,7 @@
               class="form-input"
               placeholder="请输入Xbox用户ID"
             />
-          </div>
+                </div>
           <div v-if="selectedPlatform?.id === 7" class="form-group">
             <label>访问令牌（可选）</label>
             <input 
@@ -274,7 +274,7 @@
               class="form-input"
               placeholder="请输入访问令牌"
             />
-          </div>
+                </div>
           <div v-if="selectedPlatform?.id === 7" class="form-group">
             <label>刷新令牌（可选）</label>
             <input 
@@ -283,7 +283,7 @@
               class="form-input"
               placeholder="请输入刷新令牌"
             />
-          </div>
+              </div>
 
           <div v-if="selectedPlatform?.id === 6" class="form-group">
             <label>PSN在线ID *</label>
@@ -293,7 +293,7 @@
               class="form-input"
               placeholder="请输入PSN在线ID"
             />
-          </div>
+            </div>
           <div v-if="selectedPlatform?.id === 6" class="form-group">
             <label>访问令牌（可选）</label>
             <input 
@@ -302,7 +302,7 @@
               class="form-input"
               placeholder="请输入访问令牌"
             />
-          </div>
+            </div>
           <div v-if="selectedPlatform?.id === 6" class="form-group">
             <label>刷新令牌（可选）</label>
             <input 
@@ -311,7 +311,7 @@
               class="form-input"
               placeholder="请输入刷新令牌"
             />
-          </div>
+      </div>
 
           <div v-if="selectedPlatform?.id === 5" class="form-group">
             <label>GOG用户ID *</label>
@@ -321,7 +321,7 @@
               class="form-input"
               placeholder="请输入GOG用户ID"
             />
-          </div>
+              </div>
           <div v-if="selectedPlatform?.id === 5" class="form-group">
             <label>访问令牌（可选）</label>
             <input 
@@ -330,7 +330,7 @@
               class="form-input"
               placeholder="请输入访问令牌"
             />
-          </div>
+            </div>
           <div v-if="selectedPlatform?.id === 5" class="form-group">
             <label>刷新令牌（可选）</label>
             <input 
@@ -339,8 +339,8 @@
               class="form-input"
               placeholder="请输入刷新令牌"
             />
-          </div>
-        </div>
+              </div>
+            </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeBindModal">取消</button>
           <button 
@@ -349,11 +349,11 @@
             :disabled="loading"
           >
             {{ loading ? '绑定中...' : '确认绑定' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
+              </button>
+            </div>
+            </div>
+          </div>
+          
     <!-- 加载遮罩 -->
     <div v-if="loading" class="loading-overlay">
       <div class="loading-spinner">加载中...</div>

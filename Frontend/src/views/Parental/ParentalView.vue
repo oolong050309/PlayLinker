@@ -11,6 +11,55 @@
       </div>
     </div>
 
+    <!-- 邀请子账户 -->
+    <section class="parental-section">
+      <div class="settings-card">
+        <div class="setting-item">
+          <div class="setting-info">
+            <h3 class="setting-label">邀请子账户</h3>
+            <p class="setting-desc">
+              通过输入子账户用户名，向对方发送家长监管邀请。<br />
+              对方需在消息中心中同意邀请后，才会正式建立家长监管关系。
+            </p>
+          </div>
+          <div class="setting-action invite-action">
+            <input
+              v-model="childUsername"
+              type="text"
+              class="setting-input"
+              style="width: 200px;"
+              placeholder="子账户用户名"
+            />
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <h3 class="setting-label">附加留言（可选）</h3>
+            <p class="setting-desc">例如：说明监管原因或约定的游戏时间等。</p>
+          </div>
+          <div class="setting-action invite-action">
+            <textarea
+              v-model="inviteMessage"
+              class="setting-textarea"
+              rows="3"
+              placeholder="写一点想对孩子说的话...（可留空）"
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="parental-actions">
+          <button
+            class="btn btn-primary"
+            @click="handleSendInvitation"
+            :disabled="inviting || !childUsername.trim()"
+          >
+            {{ inviting ? '发送中...' : '发送邀请' }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <!-- 监管开关 -->
     <section class="parental-section">
       <div class="settings-card">
@@ -275,11 +324,17 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import parentalApi from '@/api/parental'
 
 const isEnabled = ref(false)
 const saving = ref(false)
 const showBlockGameDialog = ref(false)
 const gameSearchQuery = ref('')
+
+// 邀请相关
+const childUsername = ref('')
+const inviteMessage = ref('')
+const inviting = ref(false)
 
 const timeLimits = ref({
   dailyHours: 2,
@@ -321,6 +376,35 @@ const contentTags = [
 ]
 
 const searchResults = ref([])
+
+const handleSendInvitation = async () => {
+  if (!childUsername.value.trim()) {
+    alert('请输入子账户用户名')
+    return
+  }
+
+  inviting.value = true
+  try {
+    const payload = {
+      childUsername: childUsername.value.trim()
+    }
+    if (inviteMessage.value.trim()) {
+      payload.message = inviteMessage.value.trim()
+    }
+
+    const res = await parentalApi.createInvitation(payload)
+    if (res && res.success !== false) {
+      alert('邀请已发送，对方需要在消息中心同意后才会生效')
+      childUsername.value = ''
+      inviteMessage.value = ''
+    }
+  } catch (error) {
+    console.error('发送家长邀请失败:', error)
+    alert('发送邀请失败: ' + (error.message || '未知错误'))
+  } finally {
+    inviting.value = false
+  }
+}
 
 const handleToggle = () => {
   // TODO: 调用 API 更新状态
