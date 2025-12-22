@@ -9,8 +9,8 @@
         </div>
         <div class="header-status">
           <div class="status-badge">
-            <i data-lucide="check-circle" class="icon icon-success"></i>
-            <span><span class="text-success font-bold">3</span> 已连接</span>
+            <CheckCircle class="icon icon-success" size="16" />
+            <span><span class="text-success font-bold">{{ stats.connectedCount }}</span> 已连接</span>
           </div>
         </div>
       </div>
@@ -26,149 +26,82 @@
           </div>
           <div class="stat-info">
             <div class="stat-label">已连接平台</div>
-            <div class="stat-value">3 / 7</div>
+            <div class="stat-value">{{ stats.connectedCount }} / 7</div>
           </div>
         </div>
         
         <div class="stat-card">
           <div class="stat-icon bg-emerald">
-            <i data-lucide="gamepad-2" class="icon"></i>
+            <Gamepad2 class="icon" size="24" />
           </div>
           <div class="stat-info">
             <div class="stat-label">已同步游戏总数</div>
-            <div class="stat-value">127</div>
+            <div class="stat-value">{{ stats.totalGames }}</div>
           </div>
         </div>
 
         <div class="stat-card">
           <div class="stat-icon bg-amber">
-            <i data-lucide="trophy" class="icon"></i>
+            <Trophy class="icon" size="24" />
           </div>
           <div class="stat-info">
             <div class="stat-label">已同步成就数</div>
-            <div class="stat-value">892</div>
+            <div class="stat-value">{{ stats.totalAchievements }}</div>
           </div>
         </div>
 
         <div class="stat-card">
           <div class="stat-icon bg-rose">
-            <i data-lucide="clock" class="icon"></i>
+            <Clock class="icon" size="24" />
           </div>
           <div class="stat-info">
             <div class="stat-label">最后同步时间</div>
-            <div class="stat-value">2分钟前</div>
+            <div class="stat-value">{{ stats.lastSync }}</div>
           </div>
         </div>
       </div>
 
       <!-- 已连接平台 -->
-      <div class="section">
+      <div class="section" v-if="connectedPlatforms.length > 0">
         <h2 class="section-title">
-          <i data-lucide="check-circle" class="icon icon-success"></i>
+          <CheckCircle class="icon icon-success" size="20" />
           已连接平台
         </h2>
         <div class="platform-grid">
-          <!-- Steam -->
-          <div class="platform-card connected">
-            <div class="platform-header steam-gradient">
+          <div 
+            v-for="binding in connectedPlatforms" 
+            :key="binding.bindingId"
+            class="platform-card connected"
+          >
+            <div class="platform-header" :class="getPlatformConfig(binding.platformId)?.gradient || ''">
               <div class="platform-info">
                 <div class="platform-logo">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/1024px-Steam_icon_logo.svg.png" alt="Steam">
+                  <img :src="getPlatformLogo(binding.platformId)" :alt="binding.platformName">
                 </div>
                 <div class="platform-details">
-                  <h3>Steam</h3>
-                  <p>@gamer_pro_2024</p>
+                  <h3>{{ binding.platformName }}</h3>
+                  <p>@{{ binding.platformUserId }}</p>
                 </div>
               </div>
               <span class="badge success">已连接</span>
-              <div class="platform-stats">
-                <div class="stat-item">
-                  <i data-lucide="gamepad-2" class="icon"></i>
-                  <span>85 款游戏</span>
-                </div>
-                <div class="stat-item">
-                  <i data-lucide="trophy" class="icon"></i>
-                  <span>542 项成就</span>
-                </div>
-              </div>
             </div>
             <div class="platform-actions">
-              <span class="last-synced">最后同步：2分钟前</span>
+              <span class="last-synced">绑定时间：{{ formatTime(binding.bindingTime) }}</span>
               <div class="action-buttons">
-                <button class="btn btn-secondary">
-                  <i data-lucide="refresh-cw" class="icon"></i> 同步
+                <button 
+                  class="btn btn-secondary"
+                  @click="handleSync(binding.platformId)"
+                  :disabled="loading"
+                >
+                  <RefreshCw class="icon" size="12" /> 同步
                 </button>
-                <button class="btn btn-danger">断开连接</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Epic Games -->
-          <div class="platform-card connected">
-            <div class="platform-header epic-gradient">
-              <div class="platform-info">
-                <div class="platform-logo">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/a/a7/Epic_Games_logo.png" alt="Epic Games">
-                </div>
-                <div class="platform-details">
-                  <h3>Epic Games</h3>
-                  <p>@epic_gamer</p>
-                </div>
-              </div>
-              <span class="badge success">已连接</span>
-              <div class="platform-stats">
-                <div class="stat-item">
-                  <i data-lucide="gamepad-2" class="icon"></i>
-                  <span>32 款游戏</span>
-                </div>
-                <div class="stat-item">
-                  <i data-lucide="trophy" class="icon"></i>
-                  <span>128 项成就</span>
-                </div>
-              </div>
-            </div>
-            <div class="platform-actions">
-              <span class="last-synced">最后同步：15分钟前</span>
-              <div class="action-buttons">
-                <button class="btn btn-secondary">
-                  <i data-lucide="refresh-cw" class="icon"></i> 同步
+                <button 
+                  class="btn btn-danger"
+                  @click="handleUnbind(binding)"
+                  :disabled="loading"
+                >
+                  断开连接
                 </button>
-                <button class="btn btn-danger">断开连接</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Xbox -->
-          <div class="platform-card connected">
-            <div class="platform-header xbox-gradient">
-              <div class="platform-info">
-                <div class="platform-logo">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Xbox_one_logo.svg/2048px-Xbox_one_logo.svg.png" alt="Xbox">
-                </div>
-                <div class="platform-details">
-                  <h3>Xbox</h3>
-                  <p>@XboxPlayer123</p>
-                </div>
-              </div>
-              <span class="badge success">已连接</span>
-              <div class="platform-stats">
-                <div class="stat-item">
-                  <i data-lucide="gamepad-2" class="icon"></i>
-                  <span>10 款游戏</span>
-                </div>
-                <div class="stat-item">
-                  <i data-lucide="trophy" class="icon"></i>
-                  <span>222 项成就</span>
-                </div>
-              </div>
-            </div>
-            <div class="platform-actions">
-              <span class="last-synced">最后同步：1小时前</span>
-              <div class="action-buttons">
-                <button class="btn btn-secondary">
-                  <i data-lucide="refresh-cw" class="icon"></i> 同步
-                </button>
-                <button class="btn btn-danger">断开连接</button>
               </div>
             </div>
           </div>
@@ -176,92 +109,36 @@
       </div>
 
       <!-- 可用平台 -->
-      <div class="section">
+      <div class="section" v-if="availablePlatforms.length > 0">
         <h2 class="section-title">
-          <i data-lucide="plus-circle" class="icon icon-muted"></i>
+          <PlusCircle class="icon icon-muted" size="20" />
           可用平台
         </h2>
         <div class="platform-grid">
-          <!-- PlayStation -->
-          <div class="platform-card">
-            <div class="platform-header playstation-gradient">
+          <div 
+            v-for="platform in availablePlatforms" 
+            :key="platform.id"
+            class="platform-card"
+          >
+            <div class="platform-header" :class="platform.gradient">
               <div class="platform-info">
                 <div class="platform-logo">
-                  <img src="https://images.seeklogo.com/logo-png/49/1/playstation-logo-png_seeklogo-494440.png" alt="PlayStation">
+                  <img :src="getPlatformLogo(platform.id)" :alt="platform.name">
                 </div>
                 <div class="platform-details">
-                  <h3>PlayStation</h3>
+                  <h3>{{ platform.name }}</h3>
                   <p>未连接</p>
                 </div>
               </div>
-              <p class="platform-desc">同步你的PlayStation奖杯和游戏库</p>
+              <p class="platform-desc">{{ getPlatformDescription(platform.id) }}</p>
             </div>
             <div class="platform-actions">
-              <button class="btn btn-primary w-full">
-                <i data-lucide="link" class="icon"></i> 连接账号
-              </button>
-            </div>
-          </div>
-
-          <!-- Nintendo -->
-          <div class="platform-card">
-            <div class="platform-header nintendo-gradient">
-              <div class="platform-info">
-                <div class="platform-logo">
-                  <img src="https://images.seeklogo.com/logo-png/31/1/nintendo-switch-logo-png_seeklogo-315901.png" alt="Nintendo Switch">
-                </div>
-                <div class="platform-details">
-                  <h3>Nintendo Switch</h3>
-                  <p>未连接</p>
-                </div>
-              </div>
-              <p class="platform-desc">连接你的任天堂账号以同步Switch游戏</p>
-            </div>
-            <div class="platform-actions">
-              <button class="btn btn-primary w-full">
-                <i data-lucide="link" class="icon"></i> 连接账号
-              </button>
-            </div>
-          </div>
-
-          <!-- GOG -->
-          <div class="platform-card">
-            <div class="platform-header gog-gradient">
-              <div class="platform-info">
-                <div class="platform-logo">
-                  <img src="https://w7.pngwing.com/pngs/403/46/png-transparent-gog-galaxy-alt-macos-bigsur-icon-thumbnail.png" alt="GOG">
-                </div>
-                <div class="platform-details">
-                  <h3>GOG Galaxy</h3>
-                  <p>未连接</p>
-                </div>
-              </div>
-              <p class="platform-desc">无DRM保护的游戏和经典游戏作品</p>
-            </div>
-            <div class="platform-actions">
-              <button class="btn btn-primary w-full">
-                <i data-lucide="link" class="icon"></i> 连接账号
-              </button>
-            </div>
-          </div>
-
-          <!-- Battle.net -->
-          <div class="platform-card">
-            <div class="platform-header battlenet-gradient">
-              <div class="platform-info">
-                <div class="platform-logo">
-                  <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTmi7pxirQ-yuPN673zi5amugvUn8bCsPSiTw&s" alt="Battle.net">
-                </div>
-                <div class="platform-details">
-                  <h3>Battle.net</h3>
-                  <p>未连接</p>
-                </div>
-              </div>
-              <p class="platform-desc">暴雪游戏，包括魔兽世界、暗黑破坏神、守望先锋等</p>
-            </div>
-            <div class="platform-actions">
-              <button class="btn btn-primary w-full">
-                <i data-lucide="link" class="icon"></i> 连接账号
+              <button 
+                class="btn btn-primary w-full"
+                @click="openBindModal(platform)"
+                :disabled="loading"
+              >
+                <Link class="icon" size="16" /> 连接账号
               </button>
             </div>
           </div>
@@ -272,7 +149,7 @@
       <div class="section">
         <div class="settings-card">
           <h2 class="section-title">
-            <i data-lucide="settings" class="icon"></i>
+            <Settings class="icon" size="20" />
             同步设置
           </h2>
           <div class="settings-list">
@@ -282,7 +159,8 @@
                 <p>每小时自动同步你的游戏库</p>
               </div>
               <div 
-                class="toggle-switch active" 
+                class="toggle-switch" 
+                :class="{ active: syncSettings.autoSync }"
                 @click="toggleSwitch('autoSync')"
               >
                 <span class="toggle-thumb"></span>
@@ -295,7 +173,8 @@
                 <p>从已连接平台导入成就和奖杯</p>
               </div>
               <div 
-                class="toggle-switch active" 
+                class="toggle-switch" 
+                :class="{ active: syncSettings.achievements }"
                 @click="toggleSwitch('achievements')"
               >
                 <span class="toggle-thumb"></span>
@@ -308,7 +187,8 @@
                 <p>追踪并汇总所有平台的游玩时长</p>
               </div>
               <div 
-                class="toggle-switch active" 
+                class="toggle-switch" 
+                :class="{ active: syncSettings.playtime }"
                 @click="toggleSwitch('playtime')"
               >
                 <span class="toggle-thumb"></span>
@@ -322,6 +202,7 @@
               </div>
               <div 
                 class="toggle-switch" 
+                :class="{ active: syncSettings.notify }"
                 @click="toggleSwitch('notify')"
               >
                 <span class="toggle-thumb"></span>
@@ -330,8 +211,12 @@
           </div>
           
           <div class="settings-actions">
-            <button class="btn btn-primary">
-              <i data-lucide="refresh-cw" class="icon"></i> 立即同步全部
+            <button 
+              class="btn btn-primary"
+              @click="handleSyncAll"
+              :disabled="loading || connectedPlatforms.length === 0"
+            >
+              <RefreshCw class="icon" size="16" /> 立即同步全部
             </button>
             <button class="btn btn-tertiary">
               查看同步历史
@@ -340,44 +225,447 @@
         </div>
       </div>
     </main>
+
+    <!-- 绑定模态框 -->
+    <div v-if="showBindModal" class="modal-overlay" @click="closeBindModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3 class="modal-title">绑定{{ selectedPlatform?.name }}</h3>
+          <button class="modal-close" @click="closeBindModal">
+            <X size="20" />
+          </button>
+        </div>
+        <div class="modal-body">
+          <div v-if="selectedPlatform?.id === 1" class="form-group">
+            <label>Steam ID *</label>
+            <input 
+              v-model="bindForm.steamId" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入Steam ID"
+            />
+            <p class="form-hint">可在Steam个人资料页面URL中找到</p>
+          </div>
+          <div v-if="selectedPlatform?.id === 1" class="form-group">
+            <label>Steam API Key *</label>
+            <input 
+              v-model="bindForm.apiKey" 
+              type="password" 
+              class="form-input"
+              placeholder="请输入Steam API Key"
+            />
+            <p class="form-hint">在 <a href="https://steamcommunity.com/dev/apikey" target="_blank">Steam API Key页面</a> 申请</p>
+          </div>
+          
+          <div v-if="selectedPlatform?.id === 7" class="form-group">
+            <label>Xbox用户ID *</label>
+            <input 
+              v-model="bindForm.xboxUserId" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入Xbox用户ID"
+            />
+          </div>
+          <div v-if="selectedPlatform?.id === 7" class="form-group">
+            <label>访问令牌（可选）</label>
+            <input 
+              v-model="bindForm.accessToken" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入访问令牌"
+            />
+          </div>
+          <div v-if="selectedPlatform?.id === 7" class="form-group">
+            <label>刷新令牌（可选）</label>
+            <input 
+              v-model="bindForm.refreshToken" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入刷新令牌"
+            />
+          </div>
+
+          <div v-if="selectedPlatform?.id === 6" class="form-group">
+            <label>PSN在线ID *</label>
+            <input 
+              v-model="bindForm.psnOnlineId" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入PSN在线ID"
+            />
+          </div>
+          <div v-if="selectedPlatform?.id === 6" class="form-group">
+            <label>访问令牌（可选）</label>
+            <input 
+              v-model="bindForm.accessToken" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入访问令牌"
+            />
+          </div>
+          <div v-if="selectedPlatform?.id === 6" class="form-group">
+            <label>刷新令牌（可选）</label>
+            <input 
+              v-model="bindForm.refreshToken" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入刷新令牌"
+            />
+          </div>
+
+          <div v-if="selectedPlatform?.id === 5" class="form-group">
+            <label>GOG用户ID *</label>
+            <input 
+              v-model="bindForm.gogUserId" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入GOG用户ID"
+            />
+          </div>
+          <div v-if="selectedPlatform?.id === 5" class="form-group">
+            <label>访问令牌（可选）</label>
+            <input 
+              v-model="bindForm.accessToken" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入访问令牌"
+            />
+          </div>
+          <div v-if="selectedPlatform?.id === 5" class="form-group">
+            <label>刷新令牌（可选）</label>
+            <input 
+              v-model="bindForm.refreshToken" 
+              type="text" 
+              class="form-input"
+              placeholder="请输入刷新令牌"
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeBindModal">取消</button>
+          <button 
+            class="btn btn-primary" 
+            @click="handleBind"
+            :disabled="loading"
+          >
+            {{ loading ? '绑定中...' : '确认绑定' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 加载遮罩 -->
+    <div v-if="loading" class="loading-overlay">
+      <div class="loading-spinner">加载中...</div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
-import { createIcons, CheckCircle, Link, Gamepad2, Trophy, Clock, PlusCircle, Settings, RefreshCw } from 'lucide';
+import { ref, onMounted, computed } from 'vue'
+import { CheckCircle, Link, Gamepad2, Trophy, Clock, PlusCircle, Settings, RefreshCw, X } from 'lucide-vue-next'
+import { platformsApi } from '@/api/platforms'
 
-// 注册lucide图标
-onMounted(() => {
-  createIcons({
-    icons: {
-      CheckCircle,
-      Link,
-      Gamepad2,
-      Trophy,
-      Clock,
-      PlusCircle,
-      Settings,
-      RefreshCw
+// 平台配置
+const platformConfig = {
+  1: { name: 'Steam', id: 1, icon: 'steam', gradient: 'steam-gradient', requires: ['steamId', 'apiKey'] },
+  2: { name: 'Epic Games', id: 2, icon: 'epic', gradient: 'epic-gradient', requires: [] },
+  5: { name: 'GOG Galaxy', id: 5, icon: 'gog', gradient: 'gog-gradient', requires: ['gogUserId'] },
+  6: { name: 'PlayStation', id: 6, icon: 'playstation', gradient: 'playstation-gradient', requires: ['psnOnlineId'] },
+  7: { name: 'Xbox', id: 7, icon: 'xbox', gradient: 'xbox-gradient', requires: ['xboxUserId'] },
+  8: { name: 'Nintendo Switch', id: 8, icon: 'nintendo', gradient: 'nintendo-gradient', requires: [] }
+}
+
+// 响应式数据
+const loading = ref(false)
+const bindings = ref([])
+const stats = ref({
+  connectedCount: 0,
+  totalGames: 0,
+  totalAchievements: 0,
+  lastSync: '从未同步'
+})
+
+const syncSettings = ref({
+  autoSync: true,
+  achievements: true,
+  playtime: true,
+  notify: false
+})
+
+// 绑定表单
+const showBindModal = ref(false)
+const selectedPlatform = ref(null)
+const bindForm = ref({
+  platformId: null,
+  steamId: '',
+  apiKey: '',
+  xboxUserId: '',
+  psnOnlineId: '',
+  gogUserId: '',
+  accessToken: '',
+  refreshToken: ''
+})
+
+// 计算属性
+const connectedPlatforms = computed(() => {
+  return bindings.value.filter(b => b.bindingStatus !== false)
+})
+
+const availablePlatforms = computed(() => {
+  const connectedIds = connectedPlatforms.value.map(b => b.platformId)
+  return Object.values(platformConfig).filter(p => !connectedIds.includes(p.id))
+})
+
+// 加载绑定列表
+const loadBindings = async () => {
+  loading.value = true
+  try {
+    const response = await platformsApi.getBindings()
+    if (response.success && response.data) {
+      // 后端返回的数据结构：{ bindings: [...], totalCount: ... }
+      bindings.value = (response.data.bindings || []).map(binding => ({
+        ...binding,
+        bindingStatus: true, // 后端只返回已绑定的记录
+        platformId: getPlatformIdByName(binding.platformName)
+      }))
+      updateStats()
     }
-  });
-});
+  } catch (error) {
+    console.error('加载绑定列表失败:', error)
+    alert('加载绑定列表失败: ' + (error.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
 
-// 开关状态管理
-const toggleSwitch = (type) => {
-  const toggleElements = document.querySelectorAll('.toggle-switch');
-  let index;
+// 根据平台名称获取平台ID
+const getPlatformIdByName = (platformName) => {
+  const nameMap = {
+    'Steam': 1,
+    'Epic Games': 2,
+    'GOG': 5,
+    'GOG Galaxy': 5,
+    'PSN': 6,
+    'PlayStation': 6,
+    'Xbox': 7,
+    'Nintendo Switch': 8
+  }
+  return nameMap[platformName] || null
+}
+
+// 更新统计数据
+const updateStats = () => {
+  stats.value.connectedCount = connectedPlatforms.value.length
+  // 这里可以从其他API获取真实的统计数据
+  // 暂时使用模拟数据
+  stats.value.totalGames = 127
+  stats.value.totalAchievements = 892
+  stats.value.lastSync = '2分钟前'
+}
+
+// 打开绑定模态框
+const openBindModal = (platform) => {
+  selectedPlatform.value = platform
+  bindForm.value = {
+    platformId: platform.id,
+    steamId: '',
+    apiKey: '',
+    xboxUserId: '',
+    psnOnlineId: '',
+    gogUserId: '',
+    accessToken: '',
+    refreshToken: ''
+  }
+  showBindModal.value = true
+}
+
+// 关闭绑定模态框
+const closeBindModal = () => {
+  showBindModal.value = false
+  selectedPlatform.value = null
+}
+
+// 绑定平台
+const handleBind = async () => {
+  if (!selectedPlatform.value) return
+
+  const platform = selectedPlatform.value
+  const requiredFields = platform.requires || []
   
-  switch(type) {
-    case 'autoSync': index = 0; break;
-    case 'achievements': index = 1; break;
-    case 'playtime': index = 2; break;
-    case 'notify': index = 3; break;
+  // 验证必填字段
+  for (const field of requiredFields) {
+    if (!bindForm.value[field] || bindForm.value[field].trim() === '') {
+      alert(`请填写${getFieldLabel(field)}`)
+      return
+    }
+  }
+
+  loading.value = true
+  try {
+    const bindData = {
+      platformId: platform.id
+    }
+
+    // 根据平台添加相应字段
+    if (platform.id === 1) { // Steam
+      bindData.steamId = bindForm.value.steamId
+      bindData.apiKey = bindForm.value.apiKey
+    } else if (platform.id === 7) { // Xbox
+      bindData.xboxUserId = bindForm.value.xboxUserId
+      if (bindForm.value.accessToken) bindData.accessToken = bindForm.value.accessToken
+      if (bindForm.value.refreshToken) bindData.refreshToken = bindForm.value.refreshToken
+    } else if (platform.id === 6) { // PSN
+      bindData.psnOnlineId = bindForm.value.psnOnlineId
+      if (bindForm.value.accessToken) bindData.accessToken = bindForm.value.accessToken
+      if (bindForm.value.refreshToken) bindData.refreshToken = bindForm.value.refreshToken
+    } else if (platform.id === 5) { // GOG
+      bindData.gogUserId = bindForm.value.gogUserId
+      if (bindForm.value.accessToken) bindData.accessToken = bindForm.value.accessToken
+      if (bindForm.value.refreshToken) bindData.refreshToken = bindForm.value.refreshToken
+    }
+
+    const response = await platformsApi.bindPlatform(bindData)
+    if (response.success) {
+      alert(`${platform.name}绑定成功！`)
+      closeBindModal()
+      await loadBindings()
+    }
+  } catch (error) {
+    console.error('绑定平台失败:', error)
+    const errorMessage = error.response?.data?.message || error.message || '未知错误'
+    alert('绑定失败: ' + errorMessage)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 获取字段标签
+const getFieldLabel = (field) => {
+  const labels = {
+    steamId: 'Steam ID',
+    apiKey: 'Steam API Key',
+    xboxUserId: 'Xbox用户ID',
+    psnOnlineId: 'PSN在线ID',
+    gogUserId: 'GOG用户ID',
+    accessToken: '访问令牌',
+    refreshToken: '刷新令牌'
+  }
+  return labels[field] || field
+}
+
+// 解绑平台
+const handleUnbind = async (binding) => {
+  if (!confirm(`确定要解绑${binding.platformName}吗？`)) {
+    return
+  }
+
+  loading.value = true
+  try {
+    const response = await platformsApi.unbindPlatform(binding.bindingId)
+    if (response.success) {
+      alert(`${binding.platformName}解绑成功！`)
+      await loadBindings()
+    }
+  } catch (error) {
+    console.error('解绑平台失败:', error)
+    const errorMessage = error.response?.data?.message || error.message || '未知错误'
+    alert('解绑失败: ' + errorMessage)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 同步平台
+const handleSync = async (platformId) => {
+  loading.value = true
+  try {
+    // 这里需要根据实际后端API调整
+    await platformsApi.syncPlatform(platformId)
+    alert('同步成功！')
+    await loadBindings()
+  } catch (error) {
+    console.error('同步平台失败:', error)
+    alert('同步失败: ' + (error.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
+
+// 切换开关
+const toggleSwitch = (type) => {
+  syncSettings.value[type] = !syncSettings.value[type]
+}
+
+// 获取平台配置
+const getPlatformConfig = (platformId) => {
+  return platformConfig[platformId] || { name: 'Unknown', gradient: '' }
+}
+
+// 格式化时间
+const formatTime = (dateString) => {
+  if (!dateString) return '未知'
+  const date = new Date(dateString)
+  const now = new Date()
+  const diff = Math.floor((now - date) / 1000 / 60) // 分钟差
+  
+  if (diff < 1) return '刚刚'
+  if (diff < 60) return `${diff}分钟前`
+  if (diff < 1440) return `${Math.floor(diff / 60)}小时前`
+  return `${Math.floor(diff / 1440)}天前`
+}
+
+// 获取平台Logo
+const getPlatformLogo = (platformId) => {
+  const logos = {
+    1: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/1024px-Steam_icon_logo.svg.png',
+    2: 'https://upload.wikimedia.org/wikipedia/commons/a/a7/Epic_Games_logo.png',
+    5: 'https://w7.pngwing.com/pngs/403/46/png-transparent-gog-galaxy-alt-macos-bigsur-icon-thumbnail.png',
+    6: 'https://images.seeklogo.com/logo-png/49/1/playstation-logo-png_seeklogo-494440.png',
+    7: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Xbox_one_logo.svg/2048px-Xbox_one_logo.svg.png',
+    8: 'https://images.seeklogo.com/logo-png/31/1/nintendo-switch-logo-png_seeklogo-315901.png'
+  }
+  return logos[platformId] || ''
+}
+
+// 获取平台描述
+const getPlatformDescription = (platformId) => {
+  const descriptions = {
+    1: '同步你的Steam游戏库和成就',
+    2: '同步Epic Games商店的游戏',
+    5: '无DRM保护的游戏和经典游戏作品',
+    6: '同步你的PlayStation奖杯和游戏库',
+    7: '同步Xbox游戏和成就',
+    8: '连接你的任天堂账号以同步Switch游戏'
+  }
+  return descriptions[platformId] || '连接平台以同步游戏库'
+}
+
+// 同步全部平台
+const handleSyncAll = async () => {
+  if (connectedPlatforms.value.length === 0) {
+    alert('没有已连接的平台')
+    return
   }
   
-  const toggle = toggleElements[index];
-  toggle.classList.toggle('active');
-};
+  loading.value = true
+  try {
+    for (const binding of connectedPlatforms.value) {
+      await platformsApi.syncPlatform(binding.platformId)
+    }
+    alert('全部平台同步成功！')
+    await loadBindings()
+  } catch (error) {
+    console.error('同步全部平台失败:', error)
+    alert('同步失败: ' + (error.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadBindings()
+})
 </script>
 
 <style scoped>
@@ -833,5 +1121,138 @@ const toggleSwitch = (type) => {
 
 .font-bold {
   font-weight: 700;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: rgba(20, 20, 23, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.25rem;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.modal-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.modal-body {
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: #ffffff;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  color: #ffffff;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+}
+
+.form-hint a {
+  color: #4f46e5;
+  text-decoration: none;
+}
+
+.form-hint a:hover {
+  text-decoration: underline;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+/* 加载遮罩 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.loading-spinner {
+  background: rgba(20, 20, 23, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  padding: 2rem;
+  color: #ffffff;
+  font-size: 1rem;
 }
 </style>
