@@ -121,8 +121,8 @@ public class AuthService : IAuthService
             {
                 // 使用用户名查询
                 user = await _dbContext.Users
-                    .Include(u => u.Role)
-                    .FirstOrDefaultAsync(u => u.Username == request.Username);
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Username == request.Username);
             }
 
             if (user == null)
