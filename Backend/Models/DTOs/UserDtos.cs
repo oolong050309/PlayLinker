@@ -102,3 +102,16 @@ public class ChangePasswordRequestDto
     public string NewPassword { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// 更新用户角色请求DTO
+/// </summary>
+public class UpdateUserRoleRequestDto
+{
+    /// <summary>
+    /// 角色名称 (user, parent, admin)
+    /// </summary>
+    [Required(ErrorMessage = "角色不能为空")]
+    [RegularExpression("^(user|parent|admin)$", ErrorMessage = "角色必须是 user、parent 或 admin")]
+    public string Role { get; set; } = string.Empty;
+}
+

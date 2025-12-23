@@ -22,7 +22,7 @@
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-icon bg-indigo">
-            <i data-lucide="link" class="icon"></i>
+            <Link class="icon" size="24" />
           </div>
           <div class="stat-info">
             <div class="stat-label">已连接平台</div>
@@ -365,6 +365,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { CheckCircle, Link, Gamepad2, Trophy, Clock, PlusCircle, Settings, RefreshCw, X } from 'lucide-vue-next'
 import { platformsApi } from '@/api/platforms'
+import { libraryApi, steamApi } from '@/api/index'
 
 // 平台配置
 const platformConfig = {
@@ -392,6 +393,19 @@ const syncSettings = ref({
   playtime: true,
   notify: false
 })
+
+// 获取当前登录用户ID（从 sessionStorage 的 user 中解析）
+const getCurrentUserId = () => {
+  try {
+    const userStr = sessionStorage.getItem('user')
+    if (!userStr) return null
+    const user = JSON.parse(userStr)
+    return user.userId || user.id || null
+  } catch (e) {
+    console.warn('解析用户ID失败:', e)
+    return null
+  }
+}
 
 // 绑定表单
 const showBindModal = ref(false)
@@ -454,14 +468,40 @@ const getPlatformIdByName = (platformName) => {
   return nameMap[platformName] || null
 }
 
-// 更新统计数据
+// 从后端刷新统计数据（游戏库 + 成就）
+const refreshStats = async () => {
+  try {
+    const res = await libraryApi.getOverview()
+    if (res.success && res.data) {
+      const o = res.data
+      // 兼容大小写字段
+      const totalGamesOwned = o.totalGamesOwned ?? o.TotalGamesOwned ?? 0
+      const totalAchievements = o.totalAchievements ?? o.TotalAchievements ?? 0
+
+      stats.value.connectedCount = connectedPlatforms.value.length
+      stats.value.totalGames = totalGamesOwned
+      stats.value.totalAchievements = totalAchievements
+
+      const platformStats = o.platformStats || o.PlatformStats || []
+      const firstPlatform = platformStats[0]
+      const lastSyncTime = firstPlatform?.lastSyncTime || firstPlatform?.LastSyncTime
+      stats.value.lastSync = lastSyncTime || '刚刚'
+    } else {
+      // 后端返回空数据时，重置为0
+      stats.value.connectedCount = connectedPlatforms.value.length
+      stats.value.totalGames = 0
+      stats.value.totalAchievements = 0
+      stats.value.lastSync = '从未同步'
+    }
+  } catch (error) {
+    console.error('刷新游戏库统计失败:', error)
+  }
+}
+
+// 更新统计数据：现在直接调用后端刷新
 const updateStats = () => {
   stats.value.connectedCount = connectedPlatforms.value.length
-  // 这里可以从其他API获取真实的统计数据
-  // 暂时使用模拟数据
-  stats.value.totalGames = 127
-  stats.value.totalAchievements = 892
-  stats.value.lastSync = '2分钟前'
+  refreshStats()
 }
 
 // 打开绑定模态框
@@ -528,8 +568,36 @@ const handleBind = async () => {
     const response = await platformsApi.bindPlatform(bindData)
     if (response.success) {
       alert(`${platform.name}绑定成功！`)
+
+      // 绑定成功后：
+      // 1) 对于 Steam，调用后端 Steam 导入接口，拉取游戏和成就
+      if (platform.id === 1) {
+        const userId = getCurrentUserId()
+        if (userId) {
+          try {
+            await steamApi.importData({
+              userId,
+              steamId: bindForm.value.steamId,
+              importGames: true,
+              importAchievements: true,
+              importFriends: false
+            })
+          } catch (e) {
+            console.error('Steam 数据导入失败:', e)
+          }
+        }
+      }
+
+      // 2) 触发一次游戏库概览刷新任务（轻量级）
+      try {
+        await libraryApi.syncPlatform({ platformId: platform.id, fullSync: true })
+      } catch (e) {
+        console.error('触发游戏库同步失败:', e)
+      }
+
       closeBindModal()
       await loadBindings()
+      await refreshStats()
     }
   } catch (error) {
     console.error('绑定平台失败:', error)
@@ -580,10 +648,38 @@ const handleUnbind = async (binding) => {
 const handleSync = async (platformId) => {
   loading.value = true
   try {
-    // 这里需要根据实际后端API调整
+    // 调用统一平台同步接口（如有实现）
     await platformsApi.syncPlatform(platformId)
+
+    // 如果是 Steam，再次调用导入接口以刷新游戏和成就
+    if (platformId === 1) {
+      const userId = getCurrentUserId()
+      const steamBinding = connectedPlatforms.value.find(b => b.platformId === 1)
+      if (userId && steamBinding?.platformUserId) {
+        try {
+          await steamApi.importData({
+            userId,
+            steamId: steamBinding.platformUserId,
+            importGames: true,
+            importAchievements: true,
+            importFriends: false
+          })
+        } catch (e) {
+          console.error('Steam 数据导入失败:', e)
+        }
+      }
+    }
+
+    // 同时调用游戏库同步接口，触发后台刷新游戏库汇总
+    try {
+      await libraryApi.syncPlatform({ platformId, fullSync: false })
+    } catch (e) {
+      console.error('调用游戏库同步接口失败:', e)
+    }
+
     alert('同步成功！')
     await loadBindings()
+    await refreshStats()
   } catch (error) {
     console.error('同步平台失败:', error)
     alert('同步失败: ' + (error.message || '未知错误'))
@@ -652,9 +748,34 @@ const handleSyncAll = async () => {
   try {
     for (const binding of connectedPlatforms.value) {
       await platformsApi.syncPlatform(binding.platformId)
+
+      // 针对 Steam 平台调用导入接口
+      if (binding.platformId === 1) {
+        const userId = getCurrentUserId()
+        if (userId && binding.platformUserId) {
+          try {
+            await steamApi.importData({
+              userId,
+              steamId: binding.platformUserId,
+              importGames: true,
+              importAchievements: true,
+              importFriends: false
+            })
+          } catch (e) {
+            console.error('Steam 数据导入失败:', e)
+          }
+        }
+      }
+
+      try {
+        await libraryApi.syncPlatform({ platformId: binding.platformId, fullSync: false })
+      } catch (e) {
+        console.error('调用游戏库同步接口失败:', e)
+      }
     }
     alert('全部平台同步成功！')
     await loadBindings()
+    await refreshStats()
   } catch (error) {
     console.error('同步全部平台失败:', error)
     alert('同步失败: ' + (error.message || '未知错误'))
@@ -665,6 +786,7 @@ const handleSyncAll = async () => {
 
 onMounted(() => {
   loadBindings()
+  refreshStats()
 })
 </script>
 

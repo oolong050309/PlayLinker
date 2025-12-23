@@ -5,14 +5,146 @@
         <h1 class="parental-title">家长监管</h1>
         <p class="parental-subtitle">管理孩子的游戏时间和内容访问</p>
       </div>
-      <div class="header-status" :class="{ active: isEnabled }">
+      <button 
+        class="header-status role-toggle-btn" 
+        :class="{ active: isParent }"
+        @click="handleToggleRole"
+        :disabled="switchingRole"
+      >
         <span class="status-dot"></span>
-        <span class="status-text">{{ isEnabled ? '已启用' : '未启用' }}</span>
-      </div>
+        <span class="status-text">{{ isParent ? '家长角色' : '普通用户' }}</span>
+        <span v-if="switchingRole" class="switching-indicator">切换中...</span>
+      </button>
     </div>
 
-    <!-- 邀请子账户 -->
+    <!-- 关系列表 -->
     <section class="parental-section">
+      <h2 class="section-title">{{ isParent ? '我的孩子' : '我的家长' }}</h2>
+      <div class="settings-card">
+        <div v-if="loadingRelationships" class="loading-state">
+          <p>加载中...</p>
+        </div>
+        <div v-else-if="isParent && children.length === 0" class="empty-state">
+          <p>您还没有监管任何子账户</p>
+        </div>
+        <div v-else-if="!isParent && !parentInfo" class="empty-state">
+          <p>您还没有建立监管关系</p>
+        </div>
+        <div v-else>
+          <!-- 家长视角：显示孩子列表 -->
+          <div v-if="isParent" class="relationships-list">
+            <div 
+              v-for="child in children" 
+              :key="child.childUserId"
+              class="relationship-item expanded"
+            >
+              <div class="relationship-header" @click="toggleChildExpanded(child.childUserId)">
+                <div class="relationship-info">
+                  <h4 class="relationship-name">{{ child.childUsername }}</h4>
+                  <div class="relationship-stats">
+                    <span>活跃规则: {{ child.activeRulesCount || 0 }}</span>
+                    <span>今日游戏时长: {{ child.todayPlaytime || 0 }} 分钟</span>
+                    <span>近期违规: {{ child.recentAlerts || 0 }} 次</span>
+                  </div>
+                </div>
+                <div class="relationship-actions">
+                  <button 
+                    class="btn btn-secondary"
+                    @click.stop="openRuleDialog(child)"
+                  >
+                    添加规则
+                  </button>
+                  <button 
+                    class="btn btn-danger"
+                    @click.stop="handleDeleteRelationship(child.childUserId)"
+                  >
+                    解除关系
+                  </button>
+                  <span class="expand-icon" :class="{ expanded: expandedChildren[child.childUserId] }">▼</span>
+                </div>
+              </div>
+              <!-- 规则列表 -->
+              <div v-if="expandedChildren[child.childUserId]" class="rules-container">
+                <div v-if="loadingRules[child.childUserId]" class="loading-state">
+                  <p>加载规则中...</p>
+                </div>
+                <div v-else-if="childRules[child.childUserId] && childRules[child.childUserId].length === 0" class="empty-state">
+                  <p>暂无规则，点击"添加规则"创建</p>
+                </div>
+                <div v-else class="rules-list">
+                  <div 
+                    v-for="rule in childRules[child.childUserId]" 
+                    :key="rule.ruleId"
+                    class="rule-item"
+                  >
+                    <div class="rule-info">
+                      <div class="rule-header">
+                        <span class="rule-type">{{ getRuleTypeLabel(rule.ruleType) }}</span>
+                        <span class="rule-status" :class="{ active: rule.isActive, inactive: !rule.isActive }">
+                          {{ rule.isActive ? '已启用' : '已禁用' }}
+                        </span>
+                      </div>
+                      <div class="rule-details">
+                        <pre class="rule-value">{{ formatRuleValue(rule.ruleValue) }}</pre>
+                        <div class="rule-statistics" v-if="rule.statistics">
+                          <span>总违规: {{ rule.statistics.totalViolations || 0 }}</span>
+                          <span>近期违规: {{ rule.statistics.recentViolations || 0 }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="rule-actions">
+                      <button 
+                        v-if="rule.isActive"
+                        class="btn btn-sm btn-warning"
+                        @click="handleToggleRuleStatus(rule, child.childUserId, false)"
+                        :disabled="togglingRuleStatus[rule.ruleId]"
+                      >
+                        {{ togglingRuleStatus[rule.ruleId] ? '停用中...' : '停用' }}
+                      </button>
+                      <button 
+                        v-else
+                        class="btn btn-sm btn-success"
+                        @click="handleToggleRuleStatus(rule, child.childUserId, true)"
+                        :disabled="togglingRuleStatus[rule.ruleId]"
+                      >
+                        {{ togglingRuleStatus[rule.ruleId] ? '启用中...' : '启用' }}
+                      </button>
+                      <button 
+                        class="btn btn-sm btn-secondary"
+                        @click="openEditRuleDialog(child, rule)"
+                      >
+                        编辑
+                      </button>
+                      <button 
+                        class="btn btn-sm btn-danger"
+                        @click="handleDeleteRule(rule.ruleId, child.childUserId)"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- 孩子视角：显示家长信息 -->
+          <div v-else-if="parentInfo" class="relationship-item">
+            <div class="relationship-info">
+              <h4 class="relationship-name">{{ parentInfo.parentUsername }}</h4>
+              <div class="relationship-stats">
+                <span>建立时间: {{ formatDate(parentInfo.createdAt) }}</span>
+              </div>
+            </div>
+            <div class="relationship-actions">
+              <p class="relationship-note">您无法主动解除监管关系，如需解除请联系家长</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 邀请子账户（仅家长可见） -->
+    <section v-if="isParent" class="parental-section">
       <div class="settings-card">
         <div class="setting-item">
           <div class="setting-info">
@@ -60,262 +192,137 @@
       </div>
     </section>
 
-    <!-- 监管开关 -->
-    <section class="parental-section">
-      <div class="settings-card">
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">启用家长监管</h3>
-            <p class="setting-desc">开启后，将限制游戏时间和内容访问</p>
-          </div>
-          <div class="setting-action">
-            <label class="toggle-switch">
-              <input 
-                type="checkbox" 
-                v-model="isEnabled"
-                @change="handleToggle"
-              />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- 时间限制 -->
-    <section class="parental-section" v-if="isEnabled">
-      <h2 class="section-title">时间限制</h2>
-      <div class="settings-card">
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">每日游戏时长</h3>
-            <p class="setting-desc">设置每天允许的游戏时间（小时）</p>
-          </div>
-          <div class="setting-action">
-            <input 
-              v-model.number="timeLimits.dailyHours" 
-              type="number" 
-              min="0"
-              max="24"
-              class="setting-input"
-              style="width: 100px;"
-            />
-            <span class="setting-unit">小时/天</span>
-          </div>
-        </div>
 
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">每周游戏时长</h3>
-            <p class="setting-desc">设置每周允许的游戏时间（小时）</p>
-          </div>
-          <div class="setting-action">
-            <input 
-              v-model.number="timeLimits.weeklyHours" 
-              type="number" 
-              min="0"
-              max="168"
-              class="setting-input"
-              style="width: 100px;"
-            />
-            <span class="setting-unit">小时/周</span>
-          </div>
-        </div>
-
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">允许游戏时间段</h3>
-            <p class="setting-desc">设置允许游戏的时间范围</p>
-          </div>
-          <div class="setting-action">
-            <div class="time-range">
-              <input 
-                v-model="timeLimits.startTime" 
-                type="time" 
-                class="setting-input"
-                style="width: 120px;"
-              />
-              <span class="time-separator">至</span>
-              <input 
-                v-model="timeLimits.endTime" 
-                type="time" 
-                class="setting-input"
-                style="width: 120px;"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">允许游戏的日期</h3>
-            <p class="setting-desc">选择允许游戏的星期</p>
-          </div>
-          <div class="setting-action">
-            <div class="weekdays-selector">
-              <label 
-                v-for="day in weekdays" 
-                :key="day.value"
-                class="weekday-checkbox"
-              >
-                <input 
-                  type="checkbox" 
-                  v-model="timeLimits.allowedDays"
-                  :value="day.value"
-                />
-                <span>{{ day.label }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 内容限制 -->
-    <section class="parental-section" v-if="isEnabled">
-      <h2 class="section-title">内容限制</h2>
-      <div class="settings-card">
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">年龄分级限制</h3>
-            <p class="setting-desc">限制可访问的游戏年龄分级</p>
-          </div>
-          <div class="setting-action">
-            <select v-model="contentRestrictions.ageRating" class="setting-select">
-              <option value="all">无限制</option>
-              <option value="3">3+</option>
-              <option value="7">7+</option>
-              <option value="12">12+</option>
-              <option value="16">16+</option>
-              <option value="18">18+</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">禁止内容类型</h3>
-            <p class="setting-desc">选择要禁止的内容类型</p>
-          </div>
-          <div class="setting-action">
-            <div class="content-tags">
-              <label 
-                v-for="tag in contentTags" 
-                :key="tag.value"
-                class="content-tag"
-              >
-                <input 
-                  type="checkbox" 
-                  v-model="contentRestrictions.blockedTags"
-                  :value="tag.value"
-                />
-                <span>{{ tag.label }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">禁止特定游戏</h3>
-            <p class="setting-desc">添加要禁止访问的游戏</p>
-          </div>
-          <div class="setting-action">
-            <button class="btn btn-secondary" @click="showBlockGameDialog = true">
-              添加游戏
-            </button>
-          </div>
-        </div>
-
-        <div v-if="blockedGames.length > 0" class="blocked-games-list">
-          <div 
-            v-for="game in blockedGames" 
-            :key="game.id"
-            class="blocked-game-item"
-          >
-            <span>{{ game.name }}</span>
-            <button 
-              class="btn-remove"
-              @click="removeBlockedGame(game.id)"
+    <!-- 规则设置对话框 -->
+    <div v-if="showRuleDialog" class="modal-overlay" @click="showRuleDialog = false">
+      <div class="modal-content rule-dialog" @click.stop>
+        <h3 class="modal-title">{{ editingRule ? '编辑' : '添加' }}监管规则 - {{ selectedChild?.childUsername }}</h3>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">规则类型</label>
+            <select 
+              v-model="ruleForm.ruleType" 
+              class="form-input" 
+              @change="updateRuleValue"
+              :disabled="!!editingRule"
             >
-              ×
-            </button>
+              <option value="playtime_daily_limit">每日时长限制</option>
+              <option value="playtime_curfew">宵禁时间</option>
+              <option value="spending_limit">消费限制</option>
+              <option value="game_restriction">游戏限制</option>
+              <option value="age_restriction">年龄限制</option>
+            </select>
+            <p v-if="editingRule" class="form-hint">规则类型创建后不可修改</p>
           </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- 活动监控 -->
-    <section class="parental-section" v-if="isEnabled">
-      <h2 class="section-title">活动监控</h2>
-      <div class="settings-card">
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">游戏活动报告</h3>
-            <p class="setting-desc">定期发送游戏活动报告到邮箱</p>
+          <!-- 每日时长限制 -->
+          <div v-if="ruleForm.ruleType === 'playtime_daily_limit'" class="form-group">
+            <label class="form-label">每日限制时长（分钟）</label>
+            <input 
+              v-model.number="ruleForm.ruleValue.limitMinutes"
+              type="number"
+              class="form-input"
+              min="0"
+              placeholder="120"
+            />
+            <label class="form-label" style="margin-top: 10px;">警告时长（分钟）</label>
+            <input 
+              v-model.number="ruleForm.ruleValue.warningMinutes"
+              type="number"
+              class="form-input"
+              min="0"
+              placeholder="100"
+            />
+            <label class="form-label" style="margin-top: 10px;">重置时间</label>
+            <input 
+              v-model="ruleForm.ruleValue.resetTime"
+              type="time"
+              class="form-input"
+              placeholder="00:00"
+            />
           </div>
-          <div class="setting-action">
-            <label class="toggle-switch">
-              <input 
-                type="checkbox" 
-                v-model="monitoring.sendReports"
-              />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-        </div>
 
-        <div class="setting-item">
-          <div class="setting-info">
-            <h3 class="setting-label">报告频率</h3>
-            <p class="setting-desc">选择报告发送频率</p>
+          <!-- 宵禁时间 -->
+          <div v-if="ruleForm.ruleType === 'playtime_curfew'" class="form-group">
+            <label class="form-label">开始时间</label>
+            <input 
+              v-model="ruleForm.ruleValue.startTime"
+              type="time"
+              class="form-input"
+              placeholder="22:00"
+            />
+            <label class="form-label" style="margin-top: 10px;">结束时间</label>
+            <input 
+              v-model="ruleForm.ruleValue.endTime"
+              type="time"
+              class="form-input"
+              placeholder="07:00"
+            />
           </div>
-          <div class="setting-action">
-            <select v-model="monitoring.reportFrequency" class="setting-select">
+
+          <!-- 消费限制 -->
+          <div v-if="ruleForm.ruleType === 'spending_limit'" class="form-group">
+            <label class="form-label">限制金额</label>
+            <input 
+              v-model.number="ruleForm.ruleValue.limitAmount"
+              type="number"
+              class="form-input"
+              min="0"
+              placeholder="100"
+            />
+            <label class="form-label" style="margin-top: 10px;">限制周期</label>
+            <select v-model="ruleForm.ruleValue.period" class="form-input">
               <option value="daily">每日</option>
               <option value="weekly">每周</option>
               <option value="monthly">每月</option>
             </select>
           </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- 保存按钮 -->
-    <div class="parental-actions">
-      <button class="btn btn-primary" @click="handleSave" :disabled="saving">
-        {{ saving ? '保存中...' : '保存设置' }}
-      </button>
-      <button class="btn btn-secondary" @click="handleReset">
-        重置
-      </button>
-    </div>
+          <!-- 游戏限制 -->
+          <div v-if="ruleForm.ruleType === 'game_restriction'" class="form-group">
+            <label class="form-label">禁止的游戏ID列表（用逗号分隔）</label>
+            <input 
+              :value="Array.isArray(ruleForm.ruleValue.blockedGameIds) ? ruleForm.ruleValue.blockedGameIds.join(',') : ''"
+              type="text"
+              class="form-input"
+              placeholder="例如: 1,2,3"
+              @input="(e) => updateGameRestriction(e.target.value)"
+            />
+          </div>
 
-    <!-- 添加禁止游戏对话框 -->
-    <div v-if="showBlockGameDialog" class="modal-overlay" @click="showBlockGameDialog = false">
-      <div class="modal-content" @click.stop>
-        <h3 class="modal-title">添加禁止游戏</h3>
-        <div class="modal-body">
-          <input 
-            v-model="gameSearchQuery"
-            type="text" 
-            class="form-input"
-            placeholder="搜索游戏名称..."
-            @input="searchGames"
-          />
-          <div v-if="searchResults.length > 0" class="search-results">
-            <div 
-              v-for="game in searchResults" 
-              :key="game.id"
-              class="search-result-item"
-              @click="addBlockedGame(game)"
-            >
-              {{ game.name }}
-            </div>
+          <!-- 年龄限制 -->
+          <div v-if="ruleForm.ruleType === 'age_restriction'" class="form-group">
+            <label class="form-label">最大年龄分级</label>
+            <select v-model.number="ruleForm.ruleValue.maxAgeRating" class="form-input">
+              <option :value="3">3+</option>
+              <option :value="7">7+</option>
+              <option :value="12">12+</option>
+              <option :value="16">16+</option>
+              <option :value="18">18+</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">
+              <input 
+                type="checkbox"
+                v-model="ruleForm.isActive"
+                style="margin-right: 8px;"
+              />
+              立即生效
+            </label>
           </div>
         </div>
         <div class="modal-actions">
-          <button class="btn btn-secondary" @click="showBlockGameDialog = false">取消</button>
+          <button class="btn btn-secondary" @click="showRuleDialog = false">取消</button>
+          <button 
+            class="btn btn-primary" 
+            @click="handleSaveRule"
+            :disabled="savingRule"
+          >
+            {{ savingRule ? '保存中...' : (editingRule ? '更新规则' : '保存规则') }}
+          </button>
         </div>
       </div>
     </div>
@@ -323,59 +330,36 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import parentalApi from '@/api/parental'
+import usersApi from '@/api/users'
 
-const isEnabled = ref(false)
-const saving = ref(false)
-const showBlockGameDialog = ref(false)
-const gameSearchQuery = ref('')
+// 关系相关
+const isParent = ref(false)
+const children = ref([])
+const parentInfo = ref(null)
+const loadingRelationships = ref(true)
+const expandedChildren = ref({})
+const childRules = ref({})
+const loadingRules = ref({})
+const togglingRuleStatus = ref({})
+const switchingRole = ref(false)
 
 // 邀请相关
 const childUsername = ref('')
 const inviteMessage = ref('')
 const inviting = ref(false)
 
-const timeLimits = ref({
-  dailyHours: 2,
-  weeklyHours: 14,
-  startTime: '09:00',
-  endTime: '21:00',
-  allowedDays: [1, 2, 3, 4, 5, 6, 0] // 0-6 代表周日到周六
+// 规则设置相关
+const showRuleDialog = ref(false)
+const selectedChild = ref(null)
+const editingRule = ref(null) // 编辑中的规则（如果有）
+const ruleForm = ref({
+  ruleType: 'playtime_daily_limit',
+  ruleValue: {},
+  isActive: true
 })
-
-const contentRestrictions = ref({
-  ageRating: 'all',
-  blockedTags: []
-})
-
-const monitoring = ref({
-  sendReports: true,
-  reportFrequency: 'weekly'
-})
-
-const blockedGames = ref([])
-
-const weekdays = [
-  { value: 0, label: '日' },
-  { value: 1, label: '一' },
-  { value: 2, label: '二' },
-  { value: 3, label: '三' },
-  { value: 4, label: '四' },
-  { value: 5, label: '五' },
-  { value: 6, label: '六' }
-]
-
-const contentTags = [
-  { value: 'violence', label: '暴力' },
-  { value: 'blood', label: '血腥' },
-  { value: 'language', label: '不当语言' },
-  { value: 'sexual', label: '性内容' },
-  { value: 'gambling', label: '赌博' },
-  { value: 'horror', label: '恐怖' }
-]
-
-const searchResults = ref([])
+const savingRule = ref(false)
 
 const handleSendInvitation = async () => {
   if (!childUsername.value.trim()) {
@@ -397,6 +381,7 @@ const handleSendInvitation = async () => {
       alert('邀请已发送，对方需要在消息中心同意后才会生效')
       childUsername.value = ''
       inviteMessage.value = ''
+      // 注意：这里不刷新关系列表，因为邀请还未被接受
     }
   } catch (error) {
     console.error('发送家长邀请失败:', error)
@@ -406,72 +391,372 @@ const handleSendInvitation = async () => {
   }
 }
 
-const handleToggle = () => {
-  // TODO: 调用 API 更新状态
+// 切换子账户展开/折叠
+const toggleChildExpanded = async (childId) => {
+  expandedChildren.value[childId] = !expandedChildren.value[childId]
+  // 每次展开时都重新加载规则，确保获取最新状态（包括规则是否被禁用）
+  if (expandedChildren.value[childId]) {
+    await loadChildRules(childId)
+  }
 }
 
-const handleSave = async () => {
-  saving.value = true
+// 加载子账户的规则列表
+const loadChildRules = async (childId) => {
+  loadingRules.value[childId] = true
   try {
-    // TODO: 调用 API 保存设置
-    await new Promise(resolve => setTimeout(resolve, 500))
-    alert('设置已保存')
+    const res = await parentalApi.getRules(childId)
+    if (res && res.success !== false && res.data) {
+      childRules.value[childId] = res.data.rules || []
+    }
   } catch (error) {
-    alert('保存失败: ' + error.message)
+    console.error('加载规则失败:', error)
+    childRules.value[childId] = []
   } finally {
-    saving.value = false
+    loadingRules.value[childId] = false
   }
 }
 
-const handleReset = () => {
-  if (confirm('确定要重置所有设置吗？')) {
-    // 重置为默认值
-    timeLimits.value = {
-      dailyHours: 2,
-      weeklyHours: 14,
-      startTime: '09:00',
-      endTime: '21:00',
-      allowedDays: [1, 2, 3, 4, 5, 6, 0]
+// 获取规则类型标签
+const getRuleTypeLabel = (ruleType) => {
+  const labels = {
+    'playtime_daily_limit': '每日时长限制',
+    'playtime_curfew': '宵禁时间',
+    'spending_limit': '消费限制',
+    'game_restriction': '游戏限制',
+    'age_restriction': '年龄限制'
+  }
+  return labels[ruleType] || ruleType
+}
+
+// 格式化规则值显示
+const formatRuleValue = (ruleValue) => {
+  if (!ruleValue) return '无'
+  try {
+    return JSON.stringify(ruleValue, null, 2)
+  } catch {
+    return String(ruleValue)
+  }
+}
+
+// 切换规则状态（启用/停用）
+const handleToggleRuleStatus = async (rule, childId, isActive) => {
+  togglingRuleStatus.value[rule.ruleId] = true
+  try {
+    // 传递当前的规则值，确保不会丢失规则内容
+    const res = await parentalApi.toggleRuleStatus(rule.ruleId, rule.ruleValue, isActive)
+    if (res && res.success !== false) {
+      // 更新本地规则状态，避免重新加载整个列表
+      const rules = childRules.value[childId]
+      if (rules) {
+        const foundRule = rules.find(r => r.ruleId === rule.ruleId)
+        if (foundRule) {
+          foundRule.isActive = isActive
+        }
+      }
+      // 刷新关系列表以更新活跃规则数
+      await loadRelationships()
     }
-    contentRestrictions.value = {
-      ageRating: 'all',
-      blockedTags: []
+  } catch (error) {
+    console.error('切换规则状态失败:', error)
+    alert('切换规则状态失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+  } finally {
+    togglingRuleStatus.value[rule.ruleId] = false
+  }
+}
+
+// 删除规则
+const handleDeleteRule = async (ruleId, childId) => {
+  if (!confirm('确定要删除这个规则吗？')) {
+    return
+  }
+
+  try {
+    const res = await parentalApi.deleteRule(ruleId)
+    if (res && res.success !== false) {
+      alert('规则已删除')
+      await loadChildRules(childId) // 重新加载规则列表
+      await loadRelationships() // 刷新关系列表以更新活跃规则数
     }
-    monitoring.value = {
-      sendReports: true,
-      reportFrequency: 'weekly'
+  } catch (error) {
+    console.error('删除规则失败:', error)
+    alert('删除规则失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+  }
+}
+
+// 加载当前用户角色
+const loadCurrentRole = () => {
+  try {
+    const userStr = sessionStorage.getItem('user')
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      // 检查用户角色，如果role是'parent'则设置为家长
+      isParent.value = user.role === 'parent' || user.Role === 'parent'
     }
-    blockedGames.value = []
+  } catch (error) {
+    console.error('加载用户角色失败:', error)
   }
 }
 
-const searchGames = () => {
-  // TODO: 调用 API 搜索游戏
-  if (gameSearchQuery.value.trim()) {
-    searchResults.value = [
-      { id: 1, name: '示例游戏 1' },
-      { id: 2, name: '示例游戏 2' }
-    ]
-  } else {
-    searchResults.value = []
+// 切换用户角色
+const handleToggleRole = async () => {
+  if (switchingRole.value) return
+
+  const newRole = !isParent.value ? 'parent' : 'user'
+  const confirmMessage = newRole === 'parent' 
+    ? '确定要切换为家长角色吗？切换后您将可以管理子账户。' 
+    : '确定要切换为普通用户角色吗？切换后您将失去家长管理权限。'
+
+  if (!confirm(confirmMessage)) {
+    return
+  }
+
+  switchingRole.value = true
+  try {
+    // 调用后端 API 更新角色
+    const res = await usersApi.updateRole({ role: newRole })
+    if (res && res.success !== false) {
+      // 更新sessionStorage中的角色
+      const userStr = sessionStorage.getItem('user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        user.role = newRole
+        user.Role = newRole
+        sessionStorage.setItem('user', JSON.stringify(user))
+        
+        // 触发用户信息更新事件，通知其他组件
+        window.dispatchEvent(new CustomEvent('userInfoUpdated', {
+          detail: { user }
+        }))
+      }
+
+      // 更新本地状态
+      isParent.value = newRole === 'parent'
+
+      // 清除已缓存的规则列表和展开状态，确保重新加载最新数据
+      childRules.value = {}
+      expandedChildren.value = {}
+
+      // 重新加载关系列表（这会获取最新的子账户信息和规则统计）
+      await loadRelationships()
+
+      alert(`已切换为${newRole === 'parent' ? '家长' : '普通用户'}角色`)
+    } else {
+      throw new Error(res?.message || '更新角色失败')
+    }
+  } catch (error) {
+    console.error('切换角色失败:', error)
+    const errorMessage = error.response?.data?.message || error.message || '未知错误'
+    alert('切换角色失败: ' + errorMessage)
+  } finally {
+    switchingRole.value = false
   }
 }
 
-const addBlockedGame = (game) => {
-  if (!blockedGames.value.find(g => g.id === game.id)) {
-    blockedGames.value.push(game)
+// 加载关系列表
+const loadRelationships = async () => {
+  loadingRelationships.value = true
+  try {
+    // 如果当前是家长角色，尝试获取子账户列表
+    if (isParent.value) {
+      try {
+        const res = await parentalApi.getChildren()
+        if (res && res.success !== false && res.data) {
+          children.value = res.data.children || []
+          return
+        }
+      } catch (error) {
+        // 如果获取失败，可能是角色不匹配，重置为普通用户
+        console.warn('获取子账户列表失败，可能不是家长角色:', error)
+        isParent.value = false
+        const userStr = sessionStorage.getItem('user')
+        if (userStr) {
+          const user = JSON.parse(userStr)
+          user.role = 'user'
+          user.Role = 'user'
+          sessionStorage.setItem('user', JSON.stringify(user))
+        }
+      }
+    }
+
+    // 尝试获取家长信息（孩子）
+    try {
+      const res = await parentalApi.getParent()
+      if (res && res.success !== false && res.data) {
+        isParent.value = false
+        parentInfo.value = res.data
+        return
+      }
+    } catch (error) {
+      // 没有建立关系
+      isParent.value = false
+      parentInfo.value = null
+    }
+  } catch (error) {
+    console.error('加载关系列表失败:', error)
+  } finally {
+    loadingRelationships.value = false
   }
-  showBlockGameDialog.value = false
-  gameSearchQuery.value = ''
-  searchResults.value = []
 }
 
-const removeBlockedGame = (gameId) => {
-  blockedGames.value = blockedGames.value.filter(g => g.id !== gameId)
+// 删除监管关系
+const handleDeleteRelationship = async (childId) => {
+  if (!confirm('确定要解除与这个子账户的监管关系吗？解除后，所有相关规则将被删除，子账户将收到通知。')) {
+    return
+  }
+
+  try {
+    const res = await parentalApi.deleteRelationship(childId)
+    if (res && res.success !== false) {
+      alert('监管关系已解除')
+      await loadRelationships() // 重新加载关系列表
+    }
+  } catch (error) {
+    console.error('解除关系失败:', error)
+    alert('解除关系失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+  }
+}
+
+// 打开规则设置对话框（新建）
+const openRuleDialog = (child) => {
+  selectedChild.value = child
+  editingRule.value = null
+  ruleForm.value = {
+    ruleType: 'playtime_daily_limit',
+    ruleValue: {},
+    isActive: true
+  }
+  updateRuleValue()
+  showRuleDialog.value = true
+}
+
+// 打开编辑规则对话框
+const openEditRuleDialog = (child, rule) => {
+  selectedChild.value = child
+  editingRule.value = rule
+  ruleForm.value = {
+    ruleType: rule.ruleType,
+    ruleValue: rule.ruleValue ? JSON.parse(JSON.stringify(rule.ruleValue)) : {},
+    isActive: rule.isActive
+  }
+  showRuleDialog.value = true
+}
+
+// 保存规则
+const handleSaveRule = async () => {
+  if (!selectedChild.value) return
+
+  // 处理游戏限制：确保 blockedGameIds 是数组
+  let ruleValue = { ...ruleForm.value.ruleValue }
+  if (ruleForm.value.ruleType === 'game_restriction') {
+    if (typeof ruleValue.blockedGameIds === 'string') {
+      ruleValue.blockedGameIds = ruleValue.blockedGameIds.split(',')
+        .map(id => parseInt(id.trim()))
+        .filter(id => !isNaN(id))
+    }
+    if (!Array.isArray(ruleValue.blockedGameIds)) {
+      ruleValue.blockedGameIds = []
+    }
+  }
+
+  savingRule.value = true
+  try {
+    if (editingRule.value) {
+      // 更新现有规则
+      const payload = {
+        ruleValue: ruleValue,
+        isActive: ruleForm.value.isActive
+      }
+      const res = await parentalApi.updateRule(editingRule.value.ruleId, payload)
+      if (res && res.success !== false) {
+        alert('规则更新成功')
+        showRuleDialog.value = false
+        await loadChildRules(selectedChild.value.childUserId) // 重新加载规则列表
+        await loadRelationships() // 刷新关系列表
+      }
+    } else {
+      // 创建新规则
+      const payload = {
+        childUserId: selectedChild.value.childUserId,
+        ruleType: ruleForm.value.ruleType,
+        ruleValue: ruleValue,
+        isActive: ruleForm.value.isActive
+      }
+      const res = await parentalApi.setRule(payload)
+      if (res && res.success !== false) {
+        alert('规则设置成功')
+        showRuleDialog.value = false
+        await loadChildRules(selectedChild.value.childUserId) // 重新加载规则列表
+        await loadRelationships() // 刷新关系列表
+      }
+    }
+  } catch (error) {
+    console.error('保存规则失败:', error)
+    alert('保存规则失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+  } finally {
+    savingRule.value = false
+  }
+}
+
+// 格式化日期
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('zh-CN', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  })
+}
+
+// 根据规则类型更新规则值
+const updateRuleValue = () => {
+  switch (ruleForm.value.ruleType) {
+    case 'playtime_daily_limit':
+      ruleForm.value.ruleValue = {
+        limitMinutes: 120,
+        warningMinutes: 100,
+        resetTime: '00:00'
+      }
+      break
+    case 'playtime_curfew':
+      ruleForm.value.ruleValue = {
+        startTime: '22:00',
+        endTime: '07:00'
+      }
+      break
+    case 'spending_limit':
+      ruleForm.value.ruleValue = {
+        limitAmount: 100,
+        period: 'monthly'
+      }
+      break
+    case 'game_restriction':
+      ruleForm.value.ruleValue = {
+        blockedGameIds: []
+      }
+      break
+    case 'age_restriction':
+      ruleForm.value.ruleValue = {
+        maxAgeRating: 12
+      }
+      break
+    default:
+      ruleForm.value.ruleValue = {}
+  }
+}
+
+// 更新游戏限制（将字符串转换为数组）
+const updateGameRestriction = (value) => {
+  if (typeof value === 'string') {
+    ruleForm.value.ruleValue.blockedGameIds = value.split(',')
+      .map(id => parseInt(id.trim()))
+      .filter(id => !isNaN(id))
+  }
 }
 
 onMounted(() => {
-  // TODO: 从 API 加载设置
+  loadCurrentRole()
+  loadRelationships()
 })
 </script>
 
@@ -515,11 +800,52 @@ onMounted(() => {
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
+  transition: all 0.3s;
 }
 
 .header-status.active {
   background: rgba(16, 185, 129, 0.1);
   border-color: var(--success-color);
+}
+
+.role-toggle-btn {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.3s;
+}
+
+.role-toggle-btn:hover:not(:disabled) {
+  background: var(--bg-surface);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+.role-toggle-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.role-toggle-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.role-toggle-btn.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.role-toggle-btn.active:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.25);
+}
+
+.switching-indicator {
+  margin-left: var(--spacing-xs);
+  font-size: 12px;
+  opacity: 0.7;
 }
 
 .status-dot {
@@ -875,6 +1201,254 @@ onMounted(() => {
   display: flex;
   gap: var(--spacing-md);
   justify-content: flex-end;
+}
+
+/* 关系列表样式 */
+.loading-state,
+.empty-state {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.relationships-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.relationship-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: all 0.3s;
+  margin-bottom: var(--spacing-md);
+}
+
+.relationship-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
+}
+
+.relationship-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  cursor: pointer;
+}
+
+.expand-icon {
+  margin-left: var(--spacing-sm);
+  transition: transform 0.3s;
+  color: var(--text-secondary);
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.relationship-info {
+  flex: 1;
+}
+
+.relationship-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.relationship-stats {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.relationship-stats span {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.relationship-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.relationship-note {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.btn-danger {
+  background: var(--error-color);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.btn-warning {
+  background: #f59e0b;
+  color: white;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.btn-success {
+  background: var(--success-color);
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #059669;
+}
+
+/* 规则设置对话框样式 */
+.rule-dialog {
+  max-width: 600px;
+}
+
+.form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.setting-textarea {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.setting-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* 规则列表样式 */
+.rules-container {
+  padding: var(--spacing-md);
+  border-top: 1px solid var(--border-color-light);
+  background: var(--bg-surface);
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.rule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+}
+
+.rule-info {
+  flex: 1;
+}
+
+.rule-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.rule-type {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rule-status {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rule-status.active {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success-color);
+}
+
+.rule-status.inactive {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--text-secondary);
+}
+
+.rule-details {
+  margin-top: var(--spacing-sm);
+}
+
+.rule-value {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  margin: var(--spacing-xs) 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.rule-statistics {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-sm);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.rule-statistics span {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.rule-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+}
+
+.btn-sm {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: 12px;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: var(--spacing-xs);
 }
 </style>
 

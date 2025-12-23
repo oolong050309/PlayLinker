@@ -244,8 +244,28 @@ public class PlatformsController : ControllerBase
         // 加密API Key
         var encryptedApiKey = _encryptionService.EncryptToken(request.ApiKey);
 
-        // 创建绑定记录
-        var binding = new UserPlatformBinding
+        // 查找现有绑定记录（不区分 BindingStatus），避免唯一索引冲突
+        var existingBinding = await _dbContext.UserPlatformBindings
+            .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 1);
+
+        UserPlatformBinding binding;
+        if (existingBinding != null)
+        {
+            // 已有记录：视为“重新绑定/更新Key”，直接更新
+            binding = existingBinding;
+            binding.PlatformUserId = request.SteamId;
+            binding.AccessToken = encryptedApiKey;
+            binding.BindingStatus = true;
+            binding.BindingTime = DateTime.UtcNow;
+            binding.ExpireTime = DateTime.UtcNow.AddYears(10);
+
+            _dbContext.UserPlatformBindings.Update(binding);
+            await _dbContext.SaveChangesAsync();
+        }
+        else
+        {
+            // 创建新的绑定记录
+            binding = new UserPlatformBinding
         {
             UserId = userId,
             PlatformId = 1, // Steam
@@ -258,6 +278,7 @@ public class PlatformsController : ControllerBase
 
         _dbContext.UserPlatformBindings.Add(binding);
         await _dbContext.SaveChangesAsync();
+        }
 
         return new PlatformBindResponseDto
         {
@@ -331,7 +352,26 @@ public class PlatformsController : ControllerBase
         }
 
         // 创建绑定记录
-        var binding = new UserPlatformBinding
+        var existingBinding = await _dbContext.UserPlatformBindings
+            .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 7);
+
+        UserPlatformBinding binding;
+        if (existingBinding != null)
+        {
+            binding = existingBinding;
+            binding.PlatformUserId = request.XboxUserId;
+            binding.AccessToken = encryptedAccessToken;
+            binding.RefreshToken = encryptedRefreshToken;
+            binding.BindingStatus = true;
+            binding.BindingTime = DateTime.UtcNow;
+            binding.ExpireTime = DateTime.UtcNow.AddDays(30);
+
+            _dbContext.UserPlatformBindings.Update(binding);
+            await _dbContext.SaveChangesAsync();
+        }
+        else
+        {
+            binding = new UserPlatformBinding
         {
             UserId = userId,
             PlatformId = 7, // Xbox
@@ -345,6 +385,7 @@ public class PlatformsController : ControllerBase
 
         _dbContext.UserPlatformBindings.Add(binding);
         await _dbContext.SaveChangesAsync();
+        }
 
         return new PlatformBindResponseDto
         {
@@ -418,7 +459,26 @@ public class PlatformsController : ControllerBase
         }
 
         // 创建绑定记录
-        var binding = new UserPlatformBinding
+        var existingBinding = await _dbContext.UserPlatformBindings
+            .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 6);
+
+        UserPlatformBinding binding;
+        if (existingBinding != null)
+        {
+            binding = existingBinding;
+            binding.PlatformUserId = request.PsnOnlineId;
+            binding.AccessToken = encryptedAccessToken;
+            binding.RefreshToken = encryptedRefreshToken;
+            binding.BindingStatus = true;
+            binding.BindingTime = DateTime.UtcNow;
+            binding.ExpireTime = DateTime.UtcNow.AddDays(30);
+
+            _dbContext.UserPlatformBindings.Update(binding);
+            await _dbContext.SaveChangesAsync();
+        }
+        else
+        {
+            binding = new UserPlatformBinding
         {
             UserId = userId,
             PlatformId = 6, // PSN
@@ -432,6 +492,7 @@ public class PlatformsController : ControllerBase
 
         _dbContext.UserPlatformBindings.Add(binding);
         await _dbContext.SaveChangesAsync();
+        }
 
         return new PlatformBindResponseDto
         {
@@ -505,7 +566,26 @@ public class PlatformsController : ControllerBase
         }
 
         // 创建绑定记录
-        var binding = new UserPlatformBinding
+        var existingBinding = await _dbContext.UserPlatformBindings
+            .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 5);
+
+        UserPlatformBinding binding;
+        if (existingBinding != null)
+        {
+            binding = existingBinding;
+            binding.PlatformUserId = request.GogUserId;
+            binding.AccessToken = encryptedAccessToken;
+            binding.RefreshToken = encryptedRefreshToken;
+            binding.BindingStatus = true;
+            binding.BindingTime = DateTime.UtcNow;
+            binding.ExpireTime = DateTime.UtcNow.AddDays(30);
+
+            _dbContext.UserPlatformBindings.Update(binding);
+            await _dbContext.SaveChangesAsync();
+        }
+        else
+        {
+            binding = new UserPlatformBinding
         {
             UserId = userId,
             PlatformId = 5, // GOG
@@ -519,6 +599,7 @@ public class PlatformsController : ControllerBase
 
         _dbContext.UserPlatformBindings.Add(binding);
         await _dbContext.SaveChangesAsync();
+        }
 
         return new PlatformBindResponseDto
         {
