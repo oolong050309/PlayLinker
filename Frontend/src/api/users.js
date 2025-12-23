@@ -43,6 +43,15 @@ export const usersApi = {
         'Content-Type': 'multipart/form-data'
       }
     })
+  },
+
+  /**
+   * 更新用户角色
+   * @param {Object} data - { role: 'user' | 'parent' | 'admin' }
+   * @returns {Promise}
+   */
+  updateRole(data) {
+    return api.patch('/users/role', data)
   }
 }
 

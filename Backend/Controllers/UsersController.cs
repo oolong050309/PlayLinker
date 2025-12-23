@@ -295,5 +295,118 @@ public class UsersController : ControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
+
+    /// <summary>
+    /// 更新用户角色
+    /// </summary>
+    /// <param name="request">更新角色请求</param>
+    [SwaggerOperation(Summary = "更新用户角色", Description = "更新当前登录用户的角色（user 或 parent）。需要JWT认证。")]
+    [HttpPatch("role")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<object>>> UpdateRole([FromBody] UpdateUserRoleRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_VALIDATION", string.Join(", ", errors)));
+            }
+
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            // 验证角色名称
+            var validRoles = new[] { "user", "parent", "admin" };
+            if (!validRoles.Contains(request.Role.ToLower()))
+            {
+                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_INVALID_ROLE", "无效的角色名称。允许的角色：user, parent, admin"));
+            }
+
+            // 查找角色
+            var role = _dbContext.Roles.FirstOrDefault(r => r.RoleName.ToLower() == request.Role.ToLower());
+            if (role == null)
+            {
+                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_ROLE_NOT_FOUND", "角色不存在"));
+            }
+
+            // 查找用户
+            var user = _dbContext.Users
+                .Include(u => u.Role)
+                .FirstOrDefault(u => u.UserId == userId);
+            if (user == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "用户不存在"));
+            }
+
+            // 如果角色没有变化，直接返回成功
+            if (user.RoleId == role.RoleId)
+            {
+                return Ok(ApiResponse<object>.SuccessResponse(new { role = role.RoleName }, "角色未变化"));
+            }
+
+            var oldRoleName = user.Role?.RoleName;
+            var newRoleName = role.RoleName;
+
+            // 更新角色
+            user.RoleId = role.RoleId;
+            _dbContext.Users.Update(user);
+            await _dbContext.SaveChangesAsync();
+
+            // 如果从家长角色变为普通用户，禁用所有规则
+            if (oldRoleName == "parent" && newRoleName.ToLower() == "user")
+            {
+                try
+                {
+                    // 获取该用户作为家长的所有子账户ID
+                    var childUserIds = _dbContext.ParentalControlRelationships
+                        .Where(r => r.ParentUserId == userId)
+                        .Select(r => r.ChildUserId)
+                        .ToList();
+
+                    if (childUserIds.Count > 0)
+                    {
+                        // 批量禁用所有相关规则
+                        var rules = _dbContext.ParentalControlRules
+                            .Where(rule => childUserIds.Contains(rule.ChildUserId) && rule.IsActive == true)
+                            .ToList();
+
+                        var disabledCount = 0;
+                        foreach (var rule in rules)
+                        {
+                            rule.IsActive = false;
+                            rule.UpdatedAt = DateTime.UtcNow;
+                            disabledCount++;
+                        }
+
+                        if (disabledCount > 0)
+                        {
+                            await _dbContext.SaveChangesAsync();
+                            _logger.LogInformation($"Disabled {disabledCount} rules when user {userId} changed from parent to user");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Failed to disable rules when user {userId} changed role, but role update succeeded");
+                    // 不阻止角色更新，只记录警告
+                }
+            }
+
+            _logger.LogInformation($"User role updated: {userId}, new role: {role.RoleName}");
+            return Ok(ApiResponse<object>.SuccessResponse(new { role = role.RoleName }, "角色更新成功"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating user role");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
 }
 

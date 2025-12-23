@@ -22,7 +22,7 @@
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-icon bg-indigo">
-            <i data-lucide="link" class="icon"></i>
+            <Link class="icon" size="24" />
           </div>
           <div class="stat-info">
             <div class="stat-label">已连接平台</div>
@@ -105,8 +105,8 @@
               </div>
             </div>
           </div>
-        </div>
-      </div>
+            </div>
+          </div>
 
       <!-- 可用平台 -->
       <div class="section" v-if="availablePlatforms.length > 0">
@@ -139,7 +139,7 @@
                 :disabled="loading"
               >
                 <Link class="icon" size="16" /> 连接账号
-              </button>
+                </button>
             </div>
           </div>
         </div>
@@ -148,68 +148,68 @@
       <!-- 同步设置 -->
       <div class="section">
         <div class="settings-card">
-          <h2 class="section-title">
+        <h2 class="section-title">
             <Settings class="icon" size="20" />
             同步设置
-          </h2>
+        </h2>
           <div class="settings-list">
             <div class="setting-item">
               <div class="setting-info">
                 <h3>自动同步游戏库</h3>
                 <p>每小时自动同步你的游戏库</p>
-              </div>
+                </div>
               <div 
                 class="toggle-switch" 
                 :class="{ active: syncSettings.autoSync }"
                 @click="toggleSwitch('autoSync')"
               >
                 <span class="toggle-thumb"></span>
+                </div>
               </div>
-            </div>
             
             <div class="setting-item">
               <div class="setting-info">
                 <h3>同步成就</h3>
                 <p>从已连接平台导入成就和奖杯</p>
-              </div>
+            </div>
               <div 
                 class="toggle-switch" 
                 :class="{ active: syncSettings.achievements }"
                 @click="toggleSwitch('achievements')"
               >
                 <span class="toggle-thumb"></span>
-              </div>
             </div>
-            
+          </div>
+
             <div class="setting-item">
               <div class="setting-info">
                 <h3>同步游玩时长</h3>
                 <p>追踪并汇总所有平台的游玩时长</p>
-              </div>
+                </div>
               <div 
                 class="toggle-switch" 
                 :class="{ active: syncSettings.playtime }"
                 @click="toggleSwitch('playtime')"
               >
                 <span class="toggle-thumb"></span>
+                </div>
               </div>
-            </div>
             
             <div class="setting-item">
               <div class="setting-info">
                 <h3>同步通知</h3>
                 <p>同步完成或失败时收到通知</p>
-              </div>
+            </div>
               <div 
                 class="toggle-switch" 
                 :class="{ active: syncSettings.notify }"
                 @click="toggleSwitch('notify')"
               >
                 <span class="toggle-thumb"></span>
-              </div>
+            </div>
             </div>
           </div>
-          
+
           <div class="settings-actions">
             <button 
               class="btn btn-primary"
@@ -221,9 +221,9 @@
             <button class="btn btn-tertiary">
               查看同步历史
             </button>
-          </div>
-        </div>
-      </div>
+                </div>
+                </div>
+              </div>
     </main>
 
     <!-- 绑定模态框 -->
@@ -233,8 +233,8 @@
           <h3 class="modal-title">绑定{{ selectedPlatform?.name }}</h3>
           <button class="modal-close" @click="closeBindModal">
             <X size="20" />
-          </button>
-        </div>
+              </button>
+            </div>
         <div class="modal-body">
           <div v-if="selectedPlatform?.id === 1" class="form-group">
             <label>Steam ID *</label>
@@ -256,7 +256,7 @@
             />
             <p class="form-hint">在 <a href="https://steamcommunity.com/dev/apikey" target="_blank">Steam API Key页面</a> 申请</p>
           </div>
-          
+
           <div v-if="selectedPlatform?.id === 7" class="form-group">
             <label>Xbox用户ID *</label>
             <input 
@@ -265,7 +265,7 @@
               class="form-input"
               placeholder="请输入Xbox用户ID"
             />
-          </div>
+                </div>
           <div v-if="selectedPlatform?.id === 7" class="form-group">
             <label>访问令牌（可选）</label>
             <input 
@@ -274,7 +274,7 @@
               class="form-input"
               placeholder="请输入访问令牌"
             />
-          </div>
+                </div>
           <div v-if="selectedPlatform?.id === 7" class="form-group">
             <label>刷新令牌（可选）</label>
             <input 
@@ -283,7 +283,7 @@
               class="form-input"
               placeholder="请输入刷新令牌"
             />
-          </div>
+              </div>
 
           <div v-if="selectedPlatform?.id === 6" class="form-group">
             <label>PSN在线ID *</label>
@@ -293,7 +293,7 @@
               class="form-input"
               placeholder="请输入PSN在线ID"
             />
-          </div>
+            </div>
           <div v-if="selectedPlatform?.id === 6" class="form-group">
             <label>访问令牌（可选）</label>
             <input 
@@ -302,7 +302,7 @@
               class="form-input"
               placeholder="请输入访问令牌"
             />
-          </div>
+            </div>
           <div v-if="selectedPlatform?.id === 6" class="form-group">
             <label>刷新令牌（可选）</label>
             <input 
@@ -311,7 +311,7 @@
               class="form-input"
               placeholder="请输入刷新令牌"
             />
-          </div>
+      </div>
 
           <div v-if="selectedPlatform?.id === 5" class="form-group">
             <label>GOG用户ID *</label>
@@ -321,7 +321,7 @@
               class="form-input"
               placeholder="请输入GOG用户ID"
             />
-          </div>
+              </div>
           <div v-if="selectedPlatform?.id === 5" class="form-group">
             <label>访问令牌（可选）</label>
             <input 
@@ -330,7 +330,7 @@
               class="form-input"
               placeholder="请输入访问令牌"
             />
-          </div>
+            </div>
           <div v-if="selectedPlatform?.id === 5" class="form-group">
             <label>刷新令牌（可选）</label>
             <input 
@@ -339,8 +339,8 @@
               class="form-input"
               placeholder="请输入刷新令牌"
             />
-          </div>
-        </div>
+              </div>
+            </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeBindModal">取消</button>
           <button 
@@ -349,11 +349,11 @@
             :disabled="loading"
           >
             {{ loading ? '绑定中...' : '确认绑定' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
+              </button>
+            </div>
+            </div>
+          </div>
+          
     <!-- 加载遮罩 -->
     <div v-if="loading" class="loading-overlay">
       <div class="loading-spinner">加载中...</div>
@@ -365,6 +365,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { CheckCircle, Link, Gamepad2, Trophy, Clock, PlusCircle, Settings, RefreshCw, X } from 'lucide-vue-next'
 import { platformsApi } from '@/api/platforms'
+import { libraryApi, steamApi } from '@/api/index'
 
 // 平台配置
 const platformConfig = {
@@ -392,6 +393,19 @@ const syncSettings = ref({
   playtime: true,
   notify: false
 })
+
+// 获取当前登录用户ID（从 sessionStorage 的 user 中解析）
+const getCurrentUserId = () => {
+  try {
+    const userStr = sessionStorage.getItem('user')
+    if (!userStr) return null
+    const user = JSON.parse(userStr)
+    return user.userId || user.id || null
+  } catch (e) {
+    console.warn('解析用户ID失败:', e)
+    return null
+  }
+}
 
 // 绑定表单
 const showBindModal = ref(false)
@@ -454,14 +468,40 @@ const getPlatformIdByName = (platformName) => {
   return nameMap[platformName] || null
 }
 
-// 更新统计数据
+// 从后端刷新统计数据（游戏库 + 成就）
+const refreshStats = async () => {
+  try {
+    const res = await libraryApi.getOverview()
+    if (res.success && res.data) {
+      const o = res.data
+      // 兼容大小写字段
+      const totalGamesOwned = o.totalGamesOwned ?? o.TotalGamesOwned ?? 0
+      const totalAchievements = o.totalAchievements ?? o.TotalAchievements ?? 0
+
+      stats.value.connectedCount = connectedPlatforms.value.length
+      stats.value.totalGames = totalGamesOwned
+      stats.value.totalAchievements = totalAchievements
+
+      const platformStats = o.platformStats || o.PlatformStats || []
+      const firstPlatform = platformStats[0]
+      const lastSyncTime = firstPlatform?.lastSyncTime || firstPlatform?.LastSyncTime
+      stats.value.lastSync = lastSyncTime || '刚刚'
+    } else {
+      // 后端返回空数据时，重置为0
+      stats.value.connectedCount = connectedPlatforms.value.length
+      stats.value.totalGames = 0
+      stats.value.totalAchievements = 0
+      stats.value.lastSync = '从未同步'
+    }
+  } catch (error) {
+    console.error('刷新游戏库统计失败:', error)
+  }
+}
+
+// 更新统计数据：现在直接调用后端刷新
 const updateStats = () => {
   stats.value.connectedCount = connectedPlatforms.value.length
-  // 这里可以从其他API获取真实的统计数据
-  // 暂时使用模拟数据
-  stats.value.totalGames = 127
-  stats.value.totalAchievements = 892
-  stats.value.lastSync = '2分钟前'
+  refreshStats()
 }
 
 // 打开绑定模态框
@@ -528,8 +568,36 @@ const handleBind = async () => {
     const response = await platformsApi.bindPlatform(bindData)
     if (response.success) {
       alert(`${platform.name}绑定成功！`)
+
+      // 绑定成功后：
+      // 1) 对于 Steam，调用后端 Steam 导入接口，拉取游戏和成就
+      if (platform.id === 1) {
+        const userId = getCurrentUserId()
+        if (userId) {
+          try {
+            await steamApi.importData({
+              userId,
+              steamId: bindForm.value.steamId,
+              importGames: true,
+              importAchievements: true,
+              importFriends: false
+            })
+          } catch (e) {
+            console.error('Steam 数据导入失败:', e)
+          }
+        }
+      }
+
+      // 2) 触发一次游戏库概览刷新任务（轻量级）
+      try {
+        await libraryApi.syncPlatform({ platformId: platform.id, fullSync: true })
+      } catch (e) {
+        console.error('触发游戏库同步失败:', e)
+      }
+
       closeBindModal()
       await loadBindings()
+      await refreshStats()
     }
   } catch (error) {
     console.error('绑定平台失败:', error)
@@ -580,10 +648,38 @@ const handleUnbind = async (binding) => {
 const handleSync = async (platformId) => {
   loading.value = true
   try {
-    // 这里需要根据实际后端API调整
+    // 调用统一平台同步接口（如有实现）
     await platformsApi.syncPlatform(platformId)
+
+    // 如果是 Steam，再次调用导入接口以刷新游戏和成就
+    if (platformId === 1) {
+      const userId = getCurrentUserId()
+      const steamBinding = connectedPlatforms.value.find(b => b.platformId === 1)
+      if (userId && steamBinding?.platformUserId) {
+        try {
+          await steamApi.importData({
+            userId,
+            steamId: steamBinding.platformUserId,
+            importGames: true,
+            importAchievements: true,
+            importFriends: false
+          })
+        } catch (e) {
+          console.error('Steam 数据导入失败:', e)
+        }
+      }
+    }
+
+    // 同时调用游戏库同步接口，触发后台刷新游戏库汇总
+    try {
+      await libraryApi.syncPlatform({ platformId, fullSync: false })
+    } catch (e) {
+      console.error('调用游戏库同步接口失败:', e)
+    }
+
     alert('同步成功！')
     await loadBindings()
+    await refreshStats()
   } catch (error) {
     console.error('同步平台失败:', error)
     alert('同步失败: ' + (error.message || '未知错误'))
@@ -652,9 +748,34 @@ const handleSyncAll = async () => {
   try {
     for (const binding of connectedPlatforms.value) {
       await platformsApi.syncPlatform(binding.platformId)
+
+      // 针对 Steam 平台调用导入接口
+      if (binding.platformId === 1) {
+        const userId = getCurrentUserId()
+        if (userId && binding.platformUserId) {
+          try {
+            await steamApi.importData({
+              userId,
+              steamId: binding.platformUserId,
+              importGames: true,
+              importAchievements: true,
+              importFriends: false
+            })
+          } catch (e) {
+            console.error('Steam 数据导入失败:', e)
+          }
+        }
+      }
+
+      try {
+        await libraryApi.syncPlatform({ platformId: binding.platformId, fullSync: false })
+      } catch (e) {
+        console.error('调用游戏库同步接口失败:', e)
+      }
     }
     alert('全部平台同步成功！')
     await loadBindings()
+    await refreshStats()
   } catch (error) {
     console.error('同步全部平台失败:', error)
     alert('同步失败: ' + (error.message || '未知错误'))
@@ -665,6 +786,7 @@ const handleSyncAll = async () => {
 
 onMounted(() => {
   loadBindings()
+  refreshStats()
 })
 </script>
 

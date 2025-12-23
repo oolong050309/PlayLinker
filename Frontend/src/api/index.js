@@ -206,9 +206,9 @@ export const newsApi = {
 
 // Steam API
 export const steamApi = {
-  // 导入Steam数据
+  // 导入Steam数据（单独提高超时时间，避免导入过程过长导致超时）
   importData(data) {
-    return api.post('/steam/import', data)
+    return api.post('/steam/import', data, { timeout: 60000 })
   },
   // 获取Steam用户信息
   getUser(steamId) {

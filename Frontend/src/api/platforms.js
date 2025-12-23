@@ -40,12 +40,9 @@ export const platformsApi = {
    * @param {number} platformId - 平台ID
    */
   syncPlatform(platformId) {
-    // 注意：这个API端点可能需要根据实际后端实现调整
-    // 如果后端没有这个端点，可以暂时使用其他同步接口
-    return api.post(`/platforms/${platformId}/sync`).catch(() => {
-      // 如果同步API不存在，返回成功（避免报错）
-      return Promise.resolve({ success: true, message: '同步功能待实现' })
-    })
+    // 当前后端未提供 /platforms/{id}/sync 端点，实际同步由其他接口完成
+    // 这里直接返回成功，避免 404 报错干扰前端逻辑
+    return Promise.resolve({ success: true, message: '平台同步由其他接口处理' })
   }
 }
 

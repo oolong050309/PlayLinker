@@ -5,6 +5,7 @@ using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Swashbuckle.AspNetCore.Annotations;
 
@@ -21,17 +22,21 @@ public class ParentalController : ControllerBase
     private readonly PlayLinkerDbContext _dbContext;
     private readonly ILogger<ParentalController> _logger;
 
-    public ParentalController(PlayLinkerDbContext dbContext, ILogger<ParentalController> logger)
+        public ParentalController(PlayLinkerDbContext dbContext, ILogger<ParentalController> logger)
     {
         _dbContext = dbContext;
         _logger = logger;
     }
 
     /// <summary>
-    /// 创建监管关系
+    /// （旧）直接创建监管关系（使用子账户ID）
     /// </summary>
+    /// <remarks>
+    /// 建议改用基于邀请/令牌的流程：CreateInvitation 和 RespondInvitation。
+    /// 该接口仍然保留用于兼容管理后台或测试。
+    /// </remarks>
     /// <param name="request">创建监管关系请求</param>
-    [SwaggerOperation(Summary = "创建监管关系", Description = "家长用户与子账户建立一对一监管关系。错误码：ERR_CHILD_ALREADY_SUPERVISED。需要parent角色。")]
+    [SwaggerOperation(Summary = "直接创建监管关系（兼容）", Description = "家长用户与子账户建立一对一监管关系（直接使用子账户ID）。错误码：ERR_CHILD_ALREADY_SUPERVISED。需要parent角色。")]
     [HttpPost("relationships")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
@@ -124,6 +129,280 @@ public class ParentalController : ControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
+
+    /// <summary>
+        /// 创建家长监管邀请（通过用户名 + 邀请令牌）
+        /// </summary>
+        /// <remarks>
+        /// 流程说明：
+        /// 1. 家长在前端输入子账户用户名，调用本接口创建邀请；
+        /// 2. 系统为被邀请用户生成一条通知（SourceModule = parental_control），内容中包含唯一令牌token；
+        /// 3. 子账户在通知中心中同意或拒绝邀请，调用 RespondInvitation 完成绑定。
+        /// 
+        /// 错误码：
+        /// - ERR_CHILD_NOT_FOUND 子账户不存在
+        /// - ERR_CHILD_ALREADY_SUPERVISED 子账户已被监管
+        /// </remarks>
+        [SwaggerOperation(Summary = "创建家长监管邀请", Description = "使用子账户用户名发起家长监管邀请，系统会给对方发送通知，待对子账户同意后正式建立监管关系。需要parent或admin角色。")]
+        [HttpPost("invitations")]
+        [ProducesResponseType(typeof(ApiResponse<CreateParentalInvitationResponseDto>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status409Conflict)]
+        public async Task<ActionResult<ApiResponse<CreateParentalInvitationResponseDto>>> CreateInvitation([FromBody] CreateParentalInvitationRequestDto request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(ApiResponse<object>.ErrorResponse("ERR_VALIDATION", string.Join(", ", errors)));
+                }
+
+                var userIdClaim = User.FindFirst("user_id");
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int parentUserId))
+                {
+                    return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+                }
+
+                // 检查家长角色（允许 parent 或 admin）
+                var parentUser = _dbContext.Users
+                    .Include(u => u.Role)
+                    .FirstOrDefault(u => u.UserId == parentUserId);
+
+                var roleName = parentUser?.Role?.RoleName;
+                if (roleName != "parent" && roleName != "admin")
+                {
+                    return Forbid();
+                }
+
+                // 通过用户名查找子账户
+                var childUser = _dbContext.Users.FirstOrDefault(u => u.Username == request.ChildUsername);
+                if (childUser == null)
+                {
+                    return BadRequest(ApiResponse<object>.ErrorResponse("ERR_CHILD_NOT_FOUND", "子账户用户名不存在"));
+                }
+
+                if (childUser.UserId == parentUserId)
+                {
+                    return BadRequest(ApiResponse<object>.ErrorResponse("ERR_INVALID_CHILD", "不能对自己创建监管关系"));
+                }
+
+                // 检查是否已存在监管关系
+                var existingRelationship = _dbContext.ParentalControlRelationships
+                    .FirstOrDefault(r => r.ChildUserId == childUser.UserId);
+
+                if (existingRelationship != null)
+                {
+                    return Conflict(ApiResponse<object>.ErrorResponse("ERR_CHILD_ALREADY_SUPERVISED", "子账户已被监管"));
+                }
+
+                // 生成邀请令牌
+                var token = Guid.NewGuid().ToString("N");
+                var expiresAt = DateTime.UtcNow.AddDays(3);
+
+                var payload = new ParentalInvitationPayload
+                {
+                    Token = token,
+                    ParentUserId = parentUserId,
+                    ParentUsername = parentUser!.Username,
+                    ChildUserId = childUser.UserId,
+                    ChildUsername = childUser.Username,
+                    Message = request.Message,
+                    ExpiresAt = expiresAt
+                };
+
+                var contentJson = JsonSerializer.Serialize(payload);
+
+                // 创建通知给子账户
+                var notification = new NotificationCenter
+                {
+                    UserId = childUser.UserId,
+                    SourceModule = "parental_control",
+                    Title = "家长监管邀请",
+                    Content = contentJson,
+                    NotificationType = "info",
+                    IsRead = false,
+                    RelatedId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _dbContext.NotificationCenters.Add(notification);
+                await _dbContext.SaveChangesAsync();
+
+                var response = new CreateParentalInvitationResponseDto
+                {
+                    Token = token,
+                    ParentUserId = parentUserId,
+                    ParentUsername = parentUser.Username,
+                    ChildUserId = childUser.UserId,
+                    ChildUsername = childUser.Username,
+                    ExpiresAt = expiresAt
+                };
+
+                _logger.LogInformation("Parental invitation created: parent {ParentUserId}, child {ChildUserId}", parentUserId, childUser.UserId);
+                return CreatedAtAction(nameof(CreateInvitation), ApiResponse<CreateParentalInvitationResponseDto>.SuccessResponse(response, "邀请已发送"));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating parental invitation");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+            }
+        }
+
+        /// <summary>
+        /// 子账户响应家长监管邀请（同意 / 拒绝）
+        /// </summary>
+        /// <remarks>
+        /// - 子账户通过通知中的token调用本接口；
+        /// - 同意时会正式创建 ParentalControlRelationship；
+        /// - 无论同意或拒绝，都会给家长发送一条结果通知。
+        /// 
+        /// 错误码：
+        /// - ERR_INVITE_NOT_FOUND 邀请不存在或已过期
+        /// - ERR_INVITE_EXPIRED 邀请已过期
+        /// - ERR_CHILD_ALREADY_SUPERVISED 子账户已被监管
+        /// </remarks>
+        [SwaggerOperation(Summary = "响应家长监管邀请", Description = "子账户通过token同意或拒绝家长监管邀请，同时给家长发送通知。")]
+        [HttpPost("invitations/respond")]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+        public async Task<ActionResult<ApiResponse<object>>> RespondInvitation([FromBody] RespondParentalInvitationRequestDto request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(ApiResponse<object>.ErrorResponse("ERR_VALIDATION", string.Join(", ", errors)));
+                }
+
+                var userIdClaim = User.FindFirst("user_id");
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int childUserId))
+                {
+                    return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+                }
+
+                // 查找该用户收到的家长监管邀请通知
+                var notifications = _dbContext.NotificationCenters
+                    .Where(n => n.UserId == childUserId && n.SourceModule == "parental_control" && n.IsRead == false)
+                    .OrderByDescending(n => n.CreatedAt)
+                    .ToList();
+
+                ParentalInvitationPayload? matchedPayload = null;
+                NotificationCenter? matchedNotification = null;
+
+                foreach (var n in notifications)
+                {
+                    try
+                    {
+                        var payload = JsonSerializer.Deserialize<ParentalInvitationPayload>(n.Content);
+                        if (payload != null && payload.Token == request.Token)
+                        {
+                            matchedPayload = payload;
+                            matchedNotification = n;
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        // 忽略解析失败的通知
+                    }
+                }
+
+                if (matchedPayload == null || matchedNotification == null)
+                {
+                    return BadRequest(ApiResponse<object>.ErrorResponse("ERR_INVITE_NOT_FOUND", "邀请不存在或已失效"));
+                }
+
+                // 检查是否过期
+                if (matchedPayload.ExpiresAt <= DateTime.UtcNow)
+                {
+                    matchedNotification.IsRead = true;
+                    _dbContext.NotificationCenters.Update(matchedNotification);
+                    await _dbContext.SaveChangesAsync();
+                    return BadRequest(ApiResponse<object>.ErrorResponse("ERR_INVITE_EXPIRED", "邀请已过期"));
+                }
+
+                // 标记原通知为已读
+                matchedNotification.IsRead = true;
+                _dbContext.NotificationCenters.Update(matchedNotification);
+
+                // 如果拒绝，发送通知给家长后返回
+                if (!request.Accept)
+                {
+                    var rejectNotification = new NotificationCenter
+                    {
+                        UserId = matchedPayload.ParentUserId,
+                        SourceModule = "parental_control",
+                        Title = "家长监管邀请被拒绝",
+                        Content = $"{matchedPayload.ChildUsername} 拒绝了你的家长监管请求。",
+                        NotificationType = "info",
+                        IsRead = false,
+                        RelatedId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.NotificationCenters.Add(rejectNotification);
+
+                    await _dbContext.SaveChangesAsync();
+                    return Ok(ApiResponse<object>.SuccessResponse(new { }, "已拒绝邀请"));
+                }
+
+                // 同意：检查是否已存在监管关系
+                var existingRelationship = _dbContext.ParentalControlRelationships
+                    .FirstOrDefault(r => r.ChildUserId == matchedPayload.ChildUserId);
+
+                if (existingRelationship != null)
+                {
+                    await _dbContext.SaveChangesAsync();
+                    return Conflict(ApiResponse<object>.ErrorResponse("ERR_CHILD_ALREADY_SUPERVISED", "子账户已被监管"));
+                }
+
+                // 创建监管关系
+                var relationship = new ParentalControlRelationship
+                {
+                    ParentUserId = matchedPayload.ParentUserId,
+                    ChildUserId = matchedPayload.ChildUserId,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _dbContext.ParentalControlRelationships.Add(relationship);
+
+                // 给家长发送同意通知
+                var acceptNotification = new NotificationCenter
+                {
+                    UserId = matchedPayload.ParentUserId,
+                    SourceModule = "parental_control",
+                    Title = "家长监管邀请已接受",
+                    Content = $"{matchedPayload.ChildUsername} 已同意你的家长监管请求。",
+                    NotificationType = "info",
+                    IsRead = false,
+                    RelatedId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    CreatedAt = DateTime.UtcNow
+                };
+                _dbContext.NotificationCenters.Add(acceptNotification);
+
+                await _dbContext.SaveChangesAsync();
+
+                var response = new
+                {
+                    relationshipId = relationship.RelationshipId,
+                    parentUserId = relationship.ParentUserId,
+                    childUserId = relationship.ChildUserId,
+                    createdAt = relationship.CreatedAt
+                };
+
+                _logger.LogInformation("Parental invitation accepted: parent {ParentUserId}, child {ChildUserId}", matchedPayload.ParentUserId, matchedPayload.ChildUserId);
+                return Ok(ApiResponse<object>.SuccessResponse(response, "已建立家长监管关系"));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error responding to parental invitation");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+            }
+        }
 
     /// <summary>
     /// 获取子账户列表
@@ -281,6 +560,234 @@ public class ParentalController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error setting parental rule");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
+    /// 更新监管规则
+    /// </summary>
+    /// <param name="ruleId">规则ID</param>
+    /// <param name="request">规则更新请求</param>
+    [SwaggerOperation(Summary = "更新监管规则", Description = "更新指定规则的规则值和激活状态。需要parent角色。")]
+    [HttpPut("rules/{ruleId}")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<object>>> UpdateRule(int ruleId, [FromBody] UpdateParentalRuleRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_VALIDATION", string.Join(", ", errors)));
+            }
+
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            // 检查用户角色
+            var parentUser = _dbContext.Users
+                .Include(u => u.Role)
+                .FirstOrDefault(u => u.UserId == userId);
+
+            var roleName = parentUser?.Role?.RoleName;
+            if (roleName != "parent" && roleName != "admin")
+            {
+                return Forbid();
+            }
+
+            // 查找规则
+            var rule = _dbContext.ParentalControlRules
+                .FirstOrDefault(r => r.RuleId == ruleId);
+
+            if (rule == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_RULE_NOT_FOUND", "规则不存在"));
+            }
+
+            // 检查监管关系（确保该规则属于当前家长监管的子账户）
+            var relationship = _dbContext.ParentalControlRelationships
+                .FirstOrDefault(r => r.ParentUserId == userId && r.ChildUserId == rule.ChildUserId);
+
+            if (relationship == null && roleName != "admin")
+            {
+                return Forbid();
+            }
+
+            // 更新规则
+            // 只有当 ruleValue 不为空且不是空对象时才更新规则值
+            // 如果 ruleValue 是空对象或 null，则保持原有规则值不变（只更新 isActive）
+            if (request.RuleValue != null)
+            {
+                var ruleValueJson = JsonSerializer.Serialize(request.RuleValue);
+                // 检查是否是空对象 "{}" 或 "null"
+                var isEmpty = ruleValueJson == "{}" || ruleValueJson == "null" || string.IsNullOrWhiteSpace(ruleValueJson);
+                if (!isEmpty)
+                {
+                    rule.RuleValue = ruleValueJson;
+                }
+                // 如果 ruleValue 是空对象，说明前端只想更新 isActive，保持原有规则值不变
+            }
+            // 始终更新 isActive 状态
+            rule.IsActive = request.IsActive;
+            rule.UpdatedAt = DateTime.UtcNow;
+
+            await _dbContext.SaveChangesAsync();
+
+            var response = new
+            {
+                ruleId = rule.RuleId,
+                ruleType = rule.RuleType,
+                updatedAt = rule.UpdatedAt
+            };
+
+            _logger.LogInformation($"Parental rule updated: rule {ruleId}, parent {userId}");
+            return Ok(ApiResponse<object>.SuccessResponse(response, "规则更新成功"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating parental rule");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
+    /// 批量禁用用户的所有规则
+    /// </summary>
+    /// <param name="parentUserId">家长用户ID</param>
+    [SwaggerOperation(Summary = "批量禁用用户的所有规则", Description = "禁用指定家长用户的所有监管规则。需要admin角色或用户本人。")]
+    [HttpPatch("rules/disable-all/{parentUserId}")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiResponse<object>>> DisableAllRules(int parentUserId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            // 检查用户角色
+            var currentUser = _dbContext.Users
+                .Include(u => u.Role)
+                .FirstOrDefault(u => u.UserId == userId);
+
+            var roleName = currentUser?.Role?.RoleName;
+            
+            // 只允许admin或用户本人操作
+            if (roleName != "admin" && userId != parentUserId)
+            {
+                return Forbid();
+            }
+
+            // 获取该用户作为家长的所有监管关系
+            var relationships = _dbContext.ParentalControlRelationships
+                .Where(r => r.ParentUserId == parentUserId)
+                .Select(r => r.ChildUserId)
+                .ToList();
+
+            if (relationships.Count == 0)
+            {
+                return Ok(ApiResponse<object>.SuccessResponse(new { disabledCount = 0 }, "没有需要禁用的规则"));
+            }
+
+            // 批量禁用所有规则
+            var rules = _dbContext.ParentalControlRules
+                .Where(r => relationships.Contains(r.ChildUserId))
+                .ToList();
+
+            var disabledCount = 0;
+            foreach (var rule in rules)
+            {
+                if (rule.IsActive == true)
+                {
+                    rule.IsActive = false;
+                    rule.UpdatedAt = DateTime.UtcNow;
+                    disabledCount++;
+                }
+            }
+
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation($"Disabled {disabledCount} rules for parent user: {parentUserId}");
+            return Ok(ApiResponse<object>.SuccessResponse(new { disabledCount }, $"已禁用 {disabledCount} 条规则"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error disabling all rules");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
+    /// 删除监管规则
+    /// </summary>
+    /// <param name="ruleId">规则ID</param>
+    [SwaggerOperation(Summary = "删除监管规则", Description = "删除指定的监管规则。需要parent角色。")]
+    [HttpDelete("rules/{ruleId}")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<object>>> DeleteRule(int ruleId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            // 检查用户角色
+            var parentUser = _dbContext.Users
+                .Include(u => u.Role)
+                .FirstOrDefault(u => u.UserId == userId);
+
+            var roleName = parentUser?.Role?.RoleName;
+            if (roleName != "parent" && roleName != "admin")
+            {
+                return Forbid();
+            }
+
+            // 查找规则
+            var rule = _dbContext.ParentalControlRules
+                .FirstOrDefault(r => r.RuleId == ruleId);
+
+            if (rule == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_RULE_NOT_FOUND", "规则不存在"));
+            }
+
+            // 检查监管关系（确保该规则属于当前家长监管的子账户）
+            var relationship = _dbContext.ParentalControlRelationships
+                .FirstOrDefault(r => r.ParentUserId == userId && r.ChildUserId == rule.ChildUserId);
+
+            if (relationship == null && roleName != "admin")
+            {
+                return Forbid();
+            }
+
+            // 删除规则
+            _dbContext.ParentalControlRules.Remove(rule);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation($"Parental rule deleted: rule {ruleId}, parent {userId}");
+            return Ok(ApiResponse<object>.SuccessResponse(new { }, "规则删除成功"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting parental rule");
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
@@ -475,6 +982,148 @@ public class ParentalController : ControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
+
+    /// <summary>
+    /// 获取家长信息（供子账户使用）
+    /// </summary>
+    [SwaggerOperation(Summary = "获取家长信息", Description = "子账户获取其家长用户信息。需要已建立监管关系。")]
+    [HttpGet("parent")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public ActionResult<ApiResponse<object>> GetParent()
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            // 查找该用户作为子账户的监管关系
+            var relationship = _dbContext.ParentalControlRelationships
+                .Include(r => r.ParentUser)
+                .FirstOrDefault(r => r.ChildUserId == userId);
+
+            if (relationship == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_NO_RELATIONSHIP", "未找到监管关系"));
+            }
+
+            var response = new
+            {
+                parentUserId = relationship.ParentUser.UserId,
+                parentUsername = relationship.ParentUser.Username,
+                relationshipId = relationship.RelationshipId,
+                createdAt = relationship.CreatedAt
+            };
+
+            _logger.LogInformation($"Parent info retrieved for child: {userId}");
+            return Ok(ApiResponse<object>.SuccessResponse(response, "获取成功"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving parent info");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
+    /// 删除监管关系（仅家长可以删除）
+    /// </summary>
+    /// <param name="childId">子账户ID</param>
+    [SwaggerOperation(Summary = "删除监管关系", Description = "家长单方面解除与子账户的监管关系，并通知子账户。需要parent角色。")]
+    [HttpDelete("relationships/{childId}")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<object>>> DeleteRelationship(int childId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            // 检查用户角色
+            var parentUser = _dbContext.Users
+                .Include(u => u.Role)
+                .FirstOrDefault(u => u.UserId == userId);
+
+            if (parentUser?.Role?.RoleName != "parent")
+            {
+                return Forbid();
+            }
+
+            // 查找监管关系
+            var relationship = _dbContext.ParentalControlRelationships
+                .Include(r => r.ChildUser)
+                .FirstOrDefault(r => r.ParentUserId == userId && r.ChildUserId == childId);
+
+            if (relationship == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_NO_RELATIONSHIP", "未找到监管关系"));
+            }
+
+            var childUserId = relationship.ChildUserId;
+            var childUsername = relationship.ChildUser.Username;
+            var parentUsername = parentUser.Username;
+
+            // 删除监管关系
+            _dbContext.ParentalControlRelationships.Remove(relationship);
+
+            // 删除相关的规则
+            var rules = _dbContext.ParentalControlRules
+                .Where(r => r.ChildUserId == childId)
+                .ToList();
+            _dbContext.ParentalControlRules.RemoveRange(rules);
+
+            // 创建通知给子账户
+            var notification = new NotificationCenter
+            {
+                UserId = childUserId,
+                SourceModule = "parental_control",
+                NotificationType = "relationship_terminated",
+                Title = "监管关系已解除",
+                Content = JsonSerializer.Serialize(new
+                {
+                    parentUserId = userId,
+                    parentUsername = parentUsername,
+                    childUserId = childUserId,
+                    childUsername = childUsername,
+                    terminatedAt = DateTime.UtcNow,
+                    message = $"家长 {parentUsername} 已解除与您的监管关系"
+                }),
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.NotificationCenters.Add(notification);
+
+            await _dbContext.SaveChangesAsync();
+
+            var response = new
+            {
+                relationshipId = relationship.RelationshipId,
+                parentUserId = userId,
+                childUserId = childId,
+                deletedAt = DateTime.UtcNow
+            };
+
+            _logger.LogInformation($"Parental relationship deleted: parent {userId}, child {childId}");
+            return Ok(ApiResponse<object>.SuccessResponse(response, "监管关系已解除"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting parental relationship");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
 }
 
 /// <summary>
@@ -522,5 +1171,93 @@ public class SetParentalRuleRequestDto
     /// 是否激活
     /// </summary>
     public bool IsActive { get; set; } = true;
+}
+
+/// <summary>
+/// 更新监管规则请求DTO
+/// </summary>
+public class UpdateParentalRuleRequestDto
+{
+    /// <summary>
+    /// 规则值
+    /// </summary>
+    public object RuleValue { get; set; } = new { };
+
+    /// <summary>
+    /// 是否激活
+    /// </summary>
+    public bool IsActive { get; set; } = true;
+}
+
+/// <summary>
+/// 创建家长监管邀请请求DTO（基于用户名）
+/// </summary>
+public class CreateParentalInvitationRequestDto
+{
+    /// <summary>
+    /// 子账户用户名
+    /// </summary>
+    [Required(ErrorMessage = "子账户用户名不能为空")]
+    [StringLength(128)]
+    public string ChildUsername { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 给对方的附加留言（可选）
+    /// </summary>
+    [StringLength(500)]
+    public string? Message { get; set; }
+}
+
+/// <summary>
+/// 创建家长监管邀请响应DTO
+/// </summary>
+public class CreateParentalInvitationResponseDto
+{
+    /// <summary>
+    /// 邀请令牌（仅用于前端调试或日志，不建议在URL中长期暴露）
+    /// </summary>
+    public string Token { get; set; } = string.Empty;
+
+    public int ParentUserId { get; set; }
+    public string ParentUsername { get; set; } = string.Empty;
+
+    public int ChildUserId { get; set; }
+    public string ChildUsername { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 邀请过期时间
+    /// </summary>
+    public DateTime ExpiresAt { get; set; }
+}
+
+/// <summary>
+/// 子账户响应家长监管邀请请求DTO
+/// </summary>
+public class RespondParentalInvitationRequestDto
+{
+    /// <summary>
+    /// 邀请令牌
+    /// </summary>
+    [Required(ErrorMessage = "邀请令牌不能为空")]
+    public string Token { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 是否同意（true=同意，false=拒绝）
+    /// </summary>
+    public bool Accept { get; set; }
+}
+
+/// <summary>
+/// 存储在通知Content中的家长邀请载荷
+/// </summary>
+public class ParentalInvitationPayload
+{
+    public string Token { get; set; } = string.Empty;
+    public int ParentUserId { get; set; }
+    public string ParentUsername { get; set; } = string.Empty;
+    public int ChildUserId { get; set; }
+    public string ChildUsername { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public DateTime ExpiresAt { get; set; }
 }
 
