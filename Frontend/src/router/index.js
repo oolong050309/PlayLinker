@@ -76,15 +76,6 @@ const routes = [
         }
       },
       {
-        path: 'achievements',
-        name: 'Achievements',
-        component: () => import('@/views/Achievements.vue'),
-        meta: {
-          title: '成就',
-          requiresAuth: true
-        }
-      },
-      {
         path: 'news',
         name: 'News',
         component: () => import('@/views/News.vue'),

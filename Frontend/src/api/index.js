@@ -174,7 +174,7 @@ export const achievementApi = {
   getGameAchievements(gameId) {
     return api.get(`/games/${gameId}/achievements`)
   },
-  // 获取用户成就总览
+  // 获取用户成就总览（不需要传递userId，后端从JWT token获取）
   getUserAchievements() {
     return api.get('/library/achievements')
   },
@@ -217,6 +217,62 @@ export const steamApi = {
   // 获取Steam游戏信息
   getGame(appId) {
     return api.get(`/steam/games/${appId}`)
+  }
+}
+
+// Xbox API
+export const xboxApi = {
+  // 导入Xbox数据
+  importData(data) {
+    return api.post('/xbox/import', data, { timeout: 60000 })
+  },
+  // 获取Xbox用户信息
+  getUser(xuid) {
+    return api.get(`/xbox/user/${xuid}`)
+  },
+  // 获取Xbox游戏信息
+  getGame(titleId) {
+    return api.get(`/xbox/games/${titleId}`)
+  },
+  // 获取Xbox用户成就
+  getUserAchievements(xuid) {
+    return api.get(`/xbox/user/${xuid}/achievements`)
+  }
+}
+
+// PSN API
+export const psnApi = {
+  // 导入PSN数据
+  importData(data) {
+    return api.post('/psn/import', data, { timeout: 60000 })
+  },
+  // 获取PSN用户信息
+  getUser(onlineId) {
+    return api.get(`/psn/user/${onlineId}`)
+  },
+  // 获取PSN游戏信息
+  getGame(titleId) {
+    return api.get(`/psn/games/${titleId}`)
+  },
+  // 获取PSN用户奖杯
+  getUserTrophies(onlineId) {
+    return api.get(`/psn/user/${onlineId}/trophies`)
+  }
+}
+
+// GOG API
+export const gogApi = {
+  // 导入GOG数据
+  importData(data) {
+    return api.post('/gog/import', data, { timeout: 60000 })
+  },
+  // 获取GOG用户信息
+  getUser(gogUserId) {
+    return api.get(`/gog/user/${gogUserId}`)
+  },
+  // 获取GOG游戏信息
+  getGame(gogGameId) {
+    return api.get(`/gog/games/${gogGameId}`)
   }
 }
 

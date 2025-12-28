@@ -1,13 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
 using Microsoft.Extensions.Configuration;
 using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
 using System.Text.Json;
+using System.Linq;
 
 namespace PlayLinker.Controllers;
 
@@ -37,7 +37,13 @@ public class AchievementsController : ControllerBase
     private int GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
-        return int.TryParse(userIdClaim, out var userId) ? userId : 1;
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+        {
+            _logger.LogWarning("无法从JWT token中获取用户ID，token claims: {Claims}", 
+                string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
+            throw new UnauthorizedAccessException("无法获取用户ID，请重新登录");
+        }
+        return userId;
     }
 
     /// <summary>
@@ -174,46 +180,165 @@ public class AchievementsController : ControllerBase
     /// <summary>
     /// 获取用户成就总览(需要认证)
     /// </summary>
-    /// <param name="userId">用户ID</param>
     [HttpGet("library/achievements")]
     [Authorize]
     [ProducesResponseType(typeof(ApiResponse<UserAchievementsOverviewDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ApiResponse<UserAchievementsOverviewDto>>> GetUserAchievementsOverview([FromQuery] int userId)
+    public async Task<ActionResult<ApiResponse<UserAchievementsOverviewDto>>> GetUserAchievementsOverview()
     {
         try
         {
+            var userId = GetCurrentUserId();
             _logger.LogInformation("获取用户成就总览: userId={UserId}", userId);
 
-            // 验证 userId 是否合法
             if (userId <= 0)
             {
-                return BadRequest(ApiResponse<UserAchievementsOverviewDto>.ErrorResponse("BAD_REQUEST", "userId 参数无效，必须提供有效的用户ID"));
-            }
-
-            // 验证用户是否存在
-            var connection = _context.Database.GetDbConnection();
-            if (connection.State != System.Data.ConnectionState.Open)
-            {
-                await connection.OpenAsync();
-            }
-
-            using var checkUserCommand = connection.CreateCommand();
-            checkUserCommand.CommandText = "SELECT COUNT(*) FROM `user` WHERE `user_id` = @userId";
-            var userIdParam = checkUserCommand.CreateParameter();
-            userIdParam.ParameterName = "@userId";
-            userIdParam.Value = userId;
-            checkUserCommand.Parameters.Add(userIdParam);
-
-            var userExists = Convert.ToInt32(await checkUserCommand.ExecuteScalarAsync()) > 0;
-
-            if (!userExists)
-            {
-                _logger.LogWarning("用户不存在: userId={UserId}", userId);
-                return BadRequest(ApiResponse<UserAchievementsOverviewDto>.ErrorResponse("BAD_REQUEST", $"用户ID {userId} 不存在，请先创建用户"));
+                _logger.LogWarning("无效的用户ID: {UserId}", userId);
+                return BadRequest(ApiResponse<UserAchievementsOverviewDto>.ErrorResponse("ERR_INVALID_USER", "无效的用户ID"));
             }
 
             var library = await _context.UserGameLibraries
                 .FirstOrDefaultAsync(ugl => ugl.UserId == userId);
+
+            // 获取最近解锁的成就（最近30天）
+            var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+            _logger.LogInformation("查询最近30天解锁的成就，userId={UserId}, thirtyDaysAgo={Date}", userId, thirtyDaysAgo);
+            
+            // 先统计用户总共有多少已解锁的成就
+            var totalUnlockedCount = await _context.UserAchievements
+                .CountAsync(ua => ua.UserId == userId && ua.Unlocked);
+            _logger.LogInformation("用户 {UserId} 总共解锁了 {Count} 个成就", userId, totalUnlockedCount);
+            
+            // 先查询数据，然后在内存中格式化日期
+            var recentUnlocksData = await _context.UserAchievements
+                .Where(ua => ua.UserId == userId && ua.Unlocked && ua.UnlockTime.HasValue && ua.UnlockTime.Value >= thirtyDaysAgo)
+                .Join(_context.Achievements,
+                    ua => ua.AchievementId,
+                    a => a.AchievementId,
+                    (ua, a) => new { UserAchievement = ua, Achievement = a })
+                .Join(_context.Games,
+                    x => x.Achievement.GameId,
+                    g => g.GameId,
+                    (x, g) => new { x.UserAchievement, x.Achievement, Game = g })
+                .OrderByDescending(x => x.UserAchievement.UnlockTime)
+                .Take(50) // 增加到50条，确保有足够的数据
+                .ToListAsync();
+            
+            _logger.LogInformation("数据库查询到 {Count} 条最近30天解锁的成就记录", recentUnlocksData.Count);
+            
+            // 在内存中转换为 DTO 并格式化日期
+            var recentUnlocks = recentUnlocksData.Select(x => new RecentUnlockDto
+            {
+                AchievementId = x.Achievement.AchievementId,
+                GameId = x.Game.GameId,
+                GameName = x.Game.Name ?? "",
+                AchievementName = x.Achievement.AchievementName,
+                DisplayName = x.Achievement.DisplayName ?? x.Achievement.AchievementName,
+                UnlockTime = x.UserAchievement.UnlockTime.HasValue 
+                    ? x.UserAchievement.UnlockTime.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    : "",
+                IconUnlocked = string.IsNullOrWhiteSpace(x.Achievement.IconUnlocked) ? "" : x.Achievement.IconUnlocked
+            }).ToList();
+            _logger.LogInformation("查询到 {Count} 个最近解锁的成就", recentUnlocks.Count);
+            
+            // 记录详细信息用于调试
+            foreach (var unlock in recentUnlocks.Take(5))
+            {
+                _logger.LogInformation("最近解锁示例: AchievementId={Id}, GameName={Game}, DisplayName={Name}, IconUnlocked={Icon}", 
+                    unlock.AchievementId, unlock.GameName, unlock.DisplayName, 
+                    string.IsNullOrEmpty(unlock.IconUnlocked) ? "空" : unlock.IconUnlocked.Substring(0, Math.Min(50, unlock.IconUnlocked.Length)));
+            }
+
+            // 获取稀有成就（暂时返回所有已解锁的成就，因为数据库中没有GlobalUnlockRate字段）
+            // 未来可以从Steam API获取全局解锁率数据
+            _logger.LogInformation("查询所有已解锁的成就，userId={UserId}", userId);
+            
+            // 先查询数据，然后在内存中格式化日期
+            var rareAchievementsData = await _context.UserAchievements
+                .Where(ua => ua.UserId == userId && ua.Unlocked)
+                .Join(_context.Achievements,
+                    ua => ua.AchievementId,
+                    a => a.AchievementId,
+                    (ua, a) => new { UserAchievement = ua, Achievement = a })
+                .Join(_context.Games,
+                    x => x.Achievement.GameId,
+                    g => g.GameId,
+                    (x, g) => new { x.UserAchievement, x.Achievement, Game = g })
+                .OrderByDescending(x => x.UserAchievement.UnlockTime)
+                .Take(50) // 增加到50条，确保有足够的数据
+                .ToListAsync();
+            
+            _logger.LogInformation("数据库查询到 {Count} 条已解锁的成就记录", rareAchievementsData.Count);
+            
+            // 在内存中转换为 DTO 并格式化日期
+            var rareAchievements = rareAchievementsData.Select(x => new RareAchievementDto
+            {
+                AchievementId = x.Achievement.AchievementId,
+                GameId = x.Game.GameId,
+                GameName = x.Game.Name ?? "",
+                AchievementName = x.Achievement.AchievementName,
+                DisplayName = x.Achievement.DisplayName ?? x.Achievement.AchievementName,
+                GlobalUnlockRate = 0.05, // 暂时使用默认值，未来可以从Steam API获取
+                UnlockTime = x.UserAchievement.UnlockTime.HasValue
+                    ? x.UserAchievement.UnlockTime.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    : "",
+                IconUnlocked = string.IsNullOrWhiteSpace(x.Achievement.IconUnlocked) ? "" : x.Achievement.IconUnlocked
+            }).ToList();
+            _logger.LogInformation("查询到 {Count} 个稀有成就", rareAchievements.Count);
+            
+            // 记录详细信息用于调试
+            foreach (var rare in rareAchievements.Take(5))
+            {
+                _logger.LogInformation("稀有成就示例: AchievementId={Id}, GameName={Game}, DisplayName={Name}, IconUnlocked={Icon}", 
+                    rare.AchievementId, rare.GameName, rare.DisplayName, 
+                    string.IsNullOrEmpty(rare.IconUnlocked) ? "空" : rare.IconUnlocked.Substring(0, Math.Min(50, rare.IconUnlocked.Length)));
+            }
+
+            // 计算完美游戏数（成就完成率100%的游戏）
+            // 获取用户已解锁的成就按游戏分组
+            var userUnlockedByGame = await _context.UserAchievements
+                .Where(ua => ua.UserId == userId && ua.Unlocked)
+                .Join(_context.Achievements,
+                    ua => ua.AchievementId,
+                    a => a.AchievementId,
+                    (ua, a) => new { Achievement = a })
+                .GroupBy(x => x.Achievement.GameId)
+                .Select(g => new
+                {
+                    GameId = g.Key,
+                    UnlockedCount = g.Count()
+                })
+                .ToListAsync();
+
+            // 获取这些游戏的成就总数
+            var gameIds = userUnlockedByGame.Select(x => x.GameId).ToList();
+            var gameAchievementTotals = await _context.Achievements
+                .Where(a => gameIds.Contains(a.GameId))
+                .GroupBy(a => a.GameId)
+                .Select(g => new { GameId = g.Key, TotalCount = g.Count() })
+                .ToDictionaryAsync(x => x.GameId, x => x.TotalCount);
+
+            // 计算完美游戏数
+            var perfectGames = userUnlockedByGame
+                .Count(x => gameAchievementTotals.ContainsKey(x.GameId) 
+                    && gameAchievementTotals[x.GameId] > 0 
+                    && x.UnlockedCount == gameAchievementTotals[x.GameId]);
+
+            // 计算平均完成率（使用已获取的数据）
+            var gameCompletionRates = userUnlockedByGame
+                .Where(x => gameAchievementTotals.ContainsKey(x.GameId) && gameAchievementTotals[x.GameId] > 0)
+                .Select(x => (double)x.UnlockedCount / gameAchievementTotals[x.GameId])
+                .ToList();
+
+            var averageCompletionRate = gameCompletionRates.Count > 0
+                ? gameCompletionRates.Average()
+                : 0.0;
+
+            // 计算成就/小时
+            var totalPlaytime = library?.TotalPlaytimeMinutes ?? 0;
+            var unlockedCount = library?.UnlockedAchievements ?? 0;
+            var achievementsPerHour = totalPlaytime > 0
+                ? (double)unlockedCount / (totalPlaytime / 60.0)
+                : 0.0;
 
             var result = new UserAchievementsOverviewDto
             {
@@ -222,14 +347,14 @@ public class AchievementsController : ControllerBase
                 UnlockRate = library != null && library.TotalAchievements > 0
                     ? (double)(library.UnlockedAchievements ?? 0) / library.TotalAchievements.Value
                     : 0.0,
-                PerfectGames = 0,
-                RecentUnlocks = new List<RecentUnlockDto>(),
-                RareAchievements = new List<RareAchievementDto>(),
+                PerfectGames = perfectGames,
+                RecentUnlocks = recentUnlocks,
+                RareAchievements = rareAchievements,
                 Statistics = new AchievementStatisticsDto
                 {
-                    AverageCompletionRate = 0.45,
-                    TotalPlaytime = library?.TotalPlaytimeMinutes ?? 0,
-                    AchievementsPerHour = 0.014
+                    AverageCompletionRate = averageCompletionRate,
+                    TotalPlaytime = totalPlaytime,
+                    AchievementsPerHour = achievementsPerHour
                 }
             };
 
