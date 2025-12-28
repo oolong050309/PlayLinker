@@ -52,7 +52,7 @@
           </div>
           <div class="p-4">
             <div class="flex flex-wrap gap-2 mb-2">
-              <span v-for="tag in game.tags.slice(0, 2)" :key="tag" class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 text-xs font-medium">{{ tag }}</span>
+              <span v-for="tag in (game.tags || []).slice(0, 2)" :key="tag" class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 text-xs font-medium">{{ tag }}</span>
             </div>
             <h3 class="font-bold text-lg mb-1 truncate">{{ game.gameName }}</h3>
             <p class="text-sm text-zinc-400 mb-3 line-clamp-2">{{ game.reason }}</p>
@@ -67,32 +67,55 @@
       </div>
     </section>
 
-    <section class="mb-12">
+    <section class="mb-12" v-if="aiRecommendations.length > 0">
       <div class="glass-panel p-6 rounded-2xl border-2 border-indigo-500/30">
         <div class="flex items-start gap-4 mb-4">
           <div class="p-3 bg-indigo-500/20 rounded-xl">
             <i data-lucide="sparkles" class="w-6 h-6 text-indigo-400"></i>
           </div>
           <div class="flex-1">
-            <h3 class="text-lg font-bold mb-2">AI 智能推荐</h3>
-            <p class="text-sm text-zinc-400 mb-4">基于你在《Destiny 2》的 850 小时游玩记录以及对 "Looter Shooter" 的偏好：</p>
-            <div class="flex flex-col md:flex-row items-center gap-4">
-              <img src="https://image.api.playstation.com/vulcan/ap/rnd/202504/2220/5227e8c726a457fcde0b59b32ca996360c2193a85d8e0b3a.jpg" class="w-20 h-20 rounded-lg object-cover">
-              <div class="flex-1">
-                <h4 class="font-bold text-lg mb-1">Tom Clancy's The Division 2</h4>
-                <div class="flex gap-2 mb-1">
-                   <span class="px-2 py-0.5 rounded bg-white/10 text-zinc-400 text-xs">RPG</span>
-                   <span class="px-2 py-0.5 rounded bg-white/10 text-zinc-400 text-xs">Co-op</span>
+            <h3 class="text-lg font-bold mb-2">{{ exploreTitle }}</h3>
+            <p class="text-sm text-zinc-400 mb-4">发现更多符合您口味的宝藏游戏：</p>
+            
+            <div class="grid grid-cols-1 gap-4">
+              <div 
+                v-for="item in aiRecommendations" 
+                :key="item.gameId"
+                class="flex flex-col md:flex-row items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
+                @click="$router.push({ name: 'GameDetail', params: { id: item.gameId } })"
+              >
+                <img :src="item.headerImage" class="w-48 h-28 rounded-lg object-cover flex-shrink-0 bg-zinc-800">
+                
+                <div class="flex-1 w-full text-center md:text-left">
+                  <h4 class="font-bold text-lg mb-1">{{ item.gameName }}</h4>
+                  <div class="flex gap-2 mb-2 justify-center md:justify-start">
+                     <span 
+                       v-for="feature in (item.uniqueFeatures || []).slice(0, 3)" 
+                       :key="feature"
+                       class="px-2 py-0.5 rounded bg-white/10 text-zinc-400 text-xs"
+                     >
+                       {{ feature }}
+                     </span>
+                  </div>
+                  <p class="text-xs text-zinc-500 line-clamp-1">{{ item.whyExplore }}</p>
+                </div>
+                
+                <div class="flex gap-2">
+                  <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium whitespace-nowrap">
+                    查看详情
+                  </button>
                 </div>
               </div>
-              <div class="flex gap-2">
-                <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium">查看详情</button>
-              </div>
             </div>
+            
           </div>
         </div>
       </div>
     </section>
+    
+    <div v-if="aiRecommendations.length === 0" class="text-center text-zinc-500 py-4">
+       [调试] 暂无探索推荐数据，请查看控制台日志。
+    </div>
 
   </div>
 </template>
@@ -106,20 +129,39 @@ const searchQuery = ref('')
 const activeCategory = ref('全部')
 const categories = ['全部', 'RPG', '动作', 'FPS', '策略', '独立游戏']
 const recommendations = ref([])
+const aiRecommendations = ref([])
+const exploreTitle = ref('AI 智能探索')
 
 const handleSearch = () => {
-  // 搜索逻辑
   console.log('Search:', searchQuery.value)
 }
 
 const loadRecommendations = async () => {
+  console.log('[Frontend] Starting loadRecommendations...')
   try {
+    // 1. 加载常规推荐
     const res = await recommendationApi.getRecommendations({ limit: 4 })
+    console.log('[Frontend] GetRecommendations Response:', res)
     if (res.success) {
-      recommendations.value = res.data.items
+      recommendations.value = res.data.items || []
+    }
+
+    // 2. 加载 AI/探索推荐
+    console.log('[Frontend] Calling exploreGames API...')
+    const exploreRes = await recommendationApi.exploreGames()
+    console.log('[Frontend] ExploreGames Response:', exploreRes)
+    
+    if (exploreRes.success && exploreRes.data) {
+      aiRecommendations.value = exploreRes.data.items || []
+      console.log('[Frontend] Loaded explore items:', aiRecommendations.value.length)
+      if (exploreRes.data.exploreCategory) {
+        exploreTitle.value = exploreRes.data.exploreCategory
+      }
+    } else {
+      console.warn('[Frontend] ExploreGames returned no success flag or empty data.')
     }
   } catch (error) {
-    console.error(error)
+    console.error('[Frontend] Failed to load recommendations:', error)
   }
 }
 
