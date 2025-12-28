@@ -68,6 +68,7 @@ public class RareAchievementDto
     public string DisplayName { get; set; } = string.Empty;
     public double GlobalUnlockRate { get; set; }
     public string UnlockTime { get; set; } = string.Empty;
+    public string IconUnlocked { get; set; } = string.Empty;
 }
 
 /// <summary>

@@ -365,7 +365,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { CheckCircle, Link, Gamepad2, Trophy, Clock, PlusCircle, Settings, RefreshCw, X } from 'lucide-vue-next'
 import { platformsApi } from '@/api/platforms'
-import { libraryApi, steamApi } from '@/api/index'
+import { libraryApi, steamApi, xboxApi, psnApi, gogApi } from '@/api/index'
 
 // 平台配置
 const platformConfig = {
@@ -569,34 +569,80 @@ const handleBind = async () => {
     if (response.success) {
       alert(`${platform.name}绑定成功！`)
 
-      // 绑定成功后：
-      // 1) 对于 Steam，调用后端 Steam 导入接口，拉取游戏和成就
-      if (platform.id === 1) {
-        const userId = getCurrentUserId()
-        if (userId) {
-          try {
-            await steamApi.importData({
-              userId,
-              steamId: bindForm.value.steamId,
-              importGames: true,
-              importAchievements: true,
-              importFriends: false
-            })
-          } catch (e) {
-            console.error('Steam 数据导入失败:', e)
-          }
+      // 绑定成功后，根据平台调用对应的导入接口
+      const userId = getCurrentUserId()
+      if (userId) {
+        switch (platform.id) {
+          case 1: // Steam
+            try {
+              await steamApi.importData({
+                userId,
+                steamId: bindForm.value.steamId,
+                importGames: true,
+                importAchievements: true,
+                importFriends: false
+              })
+              await new Promise(resolve => setTimeout(resolve, 500))
+            } catch (e) {
+              console.error('Steam 数据导入失败:', e)
+            }
+            break
+          
+          case 7: // Xbox
+            try {
+              const xboxUserId = bindForm.value.xboxUserId || response.data?.platformUserId
+              if (xboxUserId) {
+                await xboxApi.importData({
+                  userId,
+                  xboxUserId,
+                  importGames: true,
+                  importAchievements: true
+                })
+                await new Promise(resolve => setTimeout(resolve, 500))
+              }
+            } catch (e) {
+              console.error('Xbox 数据导入失败:', e)
+            }
+            break
+          
+          case 6: // PSN
+            try {
+              const psnOnlineId = bindForm.value.psnOnlineId || response.data?.platformUserId
+              if (psnOnlineId) {
+                await psnApi.importData({
+                  userId,
+                  psnOnlineId,
+                  importGames: true,
+                  importTrophies: true
+                })
+                await new Promise(resolve => setTimeout(resolve, 500))
+              }
+            } catch (e) {
+              console.error('PSN 数据导入失败:', e)
+            }
+            break
+          
+          case 5: // GOG
+            try {
+              const gogUserId = bindForm.value.gogUserId || response.data?.platformUserId
+              if (gogUserId) {
+                await gogApi.importData({
+                  userId,
+                  gogUserId,
+                  importGames: true
+                })
+                await new Promise(resolve => setTimeout(resolve, 500))
+              }
+            } catch (e) {
+              console.error('GOG 数据导入失败:', e)
+            }
+            break
         }
-      }
-
-      // 2) 触发一次游戏库概览刷新任务（轻量级）
-      try {
-        await libraryApi.syncPlatform({ platformId: platform.id, fullSync: true })
-      } catch (e) {
-        console.error('触发游戏库同步失败:', e)
       }
 
       closeBindModal()
       await loadBindings()
+      // 刷新统计数据，确保显示最新的成就数量
       await refreshStats()
     }
   } catch (error) {
@@ -648,37 +694,83 @@ const handleUnbind = async (binding) => {
 const handleSync = async (platformId) => {
   loading.value = true
   try {
-    // 调用统一平台同步接口（如有实现）
-    await platformsApi.syncPlatform(platformId)
+    const userId = getCurrentUserId()
+    const binding = connectedPlatforms.value.find(b => b.platformId === platformId)
+    
+    if (!userId || !binding?.platformUserId) {
+      throw new Error('用户ID或平台用户ID缺失')
+    }
 
-    // 如果是 Steam，再次调用导入接口以刷新游戏和成就
-    if (platformId === 1) {
-      const userId = getCurrentUserId()
-      const steamBinding = connectedPlatforms.value.find(b => b.platformId === 1)
-      if (userId && steamBinding?.platformUserId) {
+    // 根据平台ID调用对应的导入接口
+    switch (platformId) {
+      case 1: // Steam
         try {
           await steamApi.importData({
             userId,
-            steamId: steamBinding.platformUserId,
+            steamId: binding.platformUserId,
             importGames: true,
             importAchievements: true,
             importFriends: false
           })
+          await new Promise(resolve => setTimeout(resolve, 500))
         } catch (e) {
           console.error('Steam 数据导入失败:', e)
+          throw e
         }
-      }
-    }
-
-    // 同时调用游戏库同步接口，触发后台刷新游戏库汇总
-    try {
-      await libraryApi.syncPlatform({ platformId, fullSync: false })
-    } catch (e) {
-      console.error('调用游戏库同步接口失败:', e)
+        break
+      
+      case 7: // Xbox
+        try {
+          await xboxApi.importData({
+            userId,
+            xboxUserId: binding.platformUserId,
+            importGames: true,
+            importAchievements: true
+          })
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } catch (e) {
+          console.error('Xbox 数据导入失败:', e)
+          throw e
+        }
+        break
+      
+      case 6: // PSN
+        try {
+          await psnApi.importData({
+            userId,
+            psnOnlineId: binding.platformUserId,
+            importGames: true,
+            importTrophies: true
+          })
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } catch (e) {
+          console.error('PSN 数据导入失败:', e)
+          throw e
+        }
+        break
+      
+      case 5: // GOG
+        try {
+          await gogApi.importData({
+            userId,
+            gogUserId: binding.platformUserId,
+            importGames: true
+          })
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } catch (e) {
+          console.error('GOG 数据导入失败:', e)
+          throw e
+        }
+        break
+      
+      default:
+        // 对于其他平台，暂时只调用占位符接口
+        await platformsApi.syncPlatform(platformId)
     }
 
     alert('同步成功！')
     await loadBindings()
+    // 刷新统计数据，确保显示最新的成就数量
     await refreshStats()
   } catch (error) {
     console.error('同步平台失败:', error)
@@ -746,13 +838,14 @@ const handleSyncAll = async () => {
   
   loading.value = true
   try {
+    const userId = getCurrentUserId()
+    
     for (const binding of connectedPlatforms.value) {
-      await platformsApi.syncPlatform(binding.platformId)
+      if (!userId || !binding.platformUserId) continue
 
-      // 针对 Steam 平台调用导入接口
-      if (binding.platformId === 1) {
-        const userId = getCurrentUserId()
-        if (userId && binding.platformUserId) {
+      // 根据平台ID调用对应的导入接口
+      switch (binding.platformId) {
+        case 1: // Steam
           try {
             await steamApi.importData({
               userId,
@@ -761,20 +854,65 @@ const handleSyncAll = async () => {
               importAchievements: true,
               importFriends: false
             })
+            await new Promise(resolve => setTimeout(resolve, 500))
           } catch (e) {
             console.error('Steam 数据导入失败:', e)
           }
-        }
-      }
-
-      try {
-        await libraryApi.syncPlatform({ platformId: binding.platformId, fullSync: false })
-      } catch (e) {
-        console.error('调用游戏库同步接口失败:', e)
+          break
+        
+        case 7: // Xbox
+          try {
+            await xboxApi.importData({
+              userId,
+              xboxUserId: binding.platformUserId,
+              importGames: true,
+              importAchievements: true
+            })
+            await new Promise(resolve => setTimeout(resolve, 500))
+          } catch (e) {
+            console.error('Xbox 数据导入失败:', e)
+          }
+          break
+        
+        case 6: // PSN
+          try {
+            await psnApi.importData({
+              userId,
+              psnOnlineId: binding.platformUserId,
+              importGames: true,
+              importTrophies: true
+            })
+            await new Promise(resolve => setTimeout(resolve, 500))
+          } catch (e) {
+            console.error('PSN 数据导入失败:', e)
+          }
+          break
+        
+        case 5: // GOG
+          try {
+            await gogApi.importData({
+              userId,
+              gogUserId: binding.platformUserId,
+              importGames: true
+            })
+            await new Promise(resolve => setTimeout(resolve, 500))
+          } catch (e) {
+            console.error('GOG 数据导入失败:', e)
+          }
+          break
+        
+        default:
+          // 对于其他平台，暂时只调用占位符接口
+          try {
+            await platformsApi.syncPlatform(binding.platformId)
+          } catch (e) {
+            console.error(`平台 ${binding.platformId} 同步失败:`, e)
+          }
       }
     }
     alert('全部平台同步成功！')
     await loadBindings()
+    // 刷新统计数据，确保显示最新的成就数量
     await refreshStats()
   } catch (error) {
     console.error('同步全部平台失败:', error)

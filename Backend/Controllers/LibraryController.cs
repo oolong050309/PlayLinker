@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
+using PlayLinker.Models.Entities;
+using System.Linq;
 
 namespace PlayLinker.Controllers;
 
@@ -29,7 +31,13 @@ public class LibraryController : ControllerBase
     private int GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
-        return int.TryParse(userIdClaim, out var userId) ? userId : 1; // 默认返回1用于测试
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+        {
+            _logger.LogWarning("无法从JWT token中获取用户ID，token claims: {Claims}", 
+                string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
+            throw new UnauthorizedAccessException("无法获取用户ID，请重新登录");
+        }
+        return userId;
     }
 
     /// <summary>
@@ -128,7 +136,7 @@ public class LibraryController : ControllerBase
     /// <param name="pageSize">每页数量</param>
     [HttpGet("games")]
     [ProducesResponseType(typeof(ApiResponse<UserGameListDto>), StatusCodes.Status200OK)]
-    public Task<ActionResult<ApiResponse<UserGameListDto>>> GetUserGames(
+    public async Task<ActionResult<ApiResponse<UserGameListDto>>> GetUserGames(
         [FromQuery] string? platform = null,
         [FromQuery] string? sortBy = null,
         [FromQuery] int page = 1,
@@ -137,31 +145,218 @@ public class LibraryController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
-            _logger.LogInformation("获取用户游戏列表: userId={UserId}", userId);
+            _logger.LogInformation("获取用户游戏列表: userId={UserId}, platform={Platform}, sortBy={SortBy}, page={Page}, pageSize={PageSize}", 
+                userId, platform, sortBy, page, pageSize);
 
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
-            // 这里简化处理,实际应该查询用户平台游戏库
+            // 获取用户绑定的所有平台账号的 platform_user_id 和 platform_id 组合
+            var userPlatformBindings = await _context.UserPlatformBindings
+                .Where(upb => upb.UserId == userId && upb.BindingStatus == true)
+                .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
+                .ToListAsync();
+
+            _logger.LogInformation("用户 {UserId} 绑定的平台账号数量: {Count}", userId, userPlatformBindings.Count);
+            foreach (var binding in userPlatformBindings)
+            {
+                _logger.LogInformation("  - PlatformId: {PlatformId}, PlatformUserId: {PlatformUserId}", 
+                    binding.PlatformId, binding.PlatformUserId);
+            }
+
+            if (userPlatformBindings.Count == 0)
+            {
+                _logger.LogInformation("用户 {UserId} 没有绑定的平台账号", userId);
+                var emptyResult = new UserGameListDto
+                {
+                    Items = new List<UserGameItemDto>(),
+                    Meta = new PaginationMeta
+                    {
+                        Page = page,
+                        PageSize = pageSize,
+                        Total = 0
+                    }
+                };
+                return Ok(ApiResponse<UserGameListDto>.SuccessResponse(emptyResult));
+            }
+
+            // 构建查询条件：必须同时精确匹配 PlatformUserId 和 PlatformId 的组合
+            // 这样可以确保只查询当前用户绑定的平台账号的游戏
+            _logger.LogInformation("用户绑定组合数量: {Count}", userPlatformBindings.Count);
+            foreach (var binding in userPlatformBindings)
+            {
+                _logger.LogInformation("  - PlatformId: {PlatformId}, PlatformUserId: {PlatformUserId}", 
+                    binding.PlatformId, binding.PlatformUserId);
+            }
+
+            // 直接通过绑定组合查询，确保只返回当前用户的游戏
+            // 为每个绑定组合单独查询，确保精确匹配
+            var userGames = new List<UserPlatformLibrary>();
+            
+            foreach (var binding in userPlatformBindings)
+            {
+                _logger.LogInformation("查询绑定: PlatformId={PlatformId}, PlatformUserId={PlatformUserId}", 
+                    binding.PlatformId, binding.PlatformUserId);
+                
+                var gamesForBinding = await _context.UserPlatformLibraries
+                    .Where(upl => upl.PlatformUserId == binding.PlatformUserId && upl.PlatformId == binding.PlatformId)
+                    .Include(upl => upl.Game)
+                    .Include(upl => upl.PlayerPlatform)
+                        .ThenInclude(pp => pp.Platform)
+                    .ToListAsync();
+                
+                _logger.LogInformation("绑定 (PlatformId={PlatformId}, PlatformUserId={PlatformUserId}) 查询到 {Count} 条游戏库记录", 
+                    binding.PlatformId, binding.PlatformUserId, gamesForBinding.Count);
+                
+                userGames.AddRange(gamesForBinding);
+            }
+
+            _logger.LogInformation("总共查询到 {Count} 条用户游戏库记录", userGames.Count);
+
+            // 平台筛选
+            if (!string.IsNullOrEmpty(platform) && int.TryParse(platform, out int platformId))
+            {
+                userGames = userGames.Where(upl => upl.PlatformId == platformId).ToList();
+                _logger.LogInformation("平台筛选后剩余 {Count} 条记录", userGames.Count);
+            }
+
+            // 去重（同一游戏可能在不同平台）- 在内存中处理
+            var distinctGamesList = userGames
+                .GroupBy(upl => upl.GameId)
+                .Select(g => new
+                {
+                    GameId = g.Key,
+                    Game = g.First().Game,
+                    TotalPlaytime = g.Sum(upl => upl.PlaytimeMinutes),
+                    LastPlayed = g.Max(upl => upl.LastPlayed),
+                    Platforms = g.Select(upl => upl.PlayerPlatform?.Platform).Where(p => p != null).Distinct().ToList(),
+                    PlatformLibraries = g.ToList()
+                })
+                .ToList();
+
+            // 排序（在内存中）
+            switch (sortBy?.ToLower())
+            {
+                case "playtime":
+                    distinctGamesList = distinctGamesList.OrderByDescending(g => g.TotalPlaytime).ToList();
+                    break;
+                case "lastplayed":
+                    distinctGamesList = distinctGamesList.OrderByDescending(g => g.LastPlayed ?? DateTime.MinValue).ToList();
+                    break;
+                case "name":
+                default:
+                    distinctGamesList = distinctGamesList.OrderBy(g => g.Game.Name).ToList();
+                    break;
+            }
+
+            // 获取总数（在内存中）
+            var total = distinctGamesList.Count;
+
+            // 分页（在内存中）
+            var games = distinctGamesList
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            _logger.LogInformation("查询到 {Count} 个游戏（分页后）", games.Count);
+
+            // 获取每个游戏的成就进度
+            var gameIds = games.Select(g => g.GameId).Distinct().ToList();
+            
+            if (gameIds.Count == 0)
+            {
+                // 没有游戏，返回空结果
+                var emptyResult = new UserGameListDto
+                {
+                    Items = new List<UserGameItemDto>(),
+                    Meta = new PaginationMeta
+                    {
+                        Page = page,
+                        PageSize = pageSize,
+                        Total = 0
+                    }
+                };
+                return Ok(ApiResponse<UserGameListDto>.SuccessResponse(emptyResult));
+            }
+            
+            // 获取所有相关成就
+            var allAchievements = await _context.Achievements
+                .Where(a => gameIds.Contains(a.GameId))
+                .Select(a => new { a.AchievementId, a.GameId })
+                .ToListAsync();
+            
+            var achievementIds = allAchievements.Select(a => a.AchievementId).ToList();
+            
+            // 获取用户已解锁的成就
+            var userUnlockedAchievements = await _context.UserAchievements
+                .Where(ua => ua.UserId == userId && ua.Unlocked && achievementIds.Contains(ua.AchievementId))
+                .Select(ua => ua.AchievementId)
+                .ToListAsync();
+            
+            // 按游戏分组统计
+            var achievementDict = allAchievements
+                .GroupBy(a => a.GameId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => {
+                        var total = g.Count();
+                        var unlocked = g.Count(a => userUnlockedAchievements.Contains(a.AchievementId));
+                        return total > 0 ? (double)unlocked / total * 100 : 0;
+                    }
+                );
+
+            // 获取所有游戏的成就总数
+            var gameAchievementCounts = await _context.Achievements
+                .Where(a => gameIds.Contains(a.GameId))
+                .GroupBy(a => a.GameId)
+                .Select(g => new { GameId = g.Key, TotalCount = g.Count() })
+                .ToDictionaryAsync(x => (long)x.GameId, x => x.TotalCount);
+            
+            // 构建返回数据
+            var items = games.Select(g => {
+                var totalCount = gameAchievementCounts.GetValueOrDefault(g.GameId, 0);
+                var progress = achievementDict.GetValueOrDefault(g.GameId, 0);
+                var unlockedCount = totalCount > 0 ? (int)(progress / 100.0 * totalCount) : 0;
+                
+                return new UserGameItemDto
+                {
+                    GameId = g.GameId,
+                    Name = g.Game.Name ?? "",
+                    HeaderImage = g.Game.HeaderImage ?? "",
+                    Platforms = g.Platforms.Select(p => p.PlatformId).ToList(),
+                    PlaytimeMinutes = g.TotalPlaytime,
+                    LastPlayed = g.LastPlayed?.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    AchievementsUnlocked = unlockedCount,
+                    AchievementsTotal = totalCount,
+                    OwnedPlatforms = g.PlatformLibraries.Select(upl => new OwnedPlatformDto
+                    {
+                        PlatformId = upl.PlatformId,
+                        PlatformName = upl.PlayerPlatform?.Platform?.PlatformName ?? "",
+                        PlaytimeMinutes = upl.PlaytimeMinutes
+                    }).ToList()
+                };
+            }).ToList();
+
             var result = new UserGameListDto
             {
-                Items = new List<UserGameItemDto>(),
+                Items = items,
                 Meta = new PaginationMeta
                 {
                     Page = page,
                     PageSize = pageSize,
-                    Total = 0
+                    Total = total
                 }
             };
 
-            return Task.FromResult<ActionResult<ApiResponse<UserGameListDto>>>(
-                Ok(ApiResponse<UserGameListDto>.SuccessResponse(result)));
+            _logger.LogInformation("返回游戏列表: 总数={Total}, 当前页={Page}, 返回项数={Count}", 
+                total, page, items.Count);
+
+            return Ok(ApiResponse<UserGameListDto>.SuccessResponse(result));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "获取用户游戏列表时发生错误");
-            return Task.FromResult<ActionResult<ApiResponse<UserGameListDto>>>(
-                StatusCode(500, ApiResponse<UserGameListDto>.ErrorResponse("ERR_INTERNAL", "服务器内部错误")));
+            return StatusCode(500, ApiResponse<UserGameListDto>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
 

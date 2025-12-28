@@ -101,7 +101,7 @@
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Gamepad2, Compass, List, Trophy, Library, BarChart2, Newspaper,
+  Gamepad2, Compass, List, Library, BarChart2, Newspaper,
   ChevronLeft, ChevronRight, Settings, Bell, Link, LogOut, Shield
 } from 'lucide-vue-next'
 import { authApi } from '@/api/auth'
@@ -213,10 +213,9 @@ const handleAvatarError = (e) => { e.target.src = defaultAvatar }
 
 const mainMenuItems = [
   { path: '/app/discover', label: '探索', icon: Compass },
-  { path: '/app/list', label: '游戏库', icon: List },
+  { path: '/app/list', label: '游戏列表', icon: List },
   { path: '/app/ranking', label: '排行榜', icon: BarChart2 },
-  { path: '/app/library', label: '我的收藏', icon: Library },
-  { path: '/app/achievements', label: '成就墙', icon: Trophy },
+  { path: '/app/library', label: '我的游戏库', icon: Library },
   { path: '/app/news', label: '资讯', icon: Newspaper }
 ]
 
