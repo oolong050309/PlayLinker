@@ -26,7 +26,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// 生成测试用JWT Token (仅用于开发和测试)
+    /// 生成测试用JWT Token
     /// </summary>
     /// <param name="request">Token生成请求</param>
     [HttpPost("token")]

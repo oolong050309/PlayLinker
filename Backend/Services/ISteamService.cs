@@ -46,6 +46,10 @@ public interface ISteamService
     /// <summary>
     /// 获取游戏新闻
     /// </summary>
-    Task<object?> GetGameNews(int appId, int count, string apiKey);
+    /// <param name="appId">Steam AppID</param>
+    /// <param name="count">获取的新闻数量，0表示获取所有新闻</param>
+    /// <param name="apiKey">Steam API Key</param>
+    /// <returns>新闻数据和是否获取完所有新闻的标识</returns>
+    Task<(object? NewsData, bool IsAll)> GetGameNews(int appId, int count, string apiKey);
 }
 

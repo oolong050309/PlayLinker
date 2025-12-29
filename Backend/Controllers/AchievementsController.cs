@@ -6,6 +6,7 @@ using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
+using PlayLinker.Services;
 using System.Text.Json;
 using System.Linq;
 
@@ -24,14 +25,17 @@ public class AchievementsController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ITokenEncryptionService _encryptionService;
+    private const int STEAM_PLATFORM_ID = 1; // Steam平台ID
 
-    public AchievementsController(PlayLinkerDbContext context, ILogger<AchievementsController> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public AchievementsController(PlayLinkerDbContext context, ILogger<AchievementsController> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory, ITokenEncryptionService encryptionService)
     {
         _context = context;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient();
         _httpClientFactory = httpClientFactory;
+        _encryptionService = encryptionService;
     }
 
     private int GetCurrentUserId()
@@ -44,6 +48,41 @@ public class AchievementsController : ControllerBase
             throw new UnauthorizedAccessException("无法获取用户ID，请重新登录");
         }
         return userId;
+    }
+
+    /// <summary>
+    /// 从数据库获取Steam API Key
+    /// </summary>
+    private async Task<string?> GetSteamApiKeyAsync(int userId)
+    {
+        try
+        {
+            // 首先尝试从用户绑定中获取
+            var binding = await _context.UserPlatformBindings
+                .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == STEAM_PLATFORM_ID && b.BindingStatus == true);
+            
+            if (binding != null && !string.IsNullOrEmpty(binding.AccessToken))
+            {
+                try
+                {
+                    var decryptedKey = _encryptionService.DecryptToken(binding.AccessToken);
+                    _logger.LogInformation("从用户绑定获取Steam API Key: userId={UserId}", userId);
+                    return decryptedKey;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "解密用户{UserId}的Steam API Key失败，尝试从配置获取", userId);
+                }
+            }
+            
+            _logger.LogWarning("用户{UserId}未绑定Steam平台或API Key不存在", userId);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "从数据库获取Steam API Key失败: userId={UserId}", userId);
+            return null;
+        }
     }
 
     /// <summary>
@@ -594,10 +633,11 @@ public class AchievementsController : ControllerBase
                 gamesToSync = gamesToSync.Where(g => g == specificGameId.Value).ToList();
             }
 
-            var apiKey = _configuration["SteamAPI:ApiKey"] ?? "";
+            // 从数据库获取Steam API Key
+            var apiKey = await GetSteamApiKeyAsync(userId);
             if (string.IsNullOrEmpty(apiKey))
             {
-                _logger.LogWarning("Steam API Key 未配置");
+                _logger.LogWarning("Steam API Key 未配置: userId={UserId}, steamId={SteamId}", userId, steamId);
                 return (0, 0);
             }
 
@@ -633,17 +673,282 @@ public class AchievementsController : ControllerBase
                     _logger.LogInformation("从 game_platform 表获取 AppID: appId={AppId}", appId);
                 }
 
-                // 获取用户成就数据
+                // 第一步：获取游戏成就架构信息（完整成就信息）
+                var schemaUrl = $"https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key={apiKey}&appid={appId}&l=schinese";
+                _logger.LogInformation("调用 Steam API 获取成就架构: {Url}", schemaUrl);
+                var schemaResponse = await httpClient.GetAsync(schemaUrl);
+
+                Dictionary<string, Achievement> schemaAchievements = new();
+                
+                if (schemaResponse.IsSuccessStatusCode)
+                {
+                    var schemaContent = await schemaResponse.Content.ReadAsStringAsync();
+                    _logger.LogDebug("GetSchemaForGame API 返回内容: {Content}", schemaContent);
+                    var schemaDoc = JsonDocument.Parse(schemaContent);
+
+                    if (schemaDoc.RootElement.TryGetProperty("game", out var gameData))
+                    {
+                        if (gameData.TryGetProperty("availableGameStats", out var stats))
+                        {
+                            if (stats.TryGetProperty("achievements", out var achievementsObj))
+                            {
+                                // 检查 achievements 是对象还是数组
+                                if (achievementsObj.ValueKind == JsonValueKind.Array)
+                                {
+                                    // 处理数组格式的成就数据
+                                    _logger.LogInformation("GetSchemaForGame 返回的 achievements 是数组格式，按数组格式处理: gameId={GameId}, appId={AppId}", 
+                                        gameId, appId);
+                                    
+                                    foreach (var achElement in achievementsObj.EnumerateArray())
+                                    {
+                                        // 数组格式中，成就名称可能在 "name" 或 "apiname" 字段中
+                                        string? achievementName = null;
+                                        if (achElement.TryGetProperty("name", out var nameProp))
+                                        {
+                                            achievementName = nameProp.GetString();
+                                        }
+                                        else if (achElement.TryGetProperty("apiname", out var apiNameProp))
+                                        {
+                                            achievementName = apiNameProp.GetString();
+                                        }
+                                        
+                                        if (string.IsNullOrEmpty(achievementName)) continue;
+
+                                        if (!achElement.TryGetProperty("displayName", out var displayNameProp)) continue;
+                                        var displayName = displayNameProp.GetString();
+                                        if (string.IsNullOrEmpty(displayName)) continue;
+
+                                        var description = achElement.TryGetProperty("description", out var descProp) 
+                                            ? descProp.GetString() 
+                                            : null;
+                                        var hidden = achElement.TryGetProperty("hidden", out var hiddenProp) 
+                                            ? hiddenProp.GetInt32() == 1 
+                                            : false;
+                                        var icon = achElement.TryGetProperty("icon", out var iconProp) 
+                                            ? iconProp.GetString() ?? "" 
+                                            : "";
+                                        var iconGray = achElement.TryGetProperty("icongray", out var iconGrayProp) 
+                                            ? iconGrayProp.GetString() ?? "" 
+                                            : "";
+                                        var defaultValue = achElement.TryGetProperty("defaultvalue", out var defaultValueProp) 
+                                            ? defaultValueProp.GetInt32() 
+                                            : 0;
+
+                                        // 创建或更新成就记录
+                                        var existingAchievement = await _context.Achievements
+                                            .FirstOrDefaultAsync(a => a.GameId == gameId && a.AchievementName == achievementName);
+
+                                        if (existingAchievement == null)
+                                        {
+                                            existingAchievement = new Achievement
+                                            {
+                                                GameId = gameId,
+                                                AchievementName = achievementName,
+                                                DisplayName = displayName,
+                                                Description = description,
+                                                Hidden = hidden,
+                                                IconUnlocked = icon,
+                                                IconLocked = iconGray
+                                            };
+                                            _context.Achievements.Add(existingAchievement);
+                                            await _context.SaveChangesAsync(); // 保存以获取 AchievementId
+                                            _logger.LogInformation("创建新成就（数组格式）: gameId={GameId}, achievementName={AchievementName}", 
+                                                gameId, achievementName);
+                                        }
+                                        else
+                                        {
+                                            // 检查并更新缺失的字段（如果字段为空则更新）
+                                            bool needsUpdate = false;
+                                            
+                                            // 更新 DisplayName（如果为空）
+                                            if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName))
+                                            {
+                                                existingAchievement.DisplayName = displayName;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            // 更新 Description（如果为空）
+                                            if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description))
+                                            {
+                                                existingAchievement.Description = description;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            // 更新 Hidden（如果当前值与API返回的不同）
+                                            if (existingAchievement.Hidden != hidden)
+                                            {
+                                                existingAchievement.Hidden = hidden;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            // 更新 IconUnlocked（如果为空）
+                                            if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon))
+                                            {
+                                                existingAchievement.IconUnlocked = icon;
+                                                needsUpdate = true;
+                                                _logger.LogInformation("更新成就图标（解锁）: gameId={GameId}, achievementName={AchievementName}", 
+                                                    gameId, achievementName);
+                                            }
+                                            
+                                            // 更新 IconLocked（如果为空）
+                                            if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray))
+                                            {
+                                                existingAchievement.IconLocked = iconGray;
+                                                needsUpdate = true;
+                                                _logger.LogInformation("更新成就图标（锁定）: gameId={GameId}, achievementName={AchievementName}", 
+                                                    gameId, achievementName);
+                                            }
+                                            
+                                            if (needsUpdate)
+                                            {
+                                                _logger.LogInformation("更新已有成就的缺失字段: gameId={GameId}, achievementName={AchievementName}", 
+                                                    gameId, achievementName);
+                                            }
+                                        }
+
+                                        schemaAchievements[achievementName] = existingAchievement;
+                                    }
+
+                                    await _context.SaveChangesAsync();
+                                    _logger.LogInformation("从 GetSchemaForGame（数组格式）获取到 {Count} 个成就: gameId={GameId}, appId={AppId}", 
+                                        schemaAchievements.Count, gameId, appId);
+                                }
+                                else if (achievementsObj.ValueKind == JsonValueKind.Object)
+                                {
+                                    // 解析成就架构信息（对象格式）
+                                    foreach (var achProp in achievementsObj.EnumerateObject())
+                                    {
+                                        var achKey = achProp.Name;
+                                        var achValue = achProp.Value;
+
+                                        if (!achValue.TryGetProperty("displayName", out var displayNameProp)) continue;
+                                        var displayName = displayNameProp.GetString();
+                                        if (string.IsNullOrEmpty(displayName)) continue;
+
+                                        var achievementName = achKey;
+                                        var description = achValue.TryGetProperty("description", out var descProp) 
+                                            ? descProp.GetString() 
+                                            : null;
+                                        var hidden = achValue.TryGetProperty("hidden", out var hiddenProp) 
+                                            ? hiddenProp.GetInt32() == 1 
+                                            : false;
+                                        var icon = achValue.TryGetProperty("icon", out var iconProp) 
+                                            ? iconProp.GetString() ?? "" 
+                                            : "";
+                                        var iconGray = achValue.TryGetProperty("icongray", out var iconGrayProp) 
+                                            ? iconGrayProp.GetString() ?? "" 
+                                            : "";
+                                        var defaultValue = achValue.TryGetProperty("defaultvalue", out var defaultValueProp) 
+                                            ? defaultValueProp.GetInt32() 
+                                            : 0;
+
+                                        // 创建或更新成就记录
+                                        var existingAchievement = await _context.Achievements
+                                            .FirstOrDefaultAsync(a => a.GameId == gameId && a.AchievementName == achievementName);
+
+                                        if (existingAchievement == null)
+                                        {
+                                            existingAchievement = new Achievement
+                                            {
+                                                GameId = gameId,
+                                                AchievementName = achievementName,
+                                                DisplayName = displayName,
+                                                Description = description,
+                                                Hidden = hidden,
+                                                IconUnlocked = icon,
+                                                IconLocked = iconGray
+                                            };
+                                            _context.Achievements.Add(existingAchievement);
+                                            await _context.SaveChangesAsync(); // 保存以获取 AchievementId
+                                            _logger.LogInformation("创建新成就: gameId={GameId}, achievementName={AchievementName}", 
+                                                gameId, achievementName);
+                                        }
+                                        else
+                                        {
+                                            // 检查并更新缺失的字段（如果字段为空则更新）
+                                            bool needsUpdate = false;
+                                            
+                                            // 更新 DisplayName（如果为空）
+                                            if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName))
+                                            {
+                                                existingAchievement.DisplayName = displayName;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            // 更新 Description（如果为空）
+                                            if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description))
+                                            {
+                                                existingAchievement.Description = description;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            // 更新 Hidden（如果当前值与API返回的不同，但优先保持已有值）
+                                            // 注意：Hidden字段通常不会为空，所以这里直接更新以保持数据一致性
+                                            if (existingAchievement.Hidden != hidden)
+                                            {
+                                                existingAchievement.Hidden = hidden;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            // 更新 IconUnlocked（如果为空）
+                                            if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon))
+                                            {
+                                                existingAchievement.IconUnlocked = icon;
+                                                needsUpdate = true;
+                                                _logger.LogInformation("更新成就图标（解锁）: gameId={GameId}, achievementName={AchievementName}", 
+                                                    gameId, achievementName);
+                                            }
+                                            
+                                            // 更新 IconLocked（如果为空）
+                                            if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray))
+                                            {
+                                                existingAchievement.IconLocked = iconGray;
+                                                needsUpdate = true;
+                                                _logger.LogInformation("更新成就图标（锁定）: gameId={GameId}, achievementName={AchievementName}", 
+                                                    gameId, achievementName);
+                                            }
+                                            
+                                            if (needsUpdate)
+                                            {
+                                                _logger.LogInformation("更新已有成就的缺失字段: gameId={GameId}, achievementName={AchievementName}", 
+                                                    gameId, achievementName);
+                                            }
+                                        }
+
+                                        schemaAchievements[achievementName] = existingAchievement;
+                                    }
+
+                                    await _context.SaveChangesAsync();
+                                    _logger.LogInformation("从 GetSchemaForGame 获取到 {Count} 个成就: gameId={GameId}, appId={AppId}", 
+                                        schemaAchievements.Count, gameId, appId);
+                                }
+                                else
+                                {
+                                    _logger.LogWarning("GetSchemaForGame 返回的 achievements 格式未知: gameId={GameId}, appId={AppId}, ValueKind={ValueKind}", 
+                                        gameId, appId, achievementsObj.ValueKind);
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    var errorContent = await schemaResponse.Content.ReadAsStringAsync();
+                    _logger.LogWarning("GetSchemaForGame API 调用失败: gameId={GameId}, appId={AppId}, StatusCode={StatusCode}, Content={Content}", 
+                        gameId, appId, schemaResponse.StatusCode, errorContent);
+                }
+
+                // 第二步：获取用户成就解锁情况
                 var achievementsUrl = $"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key={apiKey}&steamid={steamId}&appid={appId}&l=schinese";
-                _logger.LogInformation("调用 Steam API: {Url}", achievementsUrl);
+                _logger.LogInformation("调用 Steam API 获取用户成就解锁情况: {Url}", achievementsUrl);
                 var achievementsResponse = await httpClient.GetAsync(achievementsUrl);
                 
-                _logger.LogInformation("Steam API 响应状态: {StatusCode}", achievementsResponse.StatusCode);
+                _logger.LogInformation("GetPlayerAchievements API 响应状态: {StatusCode}", achievementsResponse.StatusCode);
 
                 if (achievementsResponse.IsSuccessStatusCode)
                 {
                     var achievementsContent = await achievementsResponse.Content.ReadAsStringAsync();
-                    _logger.LogDebug("Steam API 返回内容: {Content}", achievementsContent);
+                    _logger.LogDebug("GetPlayerAchievements API 返回内容: {Content}", achievementsContent);
                     var achievementsDoc = JsonDocument.Parse(achievementsContent);
 
                     if (achievementsDoc.RootElement.TryGetProperty("playerstats", out var playerStats))
@@ -651,70 +956,32 @@ public class AchievementsController : ControllerBase
                         if (playerStats.TryGetProperty("achievements", out var achievementsArray))
                         {
                             var achievementsCount = achievementsArray.GetArrayLength();
-                            _logger.LogInformation("找到 {Count} 个成就", achievementsCount);
-                            
-                            // 批量加载该游戏的所有成就，避免N+1查询问题
-                            var gameAchievements = await _context.Achievements
-                                .Where(a => a.GameId == gameId)
-                                .ToDictionaryAsync(a => a.AchievementName, a => a);
+                            _logger.LogInformation("找到 {Count} 个用户成就记录: gameId={GameId}, appId={AppId}", 
+                                achievementsCount, gameId, appId);
 
-                            // 第一遍：收集需要创建的新成就
-                            var newAchievementsToCreate = new List<Achievement>();
-                            foreach (var achElement in achievementsArray.EnumerateArray())
-                            {
-                                if (!achElement.TryGetProperty("apiname", out var apiName)) continue;
-                                var achievementName = apiName.GetString();
-                                if (string.IsNullOrEmpty(achievementName)) continue;
-
-                                // 如果数据库中不存在该成就，准备创建
-                                if (!gameAchievements.ContainsKey(achievementName))
-                                {
-                                    var displayName = achElement.TryGetProperty("name", out var nameProp) 
-                                        ? nameProp.GetString() ?? achievementName 
-                                        : achievementName;
-                                    var description = achElement.TryGetProperty("description", out var descProp) 
-                                        ? descProp.GetString() 
-                                        : null;
-
-                                    var newAchievement = new Achievement
-                                    {
-                                        GameId = gameId,
-                                        AchievementName = achievementName,
-                                        DisplayName = displayName ?? achievementName,
-                                        Description = description,
-                                        Hidden = false, // 默认不隐藏
-                                        IconUnlocked = "", // 默认空，后续可以通过 GetSchemaForGame API 获取
-                                        IconLocked = "" // 默认空，后续可以通过 GetSchemaForGame API 获取
-                                    };
-                                    newAchievementsToCreate.Add(newAchievement);
-                                    gameAchievements[achievementName] = newAchievement; // 预先添加到字典
-                                }
-                            }
-
-                            // 批量创建新成就
-                            if (newAchievementsToCreate.Count > 0)
-                            {
-                                _context.Achievements.AddRange(newAchievementsToCreate);
-                                await _context.SaveChangesAsync(); // 保存以获取 AchievementId
-                                _logger.LogInformation("批量创建 {Count} 个新成就: gameId={GameId}", 
-                                    newAchievementsToCreate.Count, gameId);
-                            }
-
-                            // 批量加载该用户已有的成就记录（包括新创建的成就）
-                            var allAchievementIds = gameAchievements.Values.Select(a => a.AchievementId).ToList();
+                            // 批量加载该用户已有的成就记录
+                            var allAchievementIds = schemaAchievements.Values.Select(a => a.AchievementId).ToList();
                             var existingUserAchievements = await _context.UserAchievements
                                 .Where(ua => ua.UserId == userId 
                                     && ua.PlatformId == STEAM_PLATFORM_ID
                                     && allAchievementIds.Contains(ua.AchievementId))
                                 .ToDictionaryAsync(ua => ua.AchievementId, ua => ua);
 
-                            // 第二遍：处理用户成就数据
+                            // 处理用户成就解锁数据
                             foreach (var achElement in achievementsArray.EnumerateArray())
                             {
                                 // 提取成就名称（apiname）
                                 if (!achElement.TryGetProperty("apiname", out var apiName)) continue;
                                 var achievementName = apiName.GetString();
                                 if (string.IsNullOrEmpty(achievementName)) continue;
+
+                                // 如果架构中没有这个成就，跳过（可能游戏更新了但架构还没同步）
+                                if (!schemaAchievements.TryGetValue(achievementName, out var achievement))
+                                {
+                                    _logger.LogWarning("成就未在架构中找到: gameId={GameId}, achievementName={AchievementName}", 
+                                        gameId, achievementName);
+                                    continue;
+                                }
 
                                 // 提取成就状态（achieved，注意：Steam API 返回的是 achieved 而不是 unlocked）
                                 var achieved = achElement.TryGetProperty("achieved", out var achievedProp) && achievedProp.GetInt32() == 1;
@@ -723,14 +990,6 @@ public class AchievementsController : ControllerBase
                                 var unlockTime = achElement.TryGetProperty("unlocktime", out var unlockTimeProp) && unlockTimeProp.GetInt64() > 0
                                     ? DateTimeOffset.FromUnixTimeSeconds(unlockTimeProp.GetInt64()).DateTime
                                     : (DateTime?)null;
-
-                                // 从内存字典中查找成就（应该已经存在）
-                                if (!gameAchievements.TryGetValue(achievementName, out var achievement))
-                                {
-                                    _logger.LogWarning("成就未找到: gameId={GameId}, achievementName={AchievementName}", 
-                                        gameId, achievementName);
-                                    continue;
-                                }
 
                                 // 从内存字典中查找用户成就记录
                                 if (existingUserAchievements.TryGetValue(achievement.AchievementId, out var userAchievement))
@@ -769,19 +1028,21 @@ public class AchievementsController : ControllerBase
                         }
                         else
                         {
-                            _logger.LogWarning("Steam API 返回数据中没有 achievements 数组");
+                            _logger.LogWarning("Steam API 返回数据中没有 achievements 数组: gameId={GameId}, appId={AppId}", 
+                                gameId, appId);
                         }
                     }
                     else
                     {
-                        _logger.LogWarning("Steam API 返回数据中没有 playerstats 对象");
+                        _logger.LogWarning("Steam API 返回数据中没有 playerstats 对象: gameId={GameId}, appId={AppId}", 
+                            gameId, appId);
                     }
                 }
                 else
                 {
                     var errorContent = await achievementsResponse.Content.ReadAsStringAsync();
-                    _logger.LogWarning("Steam API 调用失败: StatusCode={StatusCode}, Content={Content}", 
-                        achievementsResponse.StatusCode, errorContent);
+                    _logger.LogWarning("GetPlayerAchievements API 调用失败: gameId={GameId}, appId={AppId}, StatusCode={StatusCode}, Content={Content}", 
+                        gameId, appId, achievementsResponse.StatusCode, errorContent);
                 }
             }
         }

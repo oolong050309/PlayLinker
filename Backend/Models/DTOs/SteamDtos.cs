@@ -67,6 +67,7 @@ public class SteamGameDto
     public PlatformSupportDto Platforms { get; set; } = new();
     public List<string> Categories { get; set; } = new();
     public List<string> Genres { get; set; } = new();
+    public string? SupportedLanguages { get; set; }
     public string ReleaseDate { get; set; } = string.Empty;
     public int RequiredAge { get; set; }
     public SteamPriceDto? PriceOverview { get; set; }
