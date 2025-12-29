@@ -16,12 +16,14 @@ public class PricesController : ControllerBase
     private readonly PlayLinkerDbContext _context;
     private readonly IAiService _aiService;
     private readonly ILogger<PricesController> _logger;
+    private readonly IServiceProvider _serviceProvider;
 
-    public PricesController(PlayLinkerDbContext context, IAiService aiService, ILogger<PricesController> logger)
+    public PricesController(PlayLinkerDbContext context, IAiService aiService, ILogger<PricesController> logger, IServiceProvider serviceProvider)
     {
         _context = context;
         _aiService = aiService;
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
     
     private int GetCurrentUserId()
@@ -54,6 +56,10 @@ public class PricesController : ControllerBase
             gameId = gameId,
             gameName = game?.Name,
             currentPrice = current?.CurrentPrice ?? 0,
+            originalPrice = current?.OriginalPrice ?? 0,
+            discountRate = current?.DiscountRate ?? 0,
+            discount = current?.DiscountRate ?? 0, // 兼容字段
+            isDiscount = current?.IsDiscount ?? false,
             lowestPrice = lowest?.CurrentPrice ?? 0,
             lowestDate = lowest?.RecordDate,
             priceHistory = history.Select(h => new
@@ -63,6 +69,7 @@ public class PricesController : ControllerBase
                 h.CurrentPrice,
                 h.OriginalPrice,
                 Discount = h.DiscountRate,
+                DiscountRate = h.DiscountRate, // 添加兼容字段
                 IsDiscount = h.IsDiscount
             })
         };
@@ -184,6 +191,16 @@ public class PricesController : ControllerBase
             _logger.LogInformation("用户 {UserId} 添加了价格监控: GameId={GameId}, PlatformId={PlatformId}",
                 userId, request.GameId, request.PlatformId);
 
+            // 立即检查当前价格是否已经满足提醒条件
+            try
+            {
+                await CheckAndNotifyImmediatelyAsync(sub, userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "立即检查价格提醒条件时发生错误，但不影响订阅创建");
+            }
+
             return Created("", ApiResponse<object>.SuccessResponse(new { 
                 subscriptionId = sub.SubscriptionId,
                 gameId = sub.GameId 
@@ -197,6 +214,122 @@ public class PricesController : ControllerBase
         {
             _logger.LogError(ex, "添加价格监控时发生错误");
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
+    /// 立即检查价格提醒条件并发送通知（用于新创建的订阅）
+    /// </summary>
+    private async Task CheckAndNotifyImmediatelyAsync(PriceAlertSubscription subscription, int userId)
+    {
+        // 获取游戏的最新价格记录
+        var latestPrice = await _context.PriceHistories
+            .Where(ph => ph.GameId == subscription.GameId 
+                && ph.PlatformId == subscription.PlatformId)
+            .OrderByDescending(ph => ph.RecordDate)
+            .FirstOrDefaultAsync();
+
+        if (latestPrice == null)
+        {
+            _logger.LogDebug("游戏 {GameId} 暂无价格记录，跳过立即检查", subscription.GameId);
+            return;
+        }
+
+        var game = await _context.Games.FindAsync(subscription.GameId);
+        if (game == null) return;
+
+        bool shouldNotify = false;
+        string notificationTitle = "";
+        string notificationContent = "";
+        string alertType = "";
+
+        // 检查是否满足目标价格条件
+        if (subscription.TargetPrice.HasValue && latestPrice.CurrentPrice <= subscription.TargetPrice.Value)
+        {
+            shouldNotify = true;
+            alertType = "target_price";
+            notificationTitle = $"价格提醒：{game.Name}";
+            notificationContent = $"游戏 {game.Name} 的当前价格为 ¥{latestPrice.CurrentPrice:F2}，已低于您设置的目标价格 ¥{subscription.TargetPrice.Value:F2}。";
+            
+            if (latestPrice.IsDiscount && latestPrice.DiscountRate > 0)
+            {
+                notificationContent += $" 当前折扣 {latestPrice.DiscountRate}%，原价 ¥{latestPrice.OriginalPrice:F2}。";
+            }
+        }
+        // 检查是否满足目标折扣条件
+        else if (subscription.TargetDiscount.HasValue && latestPrice.DiscountRate >= subscription.TargetDiscount.Value)
+        {
+            shouldNotify = true;
+            alertType = "target_discount";
+            notificationTitle = $"折扣提醒：{game.Name}";
+            notificationContent = $"游戏 {game.Name} 当前折扣 {latestPrice.DiscountRate}%，已达到您设置的目标折扣 {subscription.TargetDiscount.Value}%。";
+            notificationContent += $" 当前价格：¥{latestPrice.CurrentPrice:F2}，原价：¥{latestPrice.OriginalPrice:F2}。";
+        }
+
+        if (shouldNotify)
+        {
+            // 创建通知到消息中心
+            var notification = new NotificationCenter
+            {
+                UserId = userId,
+                SourceModule = "price_alert",
+                Title = notificationTitle,
+                Content = notificationContent,
+                NotificationType = "info",
+                IsRead = false,
+                RelatedId = subscription.SubscriptionId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.NotificationCenters.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // 创建价格提醒日志
+            var alertLog = new PriceAlertLog
+            {
+                SubscriptionId = subscription.SubscriptionId,
+                PriceId = latestPrice.PriceId,
+                AlertType = alertType,
+                AlertTime = DateTime.UtcNow,
+                NotificationId = notification.NotificationId
+            };
+
+            _context.PriceAlertLogs.Add(alertLog);
+            await _context.SaveChangesAsync();
+
+            // 发送邮件提醒
+            var user = await _context.Users.FindAsync(userId);
+            if (user != null && !string.IsNullOrWhiteSpace(user.Email))
+            {
+                try
+                {
+                    using var scope = _serviceProvider.CreateScope();
+                    var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                    
+                    await emailService.SendPriceAlertAsync(
+                        to: user.Email,
+                        username: user.Username ?? "用户",
+                        gameName: game.Name ?? "游戏",
+                        alertType: alertType,
+                        currentPrice: latestPrice.CurrentPrice,
+                        originalPrice: latestPrice.OriginalPrice,
+                        discountRate: latestPrice.DiscountRate,
+                        targetPrice: subscription.TargetPrice,
+                        targetDiscount: subscription.TargetDiscount
+                    );
+                    
+                    _logger.LogInformation("已为用户 {UserId} 发送立即价格提醒邮件: GameId={GameId}",
+                        userId, subscription.GameId);
+                }
+                catch (Exception emailEx)
+                {
+                    _logger.LogWarning(emailEx, "发送立即价格提醒邮件失败: UserId={UserId}",
+                        userId);
+                }
+            }
+
+            _logger.LogInformation("已为用户 {UserId} 创建立即价格提醒通知: GameId={GameId}, Price={Price}, Discount={Discount}%",
+                userId, subscription.GameId, latestPrice.CurrentPrice, latestPrice.DiscountRate);
         }
     }
 

@@ -329,7 +329,7 @@ public class PriceMonitoringService : BackgroundService
     {
         try
         {
-            // 获取昨天的价格记录
+            // 获取昨天的价格记录（用于价格下降提醒）
             var yesterday = DateTime.UtcNow.Date.AddDays(-1);
             var yesterdayPrice = await context.PriceHistories
                 .Where(ph => ph.GameId == gameId 
@@ -337,12 +337,6 @@ public class PriceMonitoringService : BackgroundService
                     && ph.RecordDate.Date == yesterday)
                 .OrderByDescending(ph => ph.RecordDate)
                 .FirstOrDefaultAsync(cancellationToken);
-
-            if (yesterdayPrice == null)
-            {
-                // 没有昨天的记录，可能是首次记录，不创建通知
-                return;
-            }
 
             // 获取游戏信息
             var game = await context.Games.FindAsync(new object[] { gameId }, cancellationToken);
@@ -360,23 +354,78 @@ public class PriceMonitoringService : BackgroundService
                 bool shouldNotify = false;
                 string notificationTitle = "";
                 string notificationContent = "";
+                string alertType = "";
 
-                // 检查是否满足目标价格条件
+                // 检查今天是否已经发送过通知（避免重复通知）
+                var today = DateTime.UtcNow.Date;
+                var todayAlert = await context.PriceAlertLogs
+                    .Where(l => l.SubscriptionId == subscription.SubscriptionId 
+                        && l.AlertTime.HasValue 
+                        && l.AlertTime.Value.Date == today)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (todayAlert != null)
+                {
+                    _logger.LogDebug("用户 {UserId} 的订阅 {SubscriptionId} 今天已发送过通知，跳过",
+                        subscription.UserId, subscription.SubscriptionId);
+                    continue;
+                }
+
+                // 检查是否满足目标价格条件（使用price_history中的currentPrice）
                 if (subscription.TargetPrice.HasValue && newPrice.CurrentPrice <= subscription.TargetPrice.Value)
                 {
+                    // 检查之前是否已经达到过目标价格（避免重复通知）
+                    var previousAlert = await context.PriceAlertLogs
+                        .Where(l => l.SubscriptionId == subscription.SubscriptionId 
+                            && l.AlertType == "target_price")
+                        .Include(l => l.Price)
+                        .OrderByDescending(l => l.AlertTime)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    // 如果之前已经通知过，且价格没有进一步下降，则不通知
+                    if (previousAlert != null && previousAlert.Price != null 
+                        && previousAlert.Price.CurrentPrice <= newPrice.CurrentPrice)
+                    {
+                        continue;
+                    }
+
                     shouldNotify = true;
+                    alertType = "target_price";
                     notificationTitle = $"价格提醒：{game.Name}";
                     notificationContent = $"游戏 {game.Name} 的价格已降至 ¥{newPrice.CurrentPrice:F2}，低于您设置的目标价格 ¥{subscription.TargetPrice.Value:F2}。";
+                    
+                    if (newPrice.IsDiscount && newPrice.DiscountRate > 0)
+                    {
+                        notificationContent += $" 当前折扣 {newPrice.DiscountRate}%，原价 ¥{newPrice.OriginalPrice:F2}。";
+                    }
                 }
-                // 检查是否满足目标折扣条件
+                // 检查是否满足目标折扣条件（使用price_history中的discountRate）
                 else if (subscription.TargetDiscount.HasValue && newPrice.DiscountRate >= subscription.TargetDiscount.Value)
                 {
+                    // 检查之前是否已经达到过目标折扣
+                    var previousAlert = await context.PriceAlertLogs
+                        .Where(l => l.SubscriptionId == subscription.SubscriptionId 
+                            && l.AlertType == "target_discount")
+                        .Include(l => l.Price)
+                        .OrderByDescending(l => l.AlertTime)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    // 如果之前已经通知过，且折扣没有进一步增加，则不通知
+                    if (previousAlert != null && previousAlert.Price != null 
+                        && previousAlert.Price.DiscountRate >= newPrice.DiscountRate)
+                    {
+                        continue;
+                    }
+
                     shouldNotify = true;
+                    alertType = "target_discount";
                     notificationTitle = $"折扣提醒：{game.Name}";
-                    notificationContent = $"游戏 {game.Name} 当前折扣 {newPrice.DiscountRate}%，达到您设置的目标折扣 {subscription.TargetDiscount.Value}%。当前价格：¥{newPrice.CurrentPrice:F2}。";
+                    notificationContent = $"游戏 {game.Name} 当前折扣 {newPrice.DiscountRate}%，达到您设置的目标折扣 {subscription.TargetDiscount.Value}%。";
+                    notificationContent += $" 当前价格：¥{newPrice.CurrentPrice:F2}，原价：¥{newPrice.OriginalPrice:F2}。";
                 }
-                // 检查价格是否下降（即使没有设置目标）
-                else if (newPrice.CurrentPrice < yesterdayPrice.CurrentPrice && newPrice.IsDiscount)
+                // 检查价格是否下降（即使没有设置目标）- 使用price_history中的价格数据
+                // 注意：只有在有昨天的价格记录时才检查价格下降
+                else if (yesterdayPrice != null && newPrice.CurrentPrice < yesterdayPrice.CurrentPrice && newPrice.IsDiscount)
                 {
                     var priceDrop = yesterdayPrice.CurrentPrice - newPrice.CurrentPrice;
                     var dropPercent = (priceDrop / yesterdayPrice.CurrentPrice) * 100;
@@ -385,14 +434,19 @@ public class PriceMonitoringService : BackgroundService
                     if (dropPercent >= 5)
                     {
                         shouldNotify = true;
+                        alertType = "price_drop";
                         notificationTitle = $"价格下降：{game.Name}";
-                        notificationContent = $"游戏 {game.Name} 价格下降 {dropPercent:F1}%（¥{yesterdayPrice.CurrentPrice:F2} → ¥{newPrice.CurrentPrice:F2}），当前折扣 {newPrice.DiscountRate}%。";
+                        notificationContent = $"游戏 {game.Name} 价格下降 {dropPercent:F1}%（¥{yesterdayPrice.CurrentPrice:F2} → ¥{newPrice.CurrentPrice:F2}），";
+                        notificationContent += $"当前折扣 {newPrice.DiscountRate}%，原价 ¥{newPrice.OriginalPrice:F2}。";
                     }
                 }
 
                 if (shouldNotify)
                 {
-                    // 创建通知
+                    // 获取用户信息（用于发送邮件）
+                    var user = await context.Users.FindAsync(new object[] { subscription.UserId }, cancellationToken);
+                    
+                    // 创建通知到消息中心
                     var notification = new NotificationCenter
                     {
                         UserId = subscription.UserId,
@@ -413,7 +467,7 @@ public class PriceMonitoringService : BackgroundService
                     {
                         SubscriptionId = subscription.SubscriptionId,
                         PriceId = newPrice.PriceId,
-                        AlertType = subscription.TargetPrice.HasValue ? "target_price" : "target_discount",
+                        AlertType = alertType,
                         AlertTime = DateTime.UtcNow,
                         NotificationId = notification.NotificationId
                     };
@@ -421,8 +475,39 @@ public class PriceMonitoringService : BackgroundService
                     context.PriceAlertLogs.Add(alertLog);
                     await context.SaveChangesAsync(cancellationToken);
 
-                    _logger.LogInformation("已为用户 {UserId} 创建价格提醒通知: GameId={GameId}, Price={Price}",
-                        subscription.UserId, gameId, newPrice.CurrentPrice);
+                    // 发送邮件提醒（如果用户有邮箱）
+                    if (user != null && !string.IsNullOrWhiteSpace(user.Email))
+                    {
+                        try
+                        {
+                            using var scope = _serviceProvider.CreateScope();
+                            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                            
+                            await emailService.SendPriceAlertAsync(
+                                to: user.Email,
+                                username: user.Username ?? "用户",
+                                gameName: game.Name ?? "游戏",
+                                alertType: alertType,
+                                currentPrice: newPrice.CurrentPrice,
+                                originalPrice: newPrice.OriginalPrice,
+                                discountRate: newPrice.DiscountRate,
+                                targetPrice: subscription.TargetPrice,
+                                targetDiscount: subscription.TargetDiscount
+                            );
+                            
+                            _logger.LogInformation("已为用户 {UserId} 发送价格提醒邮件: Email={Email}, GameId={GameId}",
+                                subscription.UserId, user.Email, gameId);
+                        }
+                        catch (Exception emailEx)
+                        {
+                            // 邮件发送失败不影响通知创建
+                            _logger.LogWarning(emailEx, "为用户 {UserId} 发送价格提醒邮件失败，但通知已创建",
+                                subscription.UserId);
+                        }
+                    }
+
+                    _logger.LogInformation("已为用户 {UserId} 创建价格提醒通知: GameId={GameId}, Price={Price}, Discount={Discount}%, AlertType={AlertType}",
+                        subscription.UserId, gameId, newPrice.CurrentPrice, newPrice.DiscountRate, alertType);
                 }
             }
         }

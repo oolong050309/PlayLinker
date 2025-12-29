@@ -130,25 +130,34 @@ const loading = ref(false)
 const notifications = ref([])
 
 const tabs = computed(() => [
-  { key: 'all', label: '全部', count: notifications.value.length },
-  { key: 'unread', label: '未读', count: notifications.value.filter(n => !n.read).length },
-  { key: 'system', label: '系统', count: notifications.value.filter(n => n.type === 'system').length },
-  { key: 'game', label: '游戏', count: notifications.value.filter(n => n.type === 'game').length },
-  { key: 'parental', label: '家长监管', count: notifications.value.filter(n => n.type === 'parental').length }
+  { key: 'all', label: '全部', count: notifications.value.filter(n => !n.read).length },
+  { key: 'system', label: '系统', count: notifications.value.filter(n => n.type === 'system' && !n.read).length },
+  { key: 'game', label: '游戏', count: notifications.value.filter(n => (n.type === 'game' || n.type === 'achievement') && !n.read).length },
+  { key: 'parental', label: '家长监管', count: notifications.value.filter(n => n.type === 'parental' && !n.read).length }
 ])
 
 const filteredNotifications = computed(() => {
   let filtered = notifications.value
 
-  if (activeTab.value === 'unread') {
-    filtered = filtered.filter(n => !n.read)
-  } else if (activeTab.value === 'system') {
+  // 按分类筛选
+  if (activeTab.value === 'system') {
     filtered = filtered.filter(n => n.type === 'system')
   } else if (activeTab.value === 'game') {
     filtered = filtered.filter(n => n.type === 'game' || n.type === 'achievement')
   } else if (activeTab.value === 'parental') {
     filtered = filtered.filter(n => n.type === 'parental')
   }
+  // 'all' 不筛选，显示所有
+
+  // 排序：未读在上，已读在下，然后按时间倒序
+  filtered = filtered.sort((a, b) => {
+    // 先按已读状态排序：未读在前（false在前），已读在后（true在后）
+    if (a.read !== b.read) {
+      return a.read ? 1 : -1
+    }
+    // 如果已读状态相同，按时间倒序
+    return b.createdAt - a.createdAt
+  })
 
   const start = (currentPage.value - 1) * pageSize
   const end = start + pageSize
@@ -157,9 +166,7 @@ const filteredNotifications = computed(() => {
 
 const totalPages = computed(() => {
   let filtered = notifications.value
-  if (activeTab.value === 'unread') {
-    filtered = filtered.filter(n => !n.read)
-  } else if (activeTab.value === 'system') {
+  if (activeTab.value === 'system') {
     filtered = filtered.filter(n => n.type === 'system')
   } else if (activeTab.value === 'game') {
     filtered = filtered.filter(n => n.type === 'game' || n.type === 'achievement')
@@ -182,8 +189,18 @@ const getIcon = (type) => {
 }
 
 const formatTime = (date) => {
+  if (!date) return ''
+  
+  // 如果date是字符串，先转换为Date对象
+  const dateObj = date instanceof Date ? date : new Date(date)
+  
+  // 如果后端返回的是UTC时间字符串，需要转换为中国时区
+  // 假设后端返回的时间已经是UTC时间，需要加8小时
+  const chinaTime = new Date(dateObj.getTime() + 8 * 60 * 60 * 1000)
   const now = new Date()
-  const diff = now - date
+  
+  // 计算时间差（使用中国时区时间）
+  const diff = now - chinaTime
   const minutes = Math.floor(diff / 60000)
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
@@ -192,7 +209,16 @@ const formatTime = (date) => {
   if (minutes < 60) return `${minutes}分钟前`
   if (hours < 24) return `${hours}小时前`
   if (days < 7) return `${days}天前`
-  return date.toLocaleDateString('zh-CN')
+  
+  // 超过7天，显示具体日期和时间（中国时区）
+  return chinaTime.toLocaleString('zh-CN', { 
+    year: 'numeric', 
+    month: '2-digit', 
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Shanghai'
+  })
 }
 
 // 从后端加载通知

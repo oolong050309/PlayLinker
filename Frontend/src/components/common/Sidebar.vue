@@ -102,7 +102,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Gamepad2, Compass, List, Library, BarChart2, Newspaper,
-  ChevronLeft, ChevronRight, Settings, Bell, Link, LogOut, Shield
+  ChevronLeft, ChevronRight, Settings, Bell, Link, LogOut, Shield, Heart
 } from 'lucide-vue-next'
 import { authApi } from '@/api/auth'
 import { usersApi } from '@/api/users'
@@ -216,6 +216,7 @@ const mainMenuItems = [
   { path: '/app/list', label: '游戏列表', icon: List },
   { path: '/app/ranking', label: '排行榜', icon: BarChart2 },
   { path: '/app/library', label: '我的游戏库', icon: Library },
+  { path: '/app/price-monitor', label: '愿望单', icon: Heart },
   { path: '/app/news', label: '资讯', icon: Newspaper }
 ]
 
@@ -267,6 +268,7 @@ const toggleCollapse = () => {
 
 const isActive = (path) => {
   if (path === '/app/discover') return route.path === '/app/discover' || route.path === '/app'
+  if (path === '/app/price-monitor') return route.path === '/app/price-monitor' || route.path === '/price-monitor'
   return route.path.startsWith(path)
 }
 

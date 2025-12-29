@@ -8,4 +8,5 @@ public interface IEmailService
     Task SendWelcomeAsync(string to, string username);
     Task SendPasswordResetAsync(string to, string username, string resetLink, int expiresMinutes = 30);
     Task SendPasswordResetCodeAsync(string to, string username, string code, int expiresMinutes = 30);
+    Task SendPriceAlertAsync(string to, string username, string gameName, string alertType, decimal currentPrice, decimal? originalPrice, int? discountRate, decimal? targetPrice, int? targetDiscount);
 }
