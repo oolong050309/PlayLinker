@@ -22,7 +22,7 @@ public class ParentalController : ControllerBase
     private readonly PlayLinkerDbContext _dbContext;
     private readonly ILogger<ParentalController> _logger;
 
-        public ParentalController(PlayLinkerDbContext dbContext, ILogger<ParentalController> logger)
+    public ParentalController(PlayLinkerDbContext dbContext, ILogger<ParentalController> logger)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -400,9 +400,9 @@ public class ParentalController : ControllerBase
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error responding to parental invitation");
-                return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
-            }
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
+    }
 
     /// <summary>
     /// 获取子账户列表
