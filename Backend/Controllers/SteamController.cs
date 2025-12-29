@@ -1125,6 +1125,676 @@ public class SteamController : ControllerBase
     }
 
     /// <summary>
+    /// 从第三方API获取热门游戏ID列表
+    /// </summary>
+    private async Task<HashSet<int>> GetHotGameIdsFromThirdPartyApiAsync()
+    {
+        var gameIds = new HashSet<int>();
+        var httpClient = _httpClientFactory.CreateClient();
+
+        try
+        {
+            // 获取愿望单排名
+            var wishlistUrl = "https://games-popularity.com/swagger/api/top-wishlist";
+            _logger.LogInformation("调用第三方API获取愿望单排名: {Url}", wishlistUrl);
+            var wishlistResponse = await httpClient.GetAsync(wishlistUrl);
+            
+            if (wishlistResponse.IsSuccessStatusCode)
+            {
+                var wishlistContent = await wishlistResponse.Content.ReadAsStringAsync();
+                var wishlistDoc = JsonDocument.Parse(wishlistContent);
+                
+                if (wishlistDoc.RootElement.TryGetProperty("data", out var wishlistData))
+                {
+                    foreach (var item in wishlistData.EnumerateArray())
+                    {
+                        if (item.TryGetProperty("steamId", out var steamIdProp))
+                        {
+                            var steamIdStr = steamIdProp.GetString();
+                            if (int.TryParse(steamIdStr, out var appId))
+                            {
+                                gameIds.Add(appId);
+                            }
+                        }
+                    }
+                    _logger.LogInformation("从愿望单排名获取到 {Count} 个游戏ID", gameIds.Count);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("获取愿望单排名失败: StatusCode={StatusCode}", wishlistResponse.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取愿望单排名时发生错误");
+        }
+
+        try
+        {
+            // 获取销量榜排名
+            var topSellersUrl = "https://games-popularity.com/swagger/api/top-sellers";
+            _logger.LogInformation("调用第三方API获取销量榜排名: {Url}", topSellersUrl);
+            var topSellersResponse = await httpClient.GetAsync(topSellersUrl);
+            
+            if (topSellersResponse.IsSuccessStatusCode)
+            {
+                var topSellersContent = await topSellersResponse.Content.ReadAsStringAsync();
+                var topSellersDoc = JsonDocument.Parse(topSellersContent);
+                
+                if (topSellersDoc.RootElement.TryGetProperty("data", out var topSellersData))
+                {
+                    int beforeCount = gameIds.Count;
+                    foreach (var item in topSellersData.EnumerateArray())
+                    {
+                        if (item.TryGetProperty("steamId", out var steamIdProp))
+                        {
+                            var steamIdStr = steamIdProp.GetString();
+                            if (int.TryParse(steamIdStr, out var appId))
+                            {
+                                gameIds.Add(appId);
+                            }
+                        }
+                    }
+                    _logger.LogInformation("从销量榜排名获取到 {Count} 个新游戏ID，总计 {TotalCount} 个游戏ID", 
+                        gameIds.Count - beforeCount, gameIds.Count);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("获取销量榜排名失败: StatusCode={StatusCode}", topSellersResponse.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取销量榜排名时发生错误");
+        }
+
+        return gameIds;
+    }
+
+    /// <summary>
+    /// 导入热门Steam游戏
+    /// 从第三方API获取愿望单和销量榜排名，然后导入这些游戏
+    /// </summary>
+    /// <param name="request">导入请求</param>
+    [HttpPost("importHotGames")]
+    [ProducesResponseType(typeof(ApiResponse<SteamImportHotGamesResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<SteamImportHotGamesResponseDto>>> ImportHotGames(
+        [FromBody] SteamImportHotGamesRequestDto? request = null)
+    {
+        try
+        {
+            _logger.LogInformation("开始导入热门Steam游戏");
+
+            // 初始化平台数据（确保Steam平台存在）
+            await InitializePlatformsAsync();
+
+            // 生成任务ID
+            var taskId = $"importHotGames_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+
+            int gamesCount = 0;
+            int achievementsCount = 0;
+            var errors = new List<string>();
+
+            // 获取Steam API Key
+            int? userId = null;
+            if (request?.UserId.HasValue == true && request.UserId.Value > 0)
+            {
+                userId = (int)request.UserId.Value;
+            }
+            else
+            {
+                userId = GetCurrentUserId();
+            }
+
+            var apiKey = await GetSteamApiKeyAsync(userId ?? 0);
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                return BadRequest(ApiResponse<SteamImportHotGamesResponseDto>.ErrorResponse("ERR_STEAM_API_KEY_NOT_FOUND", 
+                    "未找到Steam API Key，请先绑定Steam平台或提供有效的userId"));
+            }
+
+            // 从第三方API获取热门游戏ID
+            var hotGameIds = await GetHotGameIdsFromThirdPartyApiAsync();
+            _logger.LogInformation("获取到 {Count} 个热门游戏ID", hotGameIds.Count);
+
+            if (hotGameIds.Count == 0)
+            {
+                return BadRequest(ApiResponse<SteamImportHotGamesResponseDto>.ErrorResponse("ERR_NO_GAMES_FOUND", 
+                    "未能从第三方API获取到游戏ID"));
+            }
+
+            int wishlistCount = 0;
+            int topSellersCount = 0;
+
+            // 统计愿望单和销量榜的数量（这里简化处理，实际可以从API响应中区分）
+            // 由于两个API返回的数据结构相同，我们无法直接区分，所以这里只统计总数
+            var httpClient = _httpClientFactory.CreateClient();
+            
+            try
+            {
+                var wishlistUrl = "https://games-popularity.com/swagger/api/top-wishlist";
+                var wishlistResponse = await httpClient.GetAsync(wishlistUrl);
+                if (wishlistResponse.IsSuccessStatusCode)
+                {
+                    var wishlistContent = await wishlistResponse.Content.ReadAsStringAsync();
+                    var wishlistDoc = JsonDocument.Parse(wishlistContent);
+                    if (wishlistDoc.RootElement.TryGetProperty("data", out var wishlistData))
+                    {
+                        wishlistCount = wishlistData.GetArrayLength();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "统计愿望单数量失败");
+            }
+
+            try
+            {
+                var topSellersUrl = "https://games-popularity.com/swagger/api/top-sellers";
+                var topSellersResponse = await httpClient.GetAsync(topSellersUrl);
+                if (topSellersResponse.IsSuccessStatusCode)
+                {
+                    var topSellersContent = await topSellersResponse.Content.ReadAsStringAsync();
+                    var topSellersDoc = JsonDocument.Parse(topSellersContent);
+                    if (topSellersDoc.RootElement.TryGetProperty("data", out var topSellersData))
+                    {
+                        topSellersCount = topSellersData.GetArrayLength();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "统计销量榜数量失败");
+            }
+
+            // 逐个处理游戏：先检查是否存在，不存在则导入游戏数据和成就
+            int consecutiveTooManyRequests = 0;
+            const int MAX_CONSECUTIVE_TOO_MANY_REQUESTS = 10;
+            bool shouldStop = false;
+
+            foreach (var appId in hotGameIds)
+            {
+                if (shouldStop)
+                {
+                    _logger.LogWarning("连续 {Count} 个游戏发生 TooManyRequests 错误，停止导入", MAX_CONSECUTIVE_TOO_MANY_REQUESTS);
+                    errors.Add($"连续 {MAX_CONSECUTIVE_TOO_MANY_REQUESTS} 个游戏发生 TooManyRequests 错误，已停止导入");
+                    break;
+                }
+
+                try
+                {
+                    // 1. 先检查数据库中是否包含该游戏（通过 Steam AppID 在 game_platform 表中查找）
+                    var existingGamePlatform = await _context.GamePlatforms
+                        .FirstOrDefaultAsync(gp => gp.PlatformId == STEAM_PLATFORM_ID && gp.PlatformGameId == appId.ToString());
+
+                    if (existingGamePlatform != null)
+                    {
+                        _logger.LogInformation("游戏已存在，跳过: appId={AppId}, gameId={GameId}", appId, existingGamePlatform.GameId);
+                        continue;
+                    }
+
+                    // 2. 如果不存在，则按照【先获取游戏数据，再获取游戏成就】的顺序执行
+                    Game? game = null;
+
+                    // 2.1 先获取游戏数据
+                    if (request?.ImportGames != false)
+                    {
+                        try
+                        {
+                            // 直接调用 HTTP 请求以捕获 TooManyRequests 错误
+                            var gameUrl = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=schinese&cc=cn";
+                            var gameResponse = await httpClient.GetAsync(gameUrl);
+                            
+                            // 检查是否是 TooManyRequests 错误
+                            if (gameResponse.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                            {
+                                consecutiveTooManyRequests++;
+                                _logger.LogWarning("Steam API请求失败: TooManyRequests, appId={AppId}, 连续失败次数={Count}", appId, consecutiveTooManyRequests);
+                                errors.Add($"游戏 {appId}: Steam API请求失败: TooManyRequests");
+                                
+                                if (consecutiveTooManyRequests >= MAX_CONSECUTIVE_TOO_MANY_REQUESTS)
+                                {
+                                    shouldStop = true;
+                                    continue;
+                                }
+                                continue;
+                            }
+
+                            // 重置连续失败计数
+                            consecutiveTooManyRequests = 0;
+
+                            if (!gameResponse.IsSuccessStatusCode)
+                            {
+                                _logger.LogWarning("无法获取游戏信息: appId={AppId}, StatusCode={StatusCode}", appId, gameResponse.StatusCode);
+                                errors.Add($"游戏 {appId}: 无法获取游戏信息 (StatusCode: {gameResponse.StatusCode})");
+                                continue;
+                            }
+
+                            // 使用 SteamService 解析游戏数据
+                            var steamGame = await _steamService.GetSteamGame(appId, apiKey);
+                            
+                            if (steamGame == null)
+                            {
+                                _logger.LogWarning("无法解析游戏信息: appId={AppId}", appId);
+                                errors.Add($"游戏 {appId}: 无法解析游戏信息");
+                                continue;
+                            }
+
+                            // 查找或创建游戏
+                            game = await _context.Games
+                                .FirstOrDefaultAsync(g => g.Name == steamGame.Name);
+
+                            if (game == null)
+                            {
+                                // 创建新游戏
+                                game = new Game
+                                {
+                                    Name = steamGame.Name,
+                                    IsFree = steamGame.IsFree,
+                                    RequireAge = (byte?)steamGame.RequiredAge,
+                                    ShortDescription = steamGame.ShortDescription,
+                                    DetailedDescription = steamGame.DetailedDescription,
+                                    HeaderImage = steamGame.HeaderImage,
+                                    CapsuleImage = steamGame.HeaderImage,
+                                    Background = steamGame.HeaderImage,
+                                    Windows = steamGame.Platforms.Windows,
+                                    Mac = steamGame.Platforms.Mac,
+                                    Linux = steamGame.Platforms.Linux,
+                                    ReleaseDate = DateTime.TryParse(steamGame.ReleaseDate, out var releaseDate) ? releaseDate : DateTime.UtcNow,
+                                    ReviewScore = 0,
+                                    ReviewScoreDesc = "",
+                                    NumReviews = 0,
+                                    TotalPositive = 0
+                                };
+                                _context.Games.Add(game);
+                                await _context.SaveChangesAsync();
+
+                                // 添加开发商
+                                foreach (var devName in steamGame.Developers)
+                                {
+                                    if (string.IsNullOrEmpty(devName)) continue;
+                                    var truncatedName = devName.Length > 20 ? devName.Substring(0, 20) : devName;
+                                    var developer = await _context.Developers.FirstOrDefaultAsync(d => d.Name == truncatedName);
+                                    if (developer == null)
+                                    {
+                                        developer = new Developer { Name = truncatedName };
+                                        _context.Developers.Add(developer);
+                                        await _context.SaveChangesAsync();
+                                    }
+                                    if (!await _context.GameDevelopers.AnyAsync(gd => gd.GameId == game.GameId && gd.DeveloperId == developer.DeveloperId))
+                                    {
+                                        _context.GameDevelopers.Add(new GameDeveloper { GameId = game.GameId, DeveloperId = developer.DeveloperId });
+                                    }
+                                }
+
+                                // 添加发行商
+                                foreach (var pubName in steamGame.Publishers)
+                                {
+                                    if (string.IsNullOrEmpty(pubName)) continue;
+                                    var truncatedName = pubName.Length > 20 ? pubName.Substring(0, 20) : pubName;
+                                    var publisher = await _context.Publishers.FirstOrDefaultAsync(p => p.Name == truncatedName);
+                                    if (publisher == null)
+                                    {
+                                        publisher = new Publisher { Name = truncatedName };
+                                        _context.Publishers.Add(publisher);
+                                        await _context.SaveChangesAsync();
+                                    }
+                                    if (!await _context.GamePublishers.AnyAsync(gp => gp.GameId == game.GameId && gp.PublisherId == publisher.PublisherId))
+                                    {
+                                        _context.GamePublishers.Add(new GamePublisher { GameId = game.GameId, PublisherId = publisher.PublisherId });
+                                    }
+                                }
+                            }
+
+                            // 创建游戏平台映射
+                            if (!await _context.GamePlatforms.AnyAsync(gp => gp.GameId == game.GameId && gp.PlatformId == STEAM_PLATFORM_ID))
+                            {
+                                _context.GamePlatforms.Add(new GamePlatform
+                                {
+                                    GameId = game.GameId,
+                                    PlatformId = STEAM_PLATFORM_ID,
+                                    PlatformGameId = appId.ToString(),
+                                    GamePlatformUrl = $"https://store.steampowered.com/app/{appId}"
+                                });
+                                await _context.SaveChangesAsync();
+                            }
+
+                            // 处理 categories、genres、languages
+                            var existingCategories = await _context.GameCategories
+                                .Where(gc => gc.GameId == game.GameId)
+                                .ToListAsync();
+                            
+                            if (existingCategories.Count == 0 && steamGame.Categories.Count > 0)
+                            {
+                                foreach (var categoryName in steamGame.Categories)
+                                {
+                                    if (string.IsNullOrEmpty(categoryName)) continue;
+                                    var truncatedName = categoryName.Length > 50 ? categoryName.Substring(0, 50) : categoryName;
+                                    var category = await _context.Categories.FirstOrDefaultAsync(c => c.Name == truncatedName);
+                                    if (category == null)
+                                    {
+                                        category = new Category { Name = truncatedName };
+                                        _context.Categories.Add(category);
+                                        await _context.SaveChangesAsync();
+                                    }
+                                    if (!await _context.GameCategories.AnyAsync(gc => gc.GameId == game.GameId && gc.CategoryId == category.CategoryId))
+                                    {
+                                        _context.GameCategories.Add(new GameCategory { GameId = game.GameId, CategoryId = category.CategoryId });
+                                    }
+                                }
+                                await _context.SaveChangesAsync();
+                            }
+
+                            var existingGenres = await _context.GameGenres
+                                .Where(gg => gg.GameId == game.GameId)
+                                .ToListAsync();
+                            
+                            if (existingGenres.Count == 0 && steamGame.Genres.Count > 0)
+                            {
+                                foreach (var genreName in steamGame.Genres)
+                                {
+                                    if (string.IsNullOrEmpty(genreName)) continue;
+                                    var truncatedName = genreName.Length > 20 ? genreName.Substring(0, 20) : genreName;
+                                    var genre = await _context.Genres.FirstOrDefaultAsync(g => g.Name == truncatedName);
+                                    if (genre == null)
+                                    {
+                                        genre = new Genre { Name = truncatedName };
+                                        _context.Genres.Add(genre);
+                                        await _context.SaveChangesAsync();
+                                    }
+                                    if (!await _context.GameGenres.AnyAsync(gg => gg.GameId == game.GameId && gg.GenreId == genre.GenreId))
+                                    {
+                                        _context.GameGenres.Add(new GameGenre { GameId = game.GameId, GenreId = genre.GenreId });
+                                    }
+                                }
+                                await _context.SaveChangesAsync();
+                            }
+
+                            if (!string.IsNullOrEmpty(steamGame.SupportedLanguages))
+                            {
+                                var existingLanguages = await _context.GameLanguages
+                                    .Where(gl => gl.GameId == game.GameId)
+                                    .ToListAsync();
+                                
+                                if (existingLanguages.Count == 0)
+                                {
+                                    var parsedLanguages = ParseSupportedLanguages(steamGame.SupportedLanguages);
+                                    foreach (var languageName in parsedLanguages)
+                                    {
+                                        if (string.IsNullOrEmpty(languageName)) continue;
+                                        var truncatedName = languageName.Length > 50 ? languageName.Substring(0, 50) : languageName;
+                                        var language = await _context.Languages.FirstOrDefaultAsync(l => l.LanguageName == truncatedName);
+                                        if (language == null)
+                                        {
+                                            language = new Language { LanguageName = truncatedName };
+                                            _context.Languages.Add(language);
+                                            await _context.SaveChangesAsync();
+                                        }
+                                        if (!await _context.GameLanguages.AnyAsync(gl => gl.GameId == game.GameId && gl.LanguageId == language.LanguageId))
+                                        {
+                                            _context.GameLanguages.Add(new GameLanguage { GameId = game.GameId, LanguageId = language.LanguageId });
+                                        }
+                                    }
+                                    await _context.SaveChangesAsync();
+                                }
+                            }
+
+                            gamesCount++;
+                            _logger.LogInformation("成功导入游戏: appId={AppId}, gameId={GameId}, name={Name}", appId, game.GameId, game.Name);
+                        }
+                        catch (HttpRequestException httpEx) when (httpEx.Message.Contains("429") || httpEx.Message.Contains("TooManyRequests"))
+                        {
+                            consecutiveTooManyRequests++;
+                            _logger.LogWarning("Steam API请求失败: TooManyRequests, appId={AppId}, 连续失败次数={Count}", appId, consecutiveTooManyRequests);
+                            errors.Add($"游戏 {appId}: Steam API请求失败: TooManyRequests");
+                            
+                            if (consecutiveTooManyRequests >= MAX_CONSECUTIVE_TOO_MANY_REQUESTS)
+                            {
+                                shouldStop = true;
+                                continue;
+                            }
+                            continue;
+                        }
+                        catch (Exception ex)
+                        {
+                            consecutiveTooManyRequests = 0; // 重置计数（非 TooManyRequests 错误）
+                            _logger.LogError(ex, "导入游戏时发生错误: appId={AppId}", appId);
+                            errors.Add($"游戏 {appId}: {ex.Message}");
+                            continue;
+                        }
+                    }
+
+                    // 2.2 再获取游戏成就（如果游戏已创建或已存在）
+                    if (request?.ImportAchievements != false && game != null)
+                    {
+                        try
+                        {
+                            // 获取游戏平台映射（应该已经存在）
+                            var gamePlatform = await _context.GamePlatforms
+                                .FirstOrDefaultAsync(gp => gp.GameId == game.GameId && gp.PlatformId == STEAM_PLATFORM_ID);
+
+                            if (gamePlatform == null)
+                            {
+                                _logger.LogWarning("未找到游戏平台映射: appId={AppId}, gameId={GameId}", appId, game.GameId);
+                                continue;
+                            }
+
+                            // 获取游戏成就架构信息
+                            var schemaUrl = $"https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key={apiKey}&appid={appId}&l=schinese";
+                            var schemaResponse = await httpClient.GetAsync(schemaUrl);
+
+                            // 检查是否是 TooManyRequests 错误
+                            if (schemaResponse.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                            {
+                                consecutiveTooManyRequests++;
+                                _logger.LogWarning("Steam API请求失败: TooManyRequests, appId={AppId}, 连续失败次数={Count}", appId, consecutiveTooManyRequests);
+                                errors.Add($"游戏 {appId} 成就导入失败: Steam API请求失败: TooManyRequests");
+                                
+                                if (consecutiveTooManyRequests >= MAX_CONSECUTIVE_TOO_MANY_REQUESTS)
+                                {
+                                    shouldStop = true;
+                                    continue;
+                                }
+                                continue;
+                            }
+
+                            // 重置连续失败计数
+                            consecutiveTooManyRequests = 0;
+
+                            if (schemaResponse.IsSuccessStatusCode)
+                            {
+                                var schemaContent = await schemaResponse.Content.ReadAsStringAsync();
+                                var schemaDoc = JsonDocument.Parse(schemaContent);
+
+                                if (schemaDoc.RootElement.TryGetProperty("game", out var gameData))
+                                {
+                                    if (gameData.TryGetProperty("availableGameStats", out var stats))
+                                    {
+                                        if (stats.TryGetProperty("achievements", out var achievementsObj))
+                                        {
+                                            // 处理成就数据
+                                            if (achievementsObj.ValueKind == JsonValueKind.Array)
+                                            {
+                                                foreach (var achElement in achievementsObj.EnumerateArray())
+                                                {
+                                                    string? achievementName = null;
+                                                    if (achElement.TryGetProperty("name", out var nameProp))
+                                                    {
+                                                        achievementName = nameProp.GetString();
+                                                    }
+                                                    else if (achElement.TryGetProperty("apiname", out var apiNameProp))
+                                                    {
+                                                        achievementName = apiNameProp.GetString();
+                                                    }
+                                                    
+                                                    if (string.IsNullOrEmpty(achievementName)) continue;
+
+                                                    if (!achElement.TryGetProperty("displayName", out var displayNameProp)) continue;
+                                                    var displayName = displayNameProp.GetString();
+                                                    if (string.IsNullOrEmpty(displayName)) continue;
+
+                                                    var description = achElement.TryGetProperty("description", out var descProp) 
+                                                        ? descProp.GetString() 
+                                                        : null;
+                                                    var hidden = achElement.TryGetProperty("hidden", out var hiddenProp) 
+                                                        ? hiddenProp.GetInt32() == 1 
+                                                        : false;
+                                                    var icon = achElement.TryGetProperty("icon", out var iconProp) 
+                                                        ? iconProp.GetString() ?? "" 
+                                                        : "";
+                                                    var iconGray = achElement.TryGetProperty("icongray", out var iconGrayProp) 
+                                                        ? iconGrayProp.GetString() ?? "" 
+                                                        : "";
+
+                                                    var existingAchievement = await _context.Achievements
+                                                        .FirstOrDefaultAsync(a => a.GameId == gamePlatform.GameId && a.AchievementName == achievementName);
+
+                                                    if (existingAchievement == null)
+                                                    {
+                                                        existingAchievement = new Achievement
+                                                        {
+                                                            GameId = gamePlatform.GameId,
+                                                            AchievementName = achievementName,
+                                                            DisplayName = displayName,
+                                                            Description = description,
+                                                            Hidden = hidden,
+                                                            IconUnlocked = icon,
+                                                            IconLocked = iconGray
+                                                        };
+                                                        _context.Achievements.Add(existingAchievement);
+                                                        achievementsCount++;
+                                                    }
+                                                    else
+                                                    {
+                                                        bool needsUpdate = false;
+                                                        if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName)) { existingAchievement.DisplayName = displayName; needsUpdate = true; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description)) { existingAchievement.Description = description; needsUpdate = true; }
+                                                        if (existingAchievement.Hidden != hidden) { existingAchievement.Hidden = hidden; needsUpdate = true; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon)) { existingAchievement.IconUnlocked = icon; needsUpdate = true; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray)) { existingAchievement.IconLocked = iconGray; needsUpdate = true; }
+                                                    }
+                                                }
+                                            }
+                                            else if (achievementsObj.ValueKind == JsonValueKind.Object)
+                                            {
+                                                foreach (var achProp in achievementsObj.EnumerateObject())
+                                                {
+                                                    var achKey = achProp.Name;
+                                                    var achValue = achProp.Value;
+
+                                                    if (!achValue.TryGetProperty("displayName", out var displayNameProp)) continue;
+                                                    var displayName = displayNameProp.GetString();
+                                                    if (string.IsNullOrEmpty(displayName)) continue;
+
+                                                    var achievementName = achKey;
+                                                    var description = achValue.TryGetProperty("description", out var descProp) 
+                                                        ? descProp.GetString() 
+                                                        : null;
+                                                    var hidden = achValue.TryGetProperty("hidden", out var hiddenProp) 
+                                                        ? hiddenProp.GetInt32() == 1 
+                                                        : false;
+                                                    var icon = achValue.TryGetProperty("icon", out var iconProp) 
+                                                        ? iconProp.GetString() ?? "" 
+                                                        : "";
+                                                    var iconGray = achValue.TryGetProperty("icongray", out var iconGrayProp) 
+                                                        ? iconGrayProp.GetString() ?? "" 
+                                                        : "";
+
+                                                    var existingAchievement = await _context.Achievements
+                                                        .FirstOrDefaultAsync(a => a.GameId == gamePlatform.GameId && a.AchievementName == achievementName);
+
+                                                    if (existingAchievement == null)
+                                                    {
+                                                        existingAchievement = new Achievement
+                                                        {
+                                                            GameId = gamePlatform.GameId,
+                                                            AchievementName = achievementName,
+                                                            DisplayName = displayName,
+                                                            Description = description,
+                                                            Hidden = hidden,
+                                                            IconUnlocked = icon,
+                                                            IconLocked = iconGray
+                                                        };
+                                                        _context.Achievements.Add(existingAchievement);
+                                                        achievementsCount++;
+                                                    }
+                                                    else
+                                                    {
+                                                        bool needsUpdate = false;
+                                                        if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName)) { existingAchievement.DisplayName = displayName; needsUpdate = true; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description)) { existingAchievement.Description = description; needsUpdate = true; }
+                                                        if (existingAchievement.Hidden != hidden) { existingAchievement.Hidden = hidden; needsUpdate = true; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon)) { existingAchievement.IconUnlocked = icon; needsUpdate = true; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray)) { existingAchievement.IconLocked = iconGray; needsUpdate = true; }
+                                                    }
+                                                }
+                                            }
+
+                                            await _context.SaveChangesAsync();
+                                            _logger.LogInformation("成功导入游戏成就: appId={AppId}, gameId={GameId}", appId, gamePlatform.GameId);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch (HttpRequestException httpEx) when (httpEx.Message.Contains("429") || httpEx.Message.Contains("TooManyRequests"))
+                        {
+                            consecutiveTooManyRequests++;
+                            _logger.LogWarning("Steam API请求失败: TooManyRequests, appId={AppId}, 连续失败次数={Count}", appId, consecutiveTooManyRequests);
+                            errors.Add($"游戏 {appId} 成就导入失败: Steam API请求失败: TooManyRequests");
+                            
+                            if (consecutiveTooManyRequests >= MAX_CONSECUTIVE_TOO_MANY_REQUESTS)
+                            {
+                                shouldStop = true;
+                                continue;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            consecutiveTooManyRequests = 0; // 重置计数（非 TooManyRequests 错误）
+                            _logger.LogError(ex, "导入游戏成就时发生错误: appId={AppId}", appId);
+                            errors.Add($"游戏 {appId} 成就导入失败: {ex.Message}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    consecutiveTooManyRequests = 0; // 重置计数（非 TooManyRequests 错误）
+                    _logger.LogError(ex, "处理游戏时发生错误: appId={AppId}", appId);
+                    errors.Add($"游戏 {appId}: {ex.Message}");
+                }
+            }
+
+            var result = new SteamImportHotGamesResponseDto
+            {
+                TaskId = taskId,
+                Status = "completed",
+                WishlistGamesCount = wishlistCount,
+                TopSellersGamesCount = topSellersCount,
+                TotalUniqueGames = hotGameIds.Count,
+                Items = new SteamImportItemsDto
+                {
+                    Games = gamesCount,
+                    Achievements = achievementsCount,
+                    Friends = 0
+                },
+                Errors = errors
+            };
+
+            return Ok(ApiResponse<SteamImportHotGamesResponseDto>.SuccessResponse(result, "热门游戏导入完成"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "导入热门Steam游戏时发生错误");
+            return StatusCode(500, ApiResponse<SteamImportHotGamesResponseDto>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
     /// 获取Steam游戏信息
     /// </summary>
     /// <param name="appId">Steam AppID</param>
