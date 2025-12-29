@@ -215,7 +215,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, computed, watch } from 'vue'
+import { ref, onMounted, onActivated, nextTick, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePriceStore } from '@/stores/price'
 import { priceApi } from '@/api/price'
@@ -225,9 +225,9 @@ import { createIcons, icons } from 'lucide'
 const router = useRouter()
 const priceStore = usePriceStore()
 
-// 核心数据保留
-const wishlist = priceStore.wishlist
-const loading = ref(false)
+// 核心数据保留 - 使用 computed 确保响应式
+const wishlist = computed(() => priceStore.wishlist)
+const loading = computed(() => priceStore.loading)
 
 // 价格订阅数据
 const subscriptions = ref([])
@@ -438,23 +438,35 @@ const handleImageError = (event) => {
 
 // 刷新数据函数
 const refreshData = async () => {
-  loading.value = true
   try {
     await Promise.all([
       priceStore.fetchWishlist(),
       loadSubscriptions()
     ])
+  } catch (error) {
+    console.error('刷新数据失败:', error)
   } finally {
-    loading.value = false
+    nextTick(() => createIcons({ icons }))
   }
-  nextTick(() => createIcons({ icons }))
 }
 
 onMounted(async () => {
+  // 确保在挂载时立即加载数据
   await refreshData()
 })
 
-// 监听 store 中的 wishlist 变化，确保数据同步
+// 当路由激活时（从其他路由返回时）也刷新数据
+onActivated(async () => {
+  // 如果数据为空或加载完成，则刷新数据
+  if (wishlist.value.length === 0 && !loading.value) {
+    await refreshData()
+  } else {
+    // 即使有数据，也刷新以确保数据是最新的
+    await refreshData()
+  }
+})
+
+// 监听 store 中的 wishlist 变化，确保图标更新
 watch(() => priceStore.wishlist, () => {
   nextTick(() => createIcons({ icons }))
 }, { deep: true })

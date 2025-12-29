@@ -24,6 +24,11 @@ export const usePriceStore = defineStore('price', () => {
 
   // Actions
   const fetchWishlist = async () => {
+    // 如果正在加载，避免重复请求
+    if (loading.value) {
+      return
+    }
+    
     loading.value = true
     try {
       const res = await wishlistApi.getWishlist()
@@ -58,6 +63,9 @@ export const usePriceStore = defineStore('price', () => {
         } else {
           wishlist.value = []
         }
+      } else {
+        // 如果请求失败，确保 wishlist 是空数组
+        wishlist.value = []
       }
     } catch (error) {
       console.error('获取愿望单失败:', error)
