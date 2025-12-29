@@ -650,25 +650,60 @@ public class SteamService : ISteamService
     /// <summary>
     /// 获取游戏新闻
     /// </summary>
-    public async Task<object?> GetGameNews(int appId, int count, string apiKey)
+    /// <summary>
+    /// 获取游戏新闻
+    /// </summary>
+    /// <param name="appId">Steam AppID</param>
+    /// <param name="count">获取的新闻数量，0表示获取所有新闻</param>
+    /// <param name="apiKey">Steam API Key</param>
+    /// <returns>新闻数据，包含是否获取完所有新闻的标识</returns>
+    public async Task<(object? NewsData, bool IsAll)> GetGameNews(int appId, int count, string apiKey)
     {
         try
         {
-            var url = $"{_baseUrl}/ISteamNews/GetNewsForApp/v2/?key={apiKey}&appid={appId}&count={count}&maxlength=300";
+            // 如果 count == 0，设置一个很大的值来尝试获取所有新闻
+            // Steam API 的 GetNewsForApp 接口不支持分页，只能一次性获取最多一定数量的新闻
+            var requestCount = count == 0 ? 50000 : count;
+            
+            var url = $"{_baseUrl}/ISteamNews/GetNewsForApp/v2/?key={apiKey}&appid={appId}&count={requestCount}&maxlength=300";
             var response = await _httpClient.GetAsync(url);
 
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<object>(content);
+                var jsonDoc = JsonDocument.Parse(content);
+                
+                // 检查是否获取完所有新闻
+                bool isAll = false;
+                int itemsCount = 0;
+                
+                if (jsonDoc.RootElement.TryGetProperty("appnews", out var appNews))
+                {
+                    if (appNews.TryGetProperty("newsitems", out var newsItems))
+                    {
+                        itemsCount = newsItems.GetArrayLength();
+                        // 如果 count == 0，说明请求了所有新闻，返回 true
+                        // 如果 count > 0 且返回的数量小于请求的数量，说明已经获取完所有新闻
+                        if (count == 0)
+                        {
+                            isAll = true;
+                        }
+                        else
+                        {
+                            isAll = itemsCount < count;
+                        }
+                    }
+                }
+
+                return (JsonSerializer.Deserialize<object>(content), isAll);
             }
 
-            return null;
+            return (null, false);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获取游戏新闻时发生错误");
-            return null;
+            _logger.LogError(ex, "获取游戏新闻时发生错误: appId={AppId}", appId);
+            return (null, false);
         }
     }
 }

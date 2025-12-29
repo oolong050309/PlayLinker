@@ -108,6 +108,7 @@ public class SteamGameNewsResponseDto
     public int AppId { get; set; }
     public List<SteamNewsItemDto> News { get; set; } = new();
     public int Total { get; set; }
+    public bool IsAll { get; set; }
 }
 
 /// <summary>

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
+using PlayLinker.Models.Entities;
 using PlayLinker.Services;
 using System.Text.Json;
 
@@ -38,6 +39,70 @@ public class NewsController : ControllerBase
     {
         var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
         return int.TryParse(userIdClaim, out var userId) ? userId : null;
+    }
+
+    /// <summary>
+    /// 存储新闻到数据库
+    /// </summary>
+    /// <param name="gameId">游戏ID</param>
+    /// <param name="newsItems">新闻项列表</param>
+    /// <returns>存储的新闻数量</returns>
+    private async Task<int> SaveNewsToDatabaseAsync(long gameId, List<SteamNewsItemDto> newsItems)
+    {
+        int savedCount = 0;
+        
+        foreach (var newsItem in newsItems)
+        {
+            try
+            {
+                // 检查新闻是否已存在（通过 news_url 判断）
+                News? existingNews = null;
+                if (!string.IsNullOrEmpty(newsItem.Url))
+                {
+                    existingNews = await _context.News
+                        .FirstOrDefaultAsync(n => n.NewsUrl == newsItem.Url);
+                }
+
+                // 如果新闻不存在，创建新记录
+                if (existingNews == null)
+                {
+                    existingNews = new News
+                    {
+                        NewsTitle = newsItem.Title.Length > 512 ? newsItem.Title.Substring(0, 512) : newsItem.Title,
+                        NewsUrl = newsItem.Url?.Length > 2048 ? newsItem.Url.Substring(0, 2048) : newsItem.Url,
+                        Date = newsItem.Date,
+                        Author = newsItem.Author.Length > 128 ? newsItem.Author.Substring(0, 128) : newsItem.Author,
+                        Contents = newsItem.Contents ?? ""
+                    };
+                    _context.News.Add(existingNews);
+                    await _context.SaveChangesAsync();
+                    savedCount++;
+                    _logger.LogInformation("创建新新闻: newsId={NewsId}, title={Title}", existingNews.NewsId, existingNews.NewsTitle);
+                }
+
+                // 检查游戏与新闻的关联是否已存在
+                var existingGameNews = await _context.GameNews
+                    .FirstOrDefaultAsync(gn => gn.GameId == gameId && gn.NewsId == existingNews.NewsId);
+
+                if (existingGameNews == null)
+                {
+                    _context.GameNews.Add(new GameNews
+                    {
+                        GameId = gameId,
+                        NewsId = existingNews.NewsId,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("创建游戏新闻关联: gameId={GameId}, newsId={NewsId}", gameId, existingNews.NewsId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "存储新闻时发生错误: gameId={GameId}, title={Title}", gameId, newsItem.Title);
+            }
+        }
+
+        return savedCount;
     }
 
     // 获取Steam API Key（优先从当前用户，否则从数据库获取第一个有效的）
@@ -237,7 +302,7 @@ public class NewsController : ControllerBase
                         _logger.LogWarning("未找到Steam API Key，跳过游戏 {GameId}", gamePlatform.GameId);
                         continue;
                     }
-                    var newsData = await _steamService.GetGameNews(appId, count, apiKey);
+                    var (newsData, isAll) = await _steamService.GetGameNews(appId, count, apiKey);
                     if (newsData == null)
                     {
                         _logger.LogWarning("Steam API返回空数据: gameId={GameId}, appId={AppId}", 
@@ -249,13 +314,35 @@ public class NewsController : ControllerBase
                     var jsonString = newsData.ToString() ?? "{}";
                     var jsonDoc = JsonDocument.Parse(jsonString);
 
+                    var newsItems = new List<SteamNewsItemDto>();
+
                     if (jsonDoc.RootElement.TryGetProperty("appnews", out var appNews) &&
-                        appNews.TryGetProperty("newsitems", out var newsItems))
+                        appNews.TryGetProperty("newsitems", out var newsItemsArray))
                     {
-                        var newsCount = newsItems.GetArrayLength();
-                        totalNews += newsCount;
-                        _logger.LogInformation("游戏 {GameId} (AppID: {AppId}) 获取到 {Count} 条新闻", 
-                            gamePlatform.GameId, appId, newsCount);
+                        foreach (var item in newsItemsArray.EnumerateArray())
+                        {
+                            var newsItem = new SteamNewsItemDto
+                            {
+                                Gid = item.TryGetProperty("gid", out var gid) ? gid.GetString() ?? "" : "",
+                                Title = item.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
+                                Url = item.TryGetProperty("url", out var url) ? url.GetString() ?? "" : "",
+                                IsExternalUrl = item.TryGetProperty("is_external_url", out var isExternal) && isExternal.GetBoolean(),
+                                Author = item.TryGetProperty("author", out var author) ? author.GetString() ?? "" : "",
+                                Contents = item.TryGetProperty("contents", out var contents) ? contents.GetString() ?? "" : "",
+                                FeedLabel = item.TryGetProperty("feedlabel", out var feedLabel) ? feedLabel.GetString() ?? "" : "",
+                                Date = item.TryGetProperty("date", out var date) ? date.GetInt64() : 0,
+                                FeedName = item.TryGetProperty("feedname", out var feedName) ? feedName.GetString() ?? "" : "",
+                                FeedType = item.TryGetProperty("feed_type", out var feedType) ? feedType.GetInt32() : 0,
+                                AppId = item.TryGetProperty("appid", out var appIdProp) ? appIdProp.GetInt32() : 0
+                            };
+                            newsItems.Add(newsItem);
+                        }
+
+                        // 存储新闻到数据库
+                        var savedCount = await SaveNewsToDatabaseAsync(gamePlatform.GameId, newsItems);
+                        totalNews += savedCount;
+                        _logger.LogInformation("游戏 {GameId} (AppID: {AppId}) 获取到 {Count} 条新闻，存储了 {SavedCount} 条新新闻，isAll={IsAll}", 
+                            gamePlatform.GameId, appId, newsItems.Count, savedCount, isAll);
                     }
 
                     processedGames++;
@@ -322,7 +409,7 @@ public class NewsController : ControllerBase
             {
                 return BadRequest(ApiResponse<SteamGameNewsResponseDto>.ErrorResponse("ERR_STEAM_API_KEY_NOT_FOUND", "未找到Steam API Key，请先绑定Steam平台"));
             }
-            var newsData = await _steamService.GetGameNews(appId, count, apiKey);
+            var (newsData, isAll) = await _steamService.GetGameNews(appId, count, apiKey);
 
             if (newsData == null)
             {
@@ -357,6 +444,11 @@ public class NewsController : ControllerBase
                     };
                     newsItems.Add(newsItem);
                 }
+
+                // 存储新闻到数据库
+                var savedCount = await SaveNewsToDatabaseAsync(request.GameId, newsItems);
+                _logger.LogInformation("游戏 {GameId} (AppID: {AppId}) 获取到 {Count} 条新闻，存储了 {SavedCount} 条新新闻，isAll={IsAll}", 
+                    request.GameId, appId, newsItems.Count, savedCount, isAll);
             }
 
             var result = new SteamGameNewsResponseDto
@@ -365,7 +457,8 @@ public class NewsController : ControllerBase
                 GameName = game.Name,
                 AppId = appId,
                 News = newsItems,
-                Total = newsItems.Count
+                Total = newsItems.Count,
+                IsAll = isAll
             };
 
             return Ok(ApiResponse<SteamGameNewsResponseDto>.SuccessResponse(result, "Steam新闻获取成功"));
