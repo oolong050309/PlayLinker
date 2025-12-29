@@ -1,144 +1,113 @@
 <template>
-  <div class="flex-1 overflow-y-auto p-8">
-    
-    <div class="mb-8">
-      <div class="flex items-center justify-between mb-4">
-        <div>
-          <h2 class="text-2xl font-bold">价格监控</h2>
-          <div class="text-sm text-zinc-400 mt-1 flex items-center gap-2">
-            <i data-lucide="clock" class="w-4 h-4"></i>
-            <span>最后更新: {{ lastUpdateTime || '暂无数据' }}</span>
-            <span v-if="monitoringStatus?.isTodayUpdated" class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs ml-2">
-              今日已更新
-            </span>
-          </div>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="glass-panel px-4 py-3 rounded-2xl">
-            <div class="text-sm text-zinc-400 mb-1">潜在总节省</div>
-            <div class="text-lg font-bold text-emerald-400">¥{{ totalPotentialSavings.toFixed(2) }}</div>
-          </div>
-          <button 
-            @click="triggerUpdate" 
-            :disabled="updating"
-            class="glass-panel px-4 py-2 rounded-xl hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <i data-lucide="refresh-cw" :class="['w-4 h-4', updating && 'animate-spin']"></i>
-            <span>手动更新</span>
-          </button>
-        </div>
+  <div class="wishlist-container">
+    <!-- 愿望单监控区域（核心功能保留，样式优化） -->
+    <section class="wishlist-section">
+      <div class="section-header mb-6">
+        <h3 class="section-title">愿望单监控</h3>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div class="glass-panel p-4 rounded-xl border border-emerald-500/30">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm text-zinc-400">愿望单游戏</div>
-              <div class="text-xl font-bold">{{ wishlist.length }}</div>
-            </div>
-            <div class="p-2 bg-emerald-500/20 rounded-lg">
-              <i data-lucide="gamepad-2" class="w-5 h-5 text-emerald-400"></i>
-            </div>
-          </div>
-        </div>
-        <div class="glass-panel p-4 rounded-xl border border-amber-500/30">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm text-zinc-400">今日更新</div>
-              <div class="text-xl font-bold">{{ monitoringStatus?.todayRecordCount || 0 }}</div>
-              <div class="text-xs text-zinc-500 mt-1">
-                进度: {{ Math.round(monitoringStatus?.updateProgress || 0) }}%
-              </div>
-            </div>
-            <div class="p-2 bg-amber-500/20 rounded-lg">
-              <i data-lucide="database" class="w-5 h-5 text-amber-400"></i>
-            </div>
-          </div>
-        </div>
-        <div class="glass-panel p-4 rounded-xl border border-purple-500/30">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm text-zinc-400">价格变化</div>
-              <div class="text-xl font-bold">{{ monitoringStatus?.priceChangedCount || 0 }}</div>
-              <div class="text-xs text-zinc-500 mt-1">今日</div>
-            </div>
-            <div class="p-2 bg-purple-500/20 rounded-lg">
-              <i data-lucide="trending-down" class="w-5 h-5 text-purple-400"></i>
-            </div>
-          </div>
-        </div>
+      
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading-container">
+        <i data-lucide="loader-2" class="loading-icon"></i>
       </div>
-    </div>
-
-    <section class="mb-12">
-      <div class="flex items-center justify-between mb-6">
-        <h3 class="text-xl font-bold">愿望单监控</h3>
-        <button class="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-2">
-          <i data-lucide="plus" class="w-4 h-4"></i> 添加游戏
-        </button>
+      
+      <!-- 空状态 -->
+      <div v-else-if="wishlist.length === 0" class="glass-panel empty-container">
+        <i data-lucide="inbox" class="empty-icon"></i>
+        <p class="empty-text">愿望单为空，暂无监控游戏！</p>
       </div>
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <i data-lucide="loader-2" class="w-8 h-8 animate-spin text-zinc-400"></i>
-      </div>
-      <div v-else-if="wishlist.length === 0" class="glass-panel rounded-2xl p-12 text-center">
-        <i data-lucide="inbox" class="w-16 h-16 text-zinc-500 mx-auto mb-4"></i>
-        <p class="text-zinc-400">愿望单为空，快去添加你感兴趣的游戏吧！</p>
-      </div>
-      <div v-else class="space-y-4">
+      
+      <!-- 愿望单列表 -->
+      <div v-else class="wishlist-list">
         <div 
           v-for="item in wishlist" 
           :key="item.gameId || item.id"
-          class="glass-panel rounded-2xl p-6 border border-white/5 transition-all hover:border-indigo-500/30"
+          class="glass-panel game-card"
+          @click="goToGameDetail(item.gameId || item.id)"
         >
-          <div class="flex flex-col md:flex-row gap-6">
-            <div class="w-24 h-24 md:w-32 md:h-32 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-800">
+          <div class="game-card-inner">
+            <!-- 游戏封面图 -->
+            <div class="game-cover-wrapper">
               <img 
                 :src="item.headerImage || item.gameImage || '/placeholder-game.png'" 
-                class="w-full h-full object-cover"
+                class="game-cover"
                 @error="handleImageError"
+                alt="游戏封面"
               >
             </div>
-            <div class="flex-1">
-              <div class="flex items-start justify-between mb-3">
-                <div>
-                  <h4 class="text-lg font-bold mb-1">{{ item.gameName }}</h4>
-                  <div class="text-sm text-zinc-400">{{ item.platformName || item.platform || 'Steam' }}</div>
+            
+            <!-- 游戏信息 -->
+            <div class="game-info">
+              <div class="game-header">
+                <div class="game-basic-info">
+                  <h4 class="game-name">{{ item.gameName }}</h4>
+                  <div class="game-platform">{{ item.platformName || item.platform || 'Steam' }}</div>
                 </div>
                 <button 
-                  @click="removeFromWishlist(item.gameId || item.id)"
-                  class="text-zinc-500 hover:text-zinc-300"
+                  @click.stop="removeFromWishlist(item.gameId || item.id)"
+                  class="remove-btn"
+                  title="移除该游戏"
                 >
-                  <i data-lucide="x" class="w-5 h-5"></i>
+                  <i data-lucide="x" class="remove-icon"></i>
                 </button>
               </div>
-              <div class="flex items-center gap-4 mb-4">
-                <div>
-                  <div class="text-sm text-zinc-400 mb-1">当前价格</div>
-                  <div class="text-xl font-bold text-white">
+              
+              <!-- 价格信息 -->
+              <div class="price-info-group">
+                <div class="price-item current-price">
+                  <div class="price-label">当前价格</div>
+                  <div class="price-value">
                     ¥{{ (item.currentPrice || 0).toFixed(2) }}
-                    <span v-if="item.isDiscount" class="ml-2 px-2 py-0.5 rounded bg-red-500/20 text-red-400 text-sm">
+                    <span v-if="item.isDiscount" class="discount-tag">
                       -{{ item.discountRate || 0 }}%
                     </span>
                   </div>
                 </div>
-                <div v-if="item.originalPrice && item.originalPrice > item.currentPrice">
-                  <div class="text-sm text-zinc-400 mb-1">原价</div>
-                  <div class="text-lg text-zinc-500 line-through">¥{{ (item.originalPrice || 0).toFixed(2) }}</div>
+                
+                <div v-if="item.originalPrice && item.originalPrice > item.currentPrice" class="price-item original-price">
+                  <div class="price-label">原价</div>
+                  <div class="price-value">¥{{ (item.originalPrice || 0).toFixed(2) }}</div>
                 </div>
-                <div v-if="item.currentPrice < item.originalPrice">
-                  <div class="text-sm text-zinc-400 mb-1">节省</div>
-                  <div class="text-lg font-bold text-emerald-400">
-                    ¥{{ ((item.originalPrice || 0) - (item.currentPrice || 0)).toFixed(2) }}
-                  </div>
+                
+                <div v-if="item.currentPrice < item.originalPrice" class="price-item save-price">
+                  <div class="price-label">节省金额</div>
+                  <div class="price-value">¥{{ ((item.originalPrice || 0) - (item.currentPrice || 0)).toFixed(2) }}</div>
                 </div>
               </div>
-              <div class="flex items-center gap-3">
-                <button 
-                  @click="viewPriceHistory(item)"
-                  class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
-                >
-                  <i data-lucide="chart-line" class="w-4 h-4"></i>
-                  查看价格历史
-                </button>
+              
+              <!-- 价格订阅策略 -->
+              <div class="subscription-section">
+                <div class="subscription-header">
+                  <span class="subscription-label">价格提醒策略</span>
+                  <button 
+                    @click.stop="editSubscription(item)"
+                    class="edit-subscription-btn"
+                    title="编辑价格提醒策略"
+                  >
+                    <i data-lucide="edit-2" class="edit-icon"></i>
+                    <span>{{ getSubscription(item) ? '编辑' : '设置' }}</span>
+                  </button>
+                </div>
+                <div class="subscription-content">
+                  <div v-if="getSubscription(item)" class="subscription-info">
+                    <div v-if="getSubscription(item).targetPrice" class="subscription-item">
+                      <i data-lucide="tag" class="subscription-icon"></i>
+                      <span>目标价格: ¥{{ getSubscription(item).targetPrice.toFixed(2) }}</span>
+                    </div>
+                    <div v-if="getSubscription(item).targetDiscount" class="subscription-item">
+                      <i data-lucide="percent" class="subscription-icon"></i>
+                      <span>目标折扣: {{ getSubscription(item).targetDiscount }}%</span>
+                    </div>
+                    <div v-if="!getSubscription(item).targetPrice && !getSubscription(item).targetDiscount" class="subscription-item">
+                      <i data-lucide="bell-off" class="subscription-icon"></i>
+                      <span>未设置提醒策略</span>
+                    </div>
+                  </div>
+                  <div v-else class="subscription-empty">
+                    <i data-lucide="bell-off" class="subscription-icon"></i>
+                    <span>未设置价格提醒</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -146,253 +115,693 @@
       </div>
     </section>
 
-    <!-- 价格历史对话框 -->
-    <div v-if="showHistoryDialog" class="dialog-overlay" @click.self="closeHistoryDialog">
-      <div class="dialog-content dialog-content-large">
+    <!-- 价格订阅策略编辑对话框 -->
+    <div v-if="showEditDialog" class="dialog-overlay" @click.self="closeEditDialog">
+      <div class="dialog-content">
         <div class="dialog-header">
-          <h3>{{ historyDialogGame?.gameName }} - 价格历史</h3>
-          <button class="dialog-close" @click="closeHistoryDialog">
+          <h3>编辑价格提醒策略</h3>
+          <button class="dialog-close" @click="closeEditDialog">
             <i data-lucide="x" class="w-5 h-5"></i>
           </button>
         </div>
-        <div class="dialog-body">
-          <div v-if="loadingHistory" class="loading-center">
-            <i data-lucide="loader-2" class="w-8 h-8 animate-spin text-zinc-400"></i>
-            <span>加载中...</span>
+        <div class="dialog-body" v-if="editingGame">
+          <div class="game-info-preview">
+            <img 
+              v-if="editingGame.headerImage || editingGame.gameImage" 
+              :src="editingGame.headerImage || editingGame.gameImage" 
+              class="preview-image"
+              @error="handleImageError"
+            />
+            <div class="preview-info">
+              <h4>{{ editingGame.gameName }}</h4>
+              <p class="preview-price">
+                当前价格: ¥{{ (editingGame.currentPrice || 0).toFixed(2) }}
+                <span v-if="editingGame.isDiscount" class="discount-badge-small">
+                  -{{ editingGame.discountRate || 0 }}%
+                </span>
+              </p>
+              <p v-if="editingGame.originalPrice" class="preview-original">
+                原价: ¥{{ editingGame.originalPrice.toFixed(2) }}
+              </p>
+            </div>
           </div>
-          <div v-else-if="priceHistoryData.length === 0" class="empty-center">
-            <i data-lucide="chart-line" class="w-12 h-12 text-zinc-500 mb-3"></i>
-            <p>暂无价格历史数据</p>
-          </div>
-          <div v-else class="history-list">
-            <div 
-              v-for="(item, index) in priceHistoryData" 
-              :key="index"
-              class="history-item"
-            >
-              <div class="history-date">{{ formatHistoryDate(item.date) }}</div>
-              <div class="history-price-info">
-                <div class="history-price-main">
-                  <span class="price-current">¥{{ item.currentPrice.toFixed(2) }}</span>
-                  <span v-if="item.isDiscount" class="discount-tag">-{{ item.discount }}%</span>
-                </div>
-                <div v-if="item.originalPrice > item.currentPrice" class="history-price-detail">
-                  <span class="price-original-text">原价: ¥{{ item.originalPrice.toFixed(2) }}</span>
-                  <span class="price-savings">节省: ¥{{ (item.originalPrice - item.currentPrice).toFixed(2) }}</span>
-                </div>
+          <div class="alert-options">
+            <div class="option-group">
+              <label class="option-label">
+                <input 
+                  type="radio" 
+                  v-model="alertType" 
+                  value="price"
+                  class="radio-input"
+                />
+                <span>目标价格提醒</span>
+              </label>
+              <div v-if="alertType === 'price'" class="option-input">
+                <input 
+                  type="number" 
+                  v-model.number="targetPrice" 
+                  placeholder="输入目标价格"
+                  class="input-field"
+                  step="0.01"
+                  min="0"
+                />
+                <span class="input-hint">当价格降至或低于此价格时提醒</span>
               </div>
+            </div>
+            <div class="option-group">
+              <label class="option-label">
+                <input 
+                  type="radio" 
+                  v-model="alertType" 
+                  value="discount"
+                  class="radio-input"
+                />
+                <span>目标折扣提醒</span>
+              </label>
+              <div v-if="alertType === 'discount'" class="option-input">
+                <input 
+                  type="number" 
+                  v-model.number="targetDiscount" 
+                  placeholder="输入目标折扣百分比"
+                  class="input-field"
+                  min="0"
+                  max="100"
+                />
+                <span class="input-hint">当折扣达到或超过此百分比时提醒</span>
+              </div>
+            </div>
+            <div class="option-group">
+              <label class="option-label">
+                <input 
+                  type="radio" 
+                  v-model="alertType" 
+                  value="none"
+                  class="radio-input"
+                />
+                <span>取消提醒</span>
+              </label>
             </div>
           </div>
         </div>
+        <div class="dialog-footer">
+          <button class="btn-secondary" @click="closeEditDialog">取消</button>
+          <button class="btn-primary" @click="saveSubscription" :disabled="savingSubscription">
+            {{ savingSubscription ? '保存中...' : '保存' }}
+          </button>
+        </div>
       </div>
     </div>
-
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, computed } from 'vue'
+import { ref, onMounted, nextTick, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePriceStore } from '@/stores/price'
 import { priceApi } from '@/api/price'
 import { wishlistApi } from '@/api/wishlist'
 import { createIcons, icons } from 'lucide'
 
+const router = useRouter()
 const priceStore = usePriceStore()
 
-// 获取store中的状态
+// 核心数据保留
 const wishlist = priceStore.wishlist
-const totalPotentialSavings = priceStore.totalPotentialSavings
-
-// 监控状态
-const monitoringStatus = ref(null)
-const lastUpdateTime = ref('')
 const loading = ref(false)
-const updating = ref(false)
 
-// 格式化时间（转换为中国时区）
-const formatTime = (dateString) => {
-  if (!dateString) return '暂无数据'
-  
-  // 如果后端返回的是UTC时间，需要转换为中国时区（UTC+8）
-  const date = new Date(dateString)
-  const chinaTime = new Date(date.getTime() + 8 * 60 * 60 * 1000)
-  const now = new Date()
-  const diff = now - chinaTime
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  
-  if (days === 0) {
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    if (hours === 0) {
-      const minutes = Math.floor(diff / (1000 * 60))
-      return minutes <= 0 ? '刚刚' : `${minutes}分钟前`
-    }
-    return `${hours}小时前`
-  } else if (days === 1) {
-    return '昨天 ' + chinaTime.toLocaleTimeString('zh-CN', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      timeZone: 'Asia/Shanghai'
-    })
-  } else if (days < 7) {
-    return `${days}天前`
-  }
-  return chinaTime.toLocaleString('zh-CN', { 
-    year: 'numeric', 
-    month: '2-digit', 
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Asia/Shanghai'
+// 价格订阅数据
+const subscriptions = ref([])
+const subscriptionsMap = computed(() => {
+  const map = new Map()
+  subscriptions.value.forEach(sub => {
+    map.set(sub.gameId, sub)
   })
+  return map
+})
+
+// 获取游戏的价格订阅信息
+const getSubscription = (item) => {
+  const gameId = item.gameId || item.id
+  return subscriptionsMap.value.get(gameId)
 }
 
-// 获取监控状态
-const fetchMonitoringStatus = async () => {
+// 编辑订阅对话框状态
+const showEditDialog = ref(false)
+const editingGame = ref(null)
+const editingSubscription = ref(null)
+const alertType = ref('price')
+const targetPrice = ref(null)
+const targetDiscount = ref(null)
+const savingSubscription = ref(false)
+
+// 加载价格订阅列表
+const loadSubscriptions = async () => {
   try {
-    const res = await priceApi.getMonitoringStatus()
-    if (res.success) {
-      monitoringStatus.value = res.data
-      if (res.data.latestRecordTime) {
-        lastUpdateTime.value = formatTime(res.data.latestRecordTime)
+    const res = await priceApi.getSubscriptions()
+    if (res.success && res.data) {
+      subscriptions.value = res.data.subscriptions || res.data.items || []
+    }
+  } catch (error) {
+    console.error('加载价格订阅失败:', error)
+  }
+}
+
+// 跳转到游戏详情页
+const goToGameDetail = (gameId) => {
+  router.push(`/app/game/${gameId}`)
+}
+
+// 编辑价格订阅策略
+const editSubscription = (item) => {
+  editingGame.value = item
+  const subscription = getSubscription(item)
+  editingSubscription.value = subscription
+  
+  // 重置表单
+  targetPrice.value = null
+  targetDiscount.value = null
+  
+  if (subscription) {
+    // 已有订阅，加载现有设置
+    if (subscription.targetPrice !== null && subscription.targetPrice !== undefined) {
+      alertType.value = 'price'
+      targetPrice.value = subscription.targetPrice
+    } else if (subscription.targetDiscount !== null && subscription.targetDiscount !== undefined) {
+      alertType.value = 'discount'
+      targetDiscount.value = subscription.targetDiscount
+    } else {
+      // 有订阅但没有设置目标，默认选择价格提醒
+      alertType.value = 'price'
+    }
+  } else {
+    // 新建订阅，默认选择价格提醒
+    alertType.value = 'price'
+  }
+  
+  showEditDialog.value = true
+}
+
+// 关闭编辑对话框
+const closeEditDialog = () => {
+  showEditDialog.value = false
+  editingGame.value = null
+  editingSubscription.value = null
+  alertType.value = 'price'
+  targetPrice.value = null
+  targetDiscount.value = null
+}
+
+// 保存价格订阅策略
+const saveSubscription = async () => {
+  if (!editingGame.value) return
+  
+  // 如果选择取消提醒
+  if (alertType.value === 'none') {
+    if (editingSubscription.value) {
+      // 删除现有订阅
+      try {
+        const res = await priceApi.unsubscribeAlert(editingSubscription.value.subscriptionId)
+        if (res.success) {
+          // 刷新数据
+          await Promise.all([
+            loadSubscriptions(),
+            priceStore.fetchWishlist()
+          ])
+          closeEditDialog()
+        } else {
+          alert(res.message || '取消订阅失败')
+        }
+      } catch (error) {
+        console.error('取消订阅失败:', error)
+        alert('取消订阅失败: ' + (error.message || '未知错误'))
+      }
+    } else {
+      // 没有订阅，直接关闭
+      closeEditDialog()
+    }
+    return
+  }
+  
+  // 验证输入
+  if (alertType.value === 'price' && (!targetPrice.value || targetPrice.value <= 0)) {
+    alert('请输入有效的目标价格')
+    return
+  }
+  if (alertType.value === 'discount' && (!targetDiscount.value || targetDiscount.value < 0 || targetDiscount.value > 100)) {
+    alert('请输入有效的折扣百分比（0-100）')
+    return
+  }
+  
+  savingSubscription.value = true
+  try {
+    const gameId = editingGame.value.gameId || editingGame.value.id
+    const platformId = editingGame.value.platformId || 1 // 默认Steam
+    
+    if (editingSubscription.value) {
+      // 更新现有订阅
+      const data = {
+        gameId: parseInt(gameId),
+        platformId: platformId,
+        targetPrice: alertType.value === 'price' ? targetPrice.value : null,
+        targetDiscount: alertType.value === 'discount' ? targetDiscount.value : null
+      }
+      
+      const response = await priceApi.updateSubscription(editingSubscription.value.subscriptionId, data)
+      if (response.success) {
+        // 刷新数据
+        await Promise.all([
+          loadSubscriptions(),
+          priceStore.fetchWishlist()
+        ])
+        closeEditDialog()
+      } else {
+        alert(response.message || '更新失败，请重试')
+      }
+    } else {
+      // 创建新订阅
+      const data = {
+        gameId: parseInt(gameId),
+        platformId: platformId,
+        targetPrice: alertType.value === 'price' ? targetPrice.value : null,
+        targetDiscount: alertType.value === 'discount' ? targetDiscount.value : null
+      }
+      
+      const response = await priceApi.trackPrice(data)
+      if (response.success) {
+        // 刷新数据
+        await Promise.all([
+          loadSubscriptions(),
+          priceStore.fetchWishlist()
+        ])
+        closeEditDialog()
+      } else {
+        alert(response.message || '设置失败，请重试')
       }
     }
   } catch (error) {
-    console.error('获取监控状态失败:', error)
-  }
-}
-
-// 手动触发更新
-const triggerUpdate = async () => {
-  if (updating.value) return
-  updating.value = true
-  try {
-    const res = await priceApi.triggerPriceUpdate()
-    if (res.success) {
-      alert('价格更新任务已触发，将在后台执行')
-      // 等待一段时间后刷新状态
-      setTimeout(() => {
-        fetchMonitoringStatus()
-      }, 2000)
-    }
-  } catch (error) {
-    console.error('触发更新失败:', error)
-    alert('触发更新失败，请稍后重试')
+    console.error('保存价格订阅失败:', error)
+    alert('保存失败: ' + (error.message || '未知错误'))
   } finally {
-    updating.value = false
+    savingSubscription.value = false
   }
 }
 
-// 移除愿望单
+// 移除愿望单功能保留
 const removeFromWishlist = async (gameId) => {
   if (!confirm('确定要从愿望单移除这个游戏吗？')) return
   try {
-    const res = await wishlistApi.removeFromWishlist(gameId)
-    if (res.success) {
-      await priceStore.fetchWishlist()
-    }
-  } catch (error) {
-    console.error('移除失败:', error)
-  }
-}
-
-
-// 价格历史对话框状态
-const showHistoryDialog = ref(false)
-const historyDialogGame = ref(null)
-const priceHistoryData = ref([])
-const loadingHistory = ref(false)
-
-// 查看价格历史
-const viewPriceHistory = async (item) => {
-  historyDialogGame.value = item
-  showHistoryDialog.value = true
-  loadingHistory.value = true
-  priceHistoryData.value = []
-  
-  try {
-    const gameId = item.gameId || item.id
-    const response = await priceApi.getPriceHistory(gameId)
-    
-    if (response.success && response.data) {
-      const data = response.data
-      if (data.priceHistory && Array.isArray(data.priceHistory)) {
-        priceHistoryData.value = data.priceHistory.map(h => ({
-          date: h.Date || h.date,
-          currentPrice: h.CurrentPrice || h.currentPrice || 0,
-          originalPrice: h.OriginalPrice || h.originalPrice || 0,
-          discount: h.Discount || h.discount || 0,
-          isDiscount: h.IsDiscount || h.isDiscount || false
-        })).reverse() // 按时间正序显示
+    await wishlistApi.removeFromWishlist(gameId)
+    // 同时移除价格订阅
+    const subscription = subscriptionsMap.value.get(gameId)
+    if (subscription) {
+      try {
+        await priceApi.unsubscribeAlert(subscription.subscriptionId)
+      } catch (error) {
+        console.error('移除价格订阅失败:', error)
       }
     }
+    // 刷新所有数据
+    await Promise.all([
+      priceStore.fetchWishlist(),
+      loadSubscriptions()
+    ])
   } catch (error) {
-    console.error('加载价格历史失败:', error)
-    alert('加载价格历史失败')
-  } finally {
-    loadingHistory.value = false
+    console.error('移除失败:', error)
+    alert('移除失败: ' + (error.message || '未知错误'))
   }
 }
 
-// 关闭价格历史对话框
-const closeHistoryDialog = () => {
-  showHistoryDialog.value = false
-  historyDialogGame.value = null
-  priceHistoryData.value = []
-}
-
-// 格式化日期
-const formatHistoryDate = (dateString) => {
-  if (!dateString) return ''
-  try {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('zh-CN', { 
-      year: 'numeric', 
-      month: '2-digit', 
-      day: '2-digit' 
-    })
-  } catch {
-    return dateString
-  }
-}
-
-// 图片加载错误处理
+// 图片加载错误处理保留
 const handleImageError = (event) => {
   event.target.src = '/placeholder-game.png'
 }
 
-// 计算折扣游戏数量
-const discountGamesCount = computed(() => {
-  return wishlist.value.filter(item => {
-    const currentPrice = item.currentPrice || 0
-    const originalPrice = item.originalPrice || 0
-    return currentPrice < originalPrice && currentPrice > 0
-  }).length
-})
-
-onMounted(async () => {
+// 刷新数据函数
+const refreshData = async () => {
   loading.value = true
   try {
     await Promise.all([
       priceStore.fetchWishlist(),
-      fetchMonitoringStatus()
+      loadSubscriptions()
     ])
   } finally {
     loading.value = false
   }
   nextTick(() => createIcons({ icons }))
-  
-  // 定期刷新监控状态（每5分钟）
-  setInterval(() => {
-    fetchMonitoringStatus()
-  }, 5 * 60 * 1000)
+}
+
+onMounted(async () => {
+  await refreshData()
 })
+
+// 监听 store 中的 wishlist 变化，确保数据同步
+watch(() => priceStore.wishlist, () => {
+  nextTick(() => createIcons({ icons }))
+}, { deep: true })
 </script>
 
 <style scoped>
+/* 全局容器优化 */
+.wishlist-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  background-color: #09090b; /* 背景色统一，增强沉浸感 */
+}
+
+/* 玻璃态基础样式优化（增强质感） */
 .glass-panel {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); /* 增加轻微阴影，提升层次感 */
+  transition: all 0.3s ease-in-out;
+}
+
+/* 区域头部样式 */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f8fafc; /* 文字更亮，提升可读性 */
+  letter-spacing: 0.5px;
+}
+
+/* 加载状态美化 */
+.loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rem 2rem;
+}
+
+.loading-icon {
+  width: 2rem;
+  height: 2rem;
+  color: #94a3b8;
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 空状态美化 */
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 7rem 2rem;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 4rem;
+  height: 4rem;
+  color: #64748b;
+  margin-bottom: 1.5rem;
+}
+
+.empty-text {
+  color: #94a3b8;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* 愿望单列表间距优化 - 一行两个 */
+.wishlist-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1.5rem; /* 列表项间距优化，更舒展 */
+}
+
+@media (max-width: 768px) {
+  .wishlist-list {
+    grid-template-columns: 1fr; /* 移动端单列显示 */
+  }
+}
+
+/* 游戏卡片美化（核心美化项） */
+.game-card {
+  padding: 1rem;
+  border-color: rgba(255, 255, 255, 0.05);
+  cursor: pointer; /* 整个卡片可点击 */
+  transition: all 0.3s ease-in-out;
+}
+
+.game-card:hover {
+  border-color: rgba(99, 102, 241, 0.4); /* hover边框变色更柔和醒目 */
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2); /* hover增强阴影，提升交互感 */
+  transform: translateY(-2px); /* 轻微上浮，增加灵动性 */
+}
+
+.game-card-inner {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* 游戏封面美化 */
+.game-cover-wrapper {
+  width: 10rem;
+  height: 15rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background-color: #18181b;
+  flex-shrink: 0;
+}
+
+.game-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: all 0.3s ease;
+}
+
+.game-card:hover .game-cover {
+  transform: scale(1.05); /* 封面轻微放大，增强hover交互 */
+}
+
+/* 游戏信息区域美化 */
+.game-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0; /* 防止内容溢出 */
+}
+
+.game-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.game-basic-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.game-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f8fafc;
+  line-height: 1.3;
+  transition: color 0.2s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.game-platform {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+/* 移除按钮美化 */
+.remove-btn {
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remove-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.remove-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* 价格信息组美化 */
+.price-info-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem; /* 价格项间距优化 */
+}
+
+.price-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.price-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.price-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+/* 不同价格项样式区分 */
+.original-price .price-value {
+  color: #64748b;
+  text-decoration: line-through;
+  font-weight: 400;
+}
+
+.save-price .price-value {
+  color: #10b981; /* 节省金额绿色更醒目，提升视觉层次 */
+}
+
+/* 折扣标签美化 */
+.discount-tag {
+  display: inline-block;
+  margin-left: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* 价格订阅策略区域 */
+.subscription-section {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.subscription-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.subscription-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.edit-subscription-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 0.375rem;
+  color: #818cf8;
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-subscription-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #a5b4fc;
+}
+
+.edit-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.subscription-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  background: rgba(15, 15, 19, 0.4);
+  border-radius: 0.375rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.subscription-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.subscription-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  padding: 0.25rem 0;
+}
+
+.subscription-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-style: italic;
+  padding: 0.25rem 0;
+}
+
+.subscription-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: #8b5cf6;
+  flex-shrink: 0;
+}
+
+.subscription-empty .subscription-icon {
+  color: #64748b;
 }
 
 /* 对话框样式 */
@@ -417,10 +826,6 @@ onMounted(async () => {
   max-height: 90vh;
   overflow-y: auto;
   backdrop-filter: blur(20px);
-}
-
-.dialog-content-large {
-  max-width: 700px;
 }
 
 .dialog-header {
@@ -612,91 +1017,16 @@ onMounted(async () => {
   color: #f8fafc;
 }
 
-/* 价格历史对话框样式 */
-.loading-center,
-.empty-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: #94a3b8;
-  gap: 12px;
-}
-
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.history-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  background: rgba(15, 15, 19, 0.6);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.2s;
-}
-
-.history-item:hover {
-  background: rgba(20, 20, 23, 0.8);
-  border-color: rgba(139, 92, 246, 0.3);
-}
-
-.history-date {
-  font-size: 14px;
-  color: #94a3b8;
-  font-weight: 500;
-  min-width: 100px;
-}
-
-.history-price-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.history-price-main {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.price-current {
-  font-size: 18px;
-  font-weight: 600;
-  color: #f8fafc;
-}
-
-.discount-tag {
-  padding: 2px 8px;
-  background: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.history-price-detail {
-  display: flex;
-  gap: 12px;
-  font-size: 12px;
-}
-
-.price-original-text {
-  color: #64748b;
-  text-decoration: line-through;
-}
-
-.price-savings {
-  color: #10b981;
-  font-weight: 500;
+/* 响应式优化，确保移动端展示舒适 */
+@media (max-width: 480px) {
+  .wishlist-container {
+    padding: 1rem;
+  }
+  
+  .price-info-group {
+    gap: 1.5rem;
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>
