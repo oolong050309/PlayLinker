@@ -76,6 +76,10 @@ builder.Services.AddScoped<IAliyunOssService, AliyunOssService>();
 builder.Services.AddHttpClient(); // 通用 HttpClient
 builder.Services.AddScoped<IAiService, AiService>();
 
+// --- 价格监控后台服务 ---
+builder.Services.AddHttpClient<PriceMonitoringService>();
+builder.Services.AddHostedService<PriceMonitoringService>();
+
 // 4. 添加控制器
 builder.Services.AddControllers();
 

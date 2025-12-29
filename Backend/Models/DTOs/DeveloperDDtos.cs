@@ -96,6 +96,7 @@ public class TrackPriceDto
     public int PlatformId { get; set; }
     public bool NotifyOnDiscount { get; set; }
     public int? TargetDiscount { get; set; }
+    public decimal? TargetPrice { get; set; }
 }
 
 // --- 推荐模块 DTOs ---
