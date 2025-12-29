@@ -182,28 +182,138 @@
           <section class="section-card">
             <h3 class="sidebar-title">价格监控</h3>
             <div class="price-monitor">
-              <div class="price-current">
-                <span class="price-label">当前价格</span>
-                <span class="price-value">{{ currentPrice || '暂无数据' }}</span>
+              <div v-if="priceLoading" class="price-loading">
+                <div class="loading-spinner-small"></div>
+                <span>加载价格中...</span>
               </div>
-              <div class="price-chart-placeholder">
-                <div class="chart-bars">
-                  <div 
-                    v-for="(bar, index) in priceChartData" 
-                    :key="index"
-                    class="chart-bar"
-                    :style="{ height: `${bar}%` }"
-                  ></div>
+              <div v-else-if="priceError" class="price-error">
+                <span>{{ priceError }}</span>
+              </div>
+              <div v-else>
+                <div class="price-current">
+                  <span class="price-label">当前价格</span>
+                  <div class="price-display">
+                    <span class="price-value" v-if="priceInfo.currentPrice !== null">
+                      ¥{{ priceInfo.currentPrice.toFixed(2) }}
+                    </span>
+                    <span class="price-value" v-else>暂无数据</span>
+                    <span v-if="priceInfo.isDiscount && priceInfo.discountRate > 0" class="discount-badge">
+                      -{{ priceInfo.discountRate }}%
+                    </span>
+                  </div>
+                  <div v-if="priceInfo.originalPrice && priceInfo.originalPrice > priceInfo.currentPrice" class="price-original">
+                    <span class="original-price">原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}</span>
+                    <span class="savings">节省: ¥{{ (priceInfo.originalPrice - priceInfo.currentPrice).toFixed(2) }}</span>
+                  </div>
+                  <div v-if="priceInfo.lowestPrice && priceInfo.lowestPrice < priceInfo.currentPrice" class="price-lowest">
+                    <span class="lowest-label">历史最低: ¥{{ priceInfo.lowestPrice.toFixed(2) }}</span>
+                  </div>
                 </div>
-              </div>
-              <div class="price-actions">
-                <button class="btn-outline" @click="handlePriceMonitor">
-                  <Bell class="icon" size="16" />
-                  设置价格提醒
-                </button>
+                <div v-if="priceHistory.length > 0" class="price-chart-container">
+                  <div class="chart-bars">
+                    <div 
+                      v-for="(item, index) in priceHistory.slice(0, 7).reverse()" 
+                      :key="index"
+                      class="chart-bar-wrapper"
+                      :title="`${item.date}: ¥${item.currentPrice.toFixed(2)}`"
+                    >
+                      <div 
+                        class="chart-bar"
+                        :style="{ height: `${getChartBarHeight(item.currentPrice)}%` }"
+                      ></div>
+                      <span class="chart-label">{{ formatChartDate(item.date) }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="price-chart-empty">
+                  <span>暂无价格历史数据</span>
+                </div>
+                <div class="price-actions">
+                  <button class="btn-outline" @click="showPriceAlertDialog">
+                    <Bell class="icon" size="16" />
+                    {{ hasPriceAlert ? '管理提醒' : '设置价格提醒' }}
+                  </button>
+                  <button v-if="priceHistory.length > 0" class="btn-outline" @click="viewPriceHistory">
+                    <TrendingUp class="icon" size="16" />
+                    查看历史
+                  </button>
+                </div>
               </div>
             </div>
           </section>
+
+          <!-- 价格提醒设置对话框 -->
+          <div v-if="showAlertDialog" class="dialog-overlay" @click.self="closeAlertDialog">
+            <div class="dialog-content">
+              <div class="dialog-header">
+                <h3>设置价格提醒</h3>
+                <button class="dialog-close" @click="closeAlertDialog">
+                  <X class="icon" size="20" />
+                </button>
+              </div>
+              <div class="dialog-body">
+                <div class="game-info-preview">
+                  <img v-if="game.headerImage" :src="game.headerImage" class="preview-image" />
+                  <div class="preview-info">
+                    <h4>{{ game.name }}</h4>
+                    <p class="preview-price">当前价格: ¥{{ priceInfo.currentPrice?.toFixed(2) || '0.00' }}</p>
+                  </div>
+                </div>
+                <div class="alert-options">
+                  <div class="option-group">
+                    <label class="option-label">
+                      <input 
+                        type="radio" 
+                        v-model="alertType" 
+                        value="price"
+                        class="radio-input"
+                      />
+                      <span>目标价格提醒</span>
+                    </label>
+                    <div v-if="alertType === 'price'" class="option-input">
+                      <input 
+                        type="number" 
+                        v-model.number="targetPrice" 
+                        placeholder="输入目标价格"
+                        class="input-field"
+                        step="0.01"
+                        min="0"
+                      />
+                      <span class="input-hint">当价格降至或低于此价格时提醒</span>
+                    </div>
+                  </div>
+                  <div class="option-group">
+                    <label class="option-label">
+                      <input 
+                        type="radio" 
+                        v-model="alertType" 
+                        value="discount"
+                        class="radio-input"
+                      />
+                      <span>目标折扣提醒</span>
+                    </label>
+                    <div v-if="alertType === 'discount'" class="option-input">
+                      <input 
+                        type="number" 
+                        v-model.number="targetDiscount" 
+                        placeholder="输入目标折扣百分比"
+                        class="input-field"
+                        min="0"
+                        max="100"
+                      />
+                      <span class="input-hint">当折扣达到或超过此百分比时提醒</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="dialog-footer">
+                <button class="btn-secondary" @click="closeAlertDialog">取消</button>
+                <button class="btn-primary" @click="savePriceAlert" :disabled="savingAlert">
+                  {{ savingAlert ? '保存中...' : '保存' }}
+                </button>
+              </div>
+            </div>
+          </div>
 
           <!-- Mod 管理 -->
           <section class="section-card">
@@ -251,10 +361,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { gameApi, achievementApi, libraryApi } from '@/api'
-import { ArrowLeft, Clock, Trophy, Calendar, Play, Settings, Bell, Package, Lock } from 'lucide-vue-next'
+import { priceApi } from '@/api/price'
+import { ArrowLeft, Clock, Trophy, Calendar, Play, Settings, Bell, Package, Lock, TrendingUp, X } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -266,9 +377,26 @@ const game = ref(null)
 const achievements = ref([])
 const achievementsLoading = ref(false)
 const gamePlaytime = ref(0)
-const currentPrice = ref(null)
-const priceChartData = ref([45, 52, 38, 61, 48, 55, 42]) // 模拟价格数据
+const priceInfo = ref({
+  currentPrice: null,
+  originalPrice: null,
+  discountRate: 0,
+  isDiscount: false,
+  lowestPrice: null,
+  lowestDate: null
+})
+const priceHistory = ref([])
+const priceLoading = ref(false)
+const priceError = ref(null)
+const hasPriceAlert = ref(false)
 const mods = ref([]) // 预留的 Mod 列表
+
+// 价格提醒对话框
+const showAlertDialog = ref(false)
+const alertType = ref('price')
+const targetPrice = ref(null)
+const targetDiscount = ref(null)
+const savingAlert = ref(false)
 
 // 计算属性
 const achievementStats = computed(() => {
@@ -398,6 +526,9 @@ const loadGameDetail = async () => {
 
     // 加载成就数据
     await loadAchievements()
+    
+    // 加载价格数据
+    await loadPriceData()
   } catch (err) {
     console.error('加载游戏详情失败:', err)
     error.value = '加载游戏详情失败: ' + (err.message || '未知错误')
@@ -482,10 +613,156 @@ const handleImageError = (event) => {
   event.target.style.display = 'none'
 }
 
-// 价格监控处理（预留）
-const handlePriceMonitor = () => {
-  console.log('打开价格监控设置')
-  // TODO: 实现价格监控功能
+// 加载价格数据
+const loadPriceData = async () => {
+  if (!game.value) return
+  
+  const gameId = game.value.id || route.params.id
+  priceLoading.value = true
+  priceError.value = null
+  
+  try {
+    // 获取价格历史
+    const historyResponse = await priceApi.getPriceHistory(gameId)
+    if (historyResponse.success && historyResponse.data) {
+      const data = historyResponse.data
+      
+      // 更新价格信息
+      priceInfo.value = {
+        currentPrice: data.currentPrice || null,
+        originalPrice: data.originalPrice || null,
+        discountRate: data.discount || 0,
+        isDiscount: data.isDiscount || false,
+        lowestPrice: data.lowestPrice || null,
+        lowestDate: data.lowestDate || null
+      }
+      
+      // 处理价格历史数据
+      if (data.priceHistory && Array.isArray(data.priceHistory)) {
+        priceHistory.value = data.priceHistory.map(item => ({
+          date: item.Date || item.date,
+          currentPrice: item.CurrentPrice || item.currentPrice || 0,
+          originalPrice: item.OriginalPrice || item.originalPrice || 0,
+          discount: item.Discount || item.discount || 0,
+          isDiscount: item.IsDiscount || item.isDiscount || false
+        }))
+      }
+    }
+    
+    // 检查是否已有价格提醒
+    await checkPriceAlert()
+  } catch (err) {
+    console.error('加载价格数据失败:', err)
+    priceError.value = '加载价格数据失败'
+  } finally {
+    priceLoading.value = false
+  }
+}
+
+// 检查是否已有价格提醒
+const checkPriceAlert = async () => {
+  try {
+    const response = await priceApi.getSubscriptions()
+    if (response.success && response.data) {
+      const subscriptions = response.data.subscriptions || response.data.items || []
+      const gameId = game.value?.id || route.params.id
+      hasPriceAlert.value = subscriptions.some(sub => 
+        sub.gameId === gameId && sub.isActive !== false
+      )
+    }
+  } catch (err) {
+    console.error('检查价格提醒失败:', err)
+  }
+}
+
+// 计算图表柱状图高度
+const getChartBarHeight = (price) => {
+  if (!price || priceHistory.value.length === 0) return 0
+  const prices = priceHistory.value.map(p => p.currentPrice).filter(p => p > 0)
+  if (prices.length === 0) return 0
+  const maxPrice = Math.max(...prices)
+  const minPrice = Math.min(...prices)
+  if (maxPrice === minPrice) return 50
+  return ((price - minPrice) / (maxPrice - minPrice)) * 80 + 10
+}
+
+// 格式化图表日期
+const formatChartDate = (dateString) => {
+  if (!dateString) return ''
+  try {
+    const date = new Date(dateString)
+    const month = date.getMonth() + 1
+    const day = date.getDate()
+    return `${month}/${day}`
+  } catch {
+    return dateString
+  }
+}
+
+// 显示价格提醒对话框
+const showPriceAlertDialog = () => {
+  showAlertDialog.value = true
+  // 重置表单
+  alertType.value = 'price'
+  targetPrice.value = null
+  targetDiscount.value = null
+}
+
+// 关闭价格提醒对话框
+const closeAlertDialog = () => {
+  showAlertDialog.value = false
+}
+
+// 保存价格提醒
+const savePriceAlert = async () => {
+  if (!game.value) return
+  
+  // 验证输入
+  if (alertType.value === 'price' && (!targetPrice.value || targetPrice.value <= 0)) {
+    alert('请输入有效的目标价格')
+    return
+  }
+  if (alertType.value === 'discount' && (!targetDiscount.value || targetDiscount.value < 0 || targetDiscount.value > 100)) {
+    alert('请输入有效的折扣百分比（0-100）')
+    return
+  }
+  
+  savingAlert.value = true
+  try {
+    const gameId = game.value.id || route.params.id
+    // 获取平台ID，默认为Steam (1)
+    const platformId = 1 // 可以根据实际情况获取
+    
+    const data = {
+      gameId: parseInt(gameId),
+      platformId: platformId,
+      targetPrice: alertType.value === 'price' ? targetPrice.value : null,
+      targetDiscount: alertType.value === 'discount' ? targetDiscount.value : null
+    }
+    
+    const response = await priceApi.trackPrice(data)
+    if (response.success) {
+      alert('价格提醒设置成功！')
+      hasPriceAlert.value = true
+      closeAlertDialog()
+    } else {
+      alert(response.message || '设置失败，请重试')
+    }
+  } catch (err) {
+    console.error('保存价格提醒失败:', err)
+    alert('设置失败: ' + (err.message || '未知错误'))
+  } finally {
+    savingAlert.value = false
+  }
+}
+
+// 查看价格历史
+const viewPriceHistory = () => {
+  // 跳转到价格监控页面，显示该游戏的历史
+  router.push({
+    path: '/price-monitor',
+    query: { gameId: game.value?.id || route.params.id }
+  })
 }
 
 // Mod 管理处理（预留）
@@ -499,6 +776,13 @@ const handleToggleMod = (mod) => {
   console.log('切换 Mod 状态:', mod.name, mod.enabled)
   // TODO: 实现 Mod 启用/禁用功能
 }
+
+// 监听游戏ID变化，重新加载价格数据
+watch(() => route.params.id, () => {
+  if (route.params.id) {
+    loadPriceData()
+  }
+})
 
 onMounted(() => {
   loadGameDetail()
@@ -981,30 +1265,277 @@ onMounted(() => {
   color: #f8fafc;
 }
 
-.price-chart-placeholder {
-  height: 100px;
-  background: rgba(15, 15, 19, 0.6);
-  border-radius: 8px;
-  padding: 8px;
-  display: flex;
-  align-items: flex-end;
-}
+  .price-loading,
+  .price-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 20px;
+    color: #94a3b8;
+    font-size: 14px;
+  }
 
-.chart-bars {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  width: 100%;
-  height: 100%;
-  gap: 4px;
-}
+  .price-error {
+    color: #ef4444;
+  }
 
-.chart-bar {
-  flex: 1;
-  background: linear-gradient(to top, #8b5cf6, #a78bfa);
-  border-radius: 2px 2px 0 0;
-  min-height: 10%;
-}
+  .price-display {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .discount-badge {
+    padding: 2px 8px;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .price-original {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+
+  .original-price {
+    color: #64748b;
+    text-decoration: line-through;
+  }
+
+  .savings {
+    color: #10b981;
+    font-weight: 600;
+  }
+
+  .price-lowest {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .lowest-label {
+    color: #8b5cf6;
+  }
+
+  .price-chart-container {
+    height: 120px;
+    background: rgba(15, 15, 19, 0.6);
+    border-radius: 8px;
+    padding: 12px 8px 8px;
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .price-chart-empty {
+    height: 80px;
+    background: rgba(15, 15, 19, 0.6);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .chart-bars {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+    gap: 4px;
+  }
+
+  .chart-bar-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    gap: 4px;
+  }
+
+  .chart-bar {
+    width: 100%;
+    background: linear-gradient(to top, #8b5cf6, #a78bfa);
+    border-radius: 2px 2px 0 0;
+    min-height: 10%;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .chart-bar:hover {
+    background: linear-gradient(to top, #7c3aed, #8b5cf6);
+    opacity: 0.9;
+  }
+
+  .chart-label {
+    font-size: 10px;
+    color: #64748b;
+    white-space: nowrap;
+  }
+
+  /* 价格提醒对话框 */
+  .dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .dialog-content {
+    background: rgba(20, 20, 23, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    backdrop-filter: blur(20px);
+  }
+
+  .dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .dialog-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f8fafc;
+  }
+
+  .dialog-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .dialog-close:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #f8fafc;
+  }
+
+  .dialog-body {
+    padding: 24px;
+  }
+
+  .game-info-preview {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(15, 15, 19, 0.6);
+    border-radius: 8px;
+    margin-bottom: 24px;
+  }
+
+  .preview-image {
+    width: 60px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  .preview-info {
+    flex: 1;
+  }
+
+  .preview-info h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #f8fafc;
+  }
+
+  .preview-price {
+    font-size: 14px;
+    color: #94a3b8;
+  }
+
+  .alert-options {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .option-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #e5e7eb;
+    cursor: pointer;
+  }
+
+  .radio-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+
+  .option-input {
+    margin-left: 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .input-field {
+    padding: 10px 12px;
+    background: rgba(15, 15, 19, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: #f8fafc;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: #8b5cf6;
+    background: rgba(20, 20, 23, 0.9);
+  }
+
+  .input-hint {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 20px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
 
 .price-actions {
   margin-top: 8px;
