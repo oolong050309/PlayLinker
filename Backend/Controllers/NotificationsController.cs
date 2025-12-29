@@ -66,9 +66,10 @@ public class NotificationsController : ControllerBase
             // 计算总数
             var total = query.Count();
 
-            // 分页
+            // 排序：未读在上，已读在下，然后按时间倒序
             var notifications = query
-                .OrderByDescending(n => n.CreatedAt)
+                .OrderBy(n => n.IsRead ?? false) // false（未读）在前，true（已读）在后
+                .ThenByDescending(n => n.CreatedAt) // 相同已读状态下按时间倒序
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToList();

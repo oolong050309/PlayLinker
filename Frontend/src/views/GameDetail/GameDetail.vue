@@ -178,8 +178,8 @@
 
         <!-- 右侧边栏 -->
         <div class="sidebar">
-          <!-- 价格监控 -->
-          <section class="section-card">
+          <!-- 价格监控（免费游戏不显示） -->
+          <section v-if="game.isFree !== true" class="section-card">
             <h3 class="sidebar-title">价格监控</h3>
             <div class="price-monitor">
               <div v-if="priceLoading" class="price-loading">
@@ -193,19 +193,23 @@
                 <div class="price-current">
                   <span class="price-label">当前价格</span>
                   <div class="price-display">
-                    <span class="price-value" v-if="priceInfo.currentPrice !== null">
+                    <span class="price-value" v-if="priceInfo.currentPrice !== null && priceInfo.currentPrice > 0">
                       ¥{{ priceInfo.currentPrice.toFixed(2) }}
                     </span>
+                    <span class="price-value" v-else-if="priceInfo.currentPrice === 0">免费</span>
                     <span class="price-value" v-else>暂无数据</span>
                     <span v-if="priceInfo.isDiscount && priceInfo.discountRate > 0" class="discount-badge">
                       -{{ priceInfo.discountRate }}%
                     </span>
                   </div>
-                  <div v-if="priceInfo.originalPrice && priceInfo.originalPrice > priceInfo.currentPrice" class="price-original">
+                  <div v-if="priceInfo.originalPrice && priceInfo.currentPrice && priceInfo.originalPrice > priceInfo.currentPrice" class="price-original">
                     <span class="original-price">原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}</span>
                     <span class="savings">节省: ¥{{ (priceInfo.originalPrice - priceInfo.currentPrice).toFixed(2) }}</span>
                   </div>
-                  <div v-if="priceInfo.lowestPrice && priceInfo.lowestPrice < priceInfo.currentPrice" class="price-lowest">
+                  <div v-else-if="priceInfo.originalPrice && priceInfo.originalPrice > 0 && (!priceInfo.currentPrice || priceInfo.currentPrice === 0)" class="price-original">
+                    <span class="original-price">原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}</span>
+                  </div>
+                  <div v-if="priceInfo.lowestPrice && priceInfo.currentPrice && priceInfo.lowestPrice < priceInfo.currentPrice" class="price-lowest">
                     <span class="lowest-label">历史最低: ¥{{ priceInfo.lowestPrice.toFixed(2) }}</span>
                   </div>
                 </div>
@@ -627,24 +631,33 @@ const loadPriceData = async () => {
     if (historyResponse.success && historyResponse.data) {
       const data = historyResponse.data
       
-      // 更新价格信息
+      // 更新价格信息（适配后端返回的数据结构）
       priceInfo.value = {
-        currentPrice: data.currentPrice || null,
-        originalPrice: data.originalPrice || null,
-        discountRate: data.discount || 0,
-        isDiscount: data.isDiscount || false,
-        lowestPrice: data.lowestPrice || null,
-        lowestDate: data.lowestDate || null
+        currentPrice: data.currentPrice ?? data.CurrentPrice ?? null,
+        originalPrice: data.originalPrice ?? data.OriginalPrice ?? null,
+        discountRate: data.discount ?? data.discountRate ?? data.Discount ?? data.DiscountRate ?? 0,
+        isDiscount: data.isDiscount ?? data.IsDiscount ?? false,
+        lowestPrice: data.lowestPrice ?? data.LowestPrice ?? null,
+        lowestDate: data.lowestDate ?? data.LowestDate ?? null
+      }
+      
+      // 如果没有当前价格，尝试从历史记录中获取最新的
+      if (priceInfo.value.currentPrice === null && data.priceHistory && Array.isArray(data.priceHistory) && data.priceHistory.length > 0) {
+        const latest = data.priceHistory[0]
+        priceInfo.value.currentPrice = latest.CurrentPrice ?? latest.currentPrice ?? null
+        priceInfo.value.originalPrice = latest.OriginalPrice ?? latest.originalPrice ?? priceInfo.value.originalPrice
+        priceInfo.value.discountRate = latest.Discount ?? latest.discount ?? priceInfo.value.discountRate
+        priceInfo.value.isDiscount = latest.IsDiscount ?? latest.isDiscount ?? priceInfo.value.isDiscount
       }
       
       // 处理价格历史数据
       if (data.priceHistory && Array.isArray(data.priceHistory)) {
         priceHistory.value = data.priceHistory.map(item => ({
-          date: item.Date || item.date,
-          currentPrice: item.CurrentPrice || item.currentPrice || 0,
-          originalPrice: item.OriginalPrice || item.originalPrice || 0,
-          discount: item.Discount || item.discount || 0,
-          isDiscount: item.IsDiscount || item.isDiscount || false
+          date: item.Date ?? item.date,
+          currentPrice: item.CurrentPrice ?? item.currentPrice ?? 0,
+          originalPrice: item.OriginalPrice ?? item.originalPrice ?? 0,
+          discount: item.Discount ?? item.discount ?? item.DiscountRate ?? item.discountRate ?? 0,
+          isDiscount: item.IsDiscount ?? item.isDiscount ?? false
         }))
       }
     }

@@ -1,10 +1,10 @@
 export default [
   {
-    path: '/price-monitor',
+    path: 'price-monitor',
     name: 'PriceMonitor',
     component: () => import('@/views/Price/PriceMonitorView.vue'),
     meta: {
-      title: '价格监控',
+      title: '愿望单',
       requiresAuth: true
     }
   }

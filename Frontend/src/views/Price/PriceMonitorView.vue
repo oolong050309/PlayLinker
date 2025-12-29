@@ -28,7 +28,7 @@
           </button>
         </div>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div class="glass-panel p-4 rounded-xl border border-emerald-500/30">
           <div class="flex items-center justify-between">
             <div>
@@ -37,17 +37,6 @@
             </div>
             <div class="p-2 bg-emerald-500/20 rounded-lg">
               <i data-lucide="gamepad-2" class="w-5 h-5 text-emerald-400"></i>
-            </div>
-          </div>
-        </div>
-        <div class="glass-panel p-4 rounded-xl border border-indigo-500/30">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm text-zinc-400">活跃提醒</div>
-              <div class="text-xl font-bold">{{ activeAlertsCount }}</div>
-            </div>
-            <div class="p-2 bg-indigo-500/20 rounded-lg">
-              <i data-lucide="bell" class="w-5 h-5 text-indigo-400"></i>
             </div>
           </div>
         </div>
@@ -144,17 +133,11 @@
               </div>
               <div class="flex items-center gap-3">
                 <button 
-                  @click="showPriceAlertDialog(item)"
+                  @click="viewPriceHistory(item)"
                   class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
                 >
-                  <i data-lucide="bell" class="w-4 h-4"></i>
-                  设置提醒
-                </button>
-                <button 
-                  @click="viewPriceHistory(item)"
-                  class="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium"
-                >
                   <i data-lucide="chart-line" class="w-4 h-4"></i>
+                  查看价格历史
                 </button>
               </div>
             </div>
@@ -163,58 +146,46 @@
       </div>
     </section>
 
-    <section>
-      <div class="flex items-center justify-between mb-6">
-        <h3 class="text-xl font-bold">价格提醒</h3>
-        <button class="text-sm text-indigo-400 hover:text-indigo-300">
-          管理所有 <i data-lucide="chevron-right" class="w-4 h-4 inline-block ml-1"></i>
-        </button>
-      </div>
-      <div class="glass-panel rounded-2xl p-6">
-        <div v-if="alerts.length === 0" class="text-center py-8 text-zinc-400">
-          <i data-lucide="bell-off" class="w-12 h-12 mx-auto mb-3 opacity-50"></i>
-          <p>暂无价格提醒</p>
+    <!-- 价格历史对话框 -->
+    <div v-if="showHistoryDialog" class="dialog-overlay" @click.self="closeHistoryDialog">
+      <div class="dialog-content dialog-content-large">
+        <div class="dialog-header">
+          <h3>{{ historyDialogGame?.gameName }} - 价格历史</h3>
+          <button class="dialog-close" @click="closeHistoryDialog">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
         </div>
-        <div v-else class="space-y-4">
-          <div 
-            v-for="alert in alerts" 
-            :key="alert.subscriptionId"
-            class="flex items-center justify-between p-3 rounded-xl bg-white/5"
-          >
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-lg overflow-hidden bg-zinc-800">
-                <img 
-                  :src="alert.headerImage || '/placeholder-game.png'" 
-                  class="w-full h-full object-cover"
-                  @error="handleImageError"
-                >
-              </div>
-              <div>
-                <div class="font-medium">{{ alert.gameName }}</div>
-                <div class="text-sm text-zinc-400">
-                  <span v-if="alert.targetPrice">当价格低于 ¥{{ alert.targetPrice.toFixed(2) }} 时提醒我</span>
-                  <span v-else-if="alert.targetDiscount">当折扣达到 {{ alert.targetDiscount }}% 时提醒我</span>
-                  <span v-else>价格提醒已设置</span>
+        <div class="dialog-body">
+          <div v-if="loadingHistory" class="loading-center">
+            <i data-lucide="loader-2" class="w-8 h-8 animate-spin text-zinc-400"></i>
+            <span>加载中...</span>
+          </div>
+          <div v-else-if="priceHistoryData.length === 0" class="empty-center">
+            <i data-lucide="chart-line" class="w-12 h-12 text-zinc-500 mb-3"></i>
+            <p>暂无价格历史数据</p>
+          </div>
+          <div v-else class="history-list">
+            <div 
+              v-for="(item, index) in priceHistoryData" 
+              :key="index"
+              class="history-item"
+            >
+              <div class="history-date">{{ formatHistoryDate(item.date) }}</div>
+              <div class="history-price-info">
+                <div class="history-price-main">
+                  <span class="price-current">¥{{ item.currentPrice.toFixed(2) }}</span>
+                  <span v-if="item.isDiscount" class="discount-tag">-{{ item.discount }}%</span>
                 </div>
-                <div v-if="alert.currentPrice !== null" class="text-xs text-zinc-500 mt-1">
-                  当前价格: ¥{{ alert.currentPrice.toFixed(2) }}
-                  <span v-if="alert.isDiscount" class="text-red-400 ml-1">(-{{ alert.discountRate }}%)</span>
+                <div v-if="item.originalPrice > item.currentPrice" class="history-price-detail">
+                  <span class="price-original-text">原价: ¥{{ item.originalPrice.toFixed(2) }}</span>
+                  <span class="price-savings">节省: ¥{{ (item.originalPrice - item.currentPrice).toFixed(2) }}</span>
                 </div>
               </div>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs">活跃</span>
-              <button 
-                @click="unsubscribeAlert(alert.subscriptionId)"
-                class="text-zinc-500 hover:text-zinc-300"
-              >
-                <i data-lucide="x" class="w-4 h-4"></i>
-              </button>
             </div>
           </div>
         </div>
       </div>
-    </section>
+    </div>
 
   </div>
 </template>
@@ -230,9 +201,7 @@ const priceStore = usePriceStore()
 
 // 获取store中的状态
 const wishlist = priceStore.wishlist
-const alerts = priceStore.alerts
 const totalPotentialSavings = priceStore.totalPotentialSavings
-const activeAlertsCount = priceStore.activeAlertsCount
 
 // 监控状态
 const monitoringStatus = ref(null)
@@ -240,12 +209,15 @@ const lastUpdateTime = ref('')
 const loading = ref(false)
 const updating = ref(false)
 
-// 格式化时间
+// 格式化时间（转换为中国时区）
 const formatTime = (dateString) => {
   if (!dateString) return '暂无数据'
+  
+  // 如果后端返回的是UTC时间，需要转换为中国时区（UTC+8）
   const date = new Date(dateString)
+  const chinaTime = new Date(date.getTime() + 8 * 60 * 60 * 1000)
   const now = new Date()
-  const diff = now - date
+  const diff = now - chinaTime
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
   
   if (days === 0) {
@@ -256,16 +228,21 @@ const formatTime = (dateString) => {
     }
     return `${hours}小时前`
   } else if (days === 1) {
-    return '昨天 ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    return '昨天 ' + chinaTime.toLocaleTimeString('zh-CN', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      timeZone: 'Asia/Shanghai'
+    })
   } else if (days < 7) {
     return `${days}天前`
   }
-  return date.toLocaleString('zh-CN', { 
+  return chinaTime.toLocaleString('zh-CN', { 
     year: 'numeric', 
     month: '2-digit', 
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: 'Asia/Shanghai'
   })
 }
 
@@ -318,29 +295,64 @@ const removeFromWishlist = async (gameId) => {
   }
 }
 
-// 取消订阅
-const unsubscribeAlert = async (subscriptionId) => {
-  if (!confirm('确定要取消这个价格提醒吗？')) return
-  try {
-    const res = await priceApi.unsubscribeAlert(subscriptionId)
-    if (res.success) {
-      await priceStore.fetchAlerts()
-    }
-  } catch (error) {
-    console.error('取消订阅失败:', error)
-  }
-}
 
-// 显示价格提醒对话框
-const showPriceAlertDialog = (item) => {
-  // TODO: 实现价格提醒设置对话框
-  alert(`设置 ${item.gameName} 的价格提醒功能开发中...`)
-}
+// 价格历史对话框状态
+const showHistoryDialog = ref(false)
+const historyDialogGame = ref(null)
+const priceHistoryData = ref([])
+const loadingHistory = ref(false)
 
 // 查看价格历史
 const viewPriceHistory = async (item) => {
-  // TODO: 实现价格历史查看
-  alert(`查看 ${item.gameName} 的价格历史功能开发中...`)
+  historyDialogGame.value = item
+  showHistoryDialog.value = true
+  loadingHistory.value = true
+  priceHistoryData.value = []
+  
+  try {
+    const gameId = item.gameId || item.id
+    const response = await priceApi.getPriceHistory(gameId)
+    
+    if (response.success && response.data) {
+      const data = response.data
+      if (data.priceHistory && Array.isArray(data.priceHistory)) {
+        priceHistoryData.value = data.priceHistory.map(h => ({
+          date: h.Date || h.date,
+          currentPrice: h.CurrentPrice || h.currentPrice || 0,
+          originalPrice: h.OriginalPrice || h.originalPrice || 0,
+          discount: h.Discount || h.discount || 0,
+          isDiscount: h.IsDiscount || h.isDiscount || false
+        })).reverse() // 按时间正序显示
+      }
+    }
+  } catch (error) {
+    console.error('加载价格历史失败:', error)
+    alert('加载价格历史失败')
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+// 关闭价格历史对话框
+const closeHistoryDialog = () => {
+  showHistoryDialog.value = false
+  historyDialogGame.value = null
+  priceHistoryData.value = []
+}
+
+// 格式化日期
+const formatHistoryDate = (dateString) => {
+  if (!dateString) return ''
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('zh-CN', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    })
+  } catch {
+    return dateString
+  }
 }
 
 // 图片加载错误处理
@@ -362,7 +374,6 @@ onMounted(async () => {
   try {
     await Promise.all([
       priceStore.fetchWishlist(),
-      priceStore.fetchAlerts(),
       fetchMonitoringStatus()
     ])
   } finally {
@@ -382,5 +393,310 @@ onMounted(async () => {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
   backdrop-filter: blur(10px);
+}
+
+/* 对话框样式 */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.dialog-content {
+  background: rgba(20, 20, 23, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  backdrop-filter: blur(20px);
+}
+
+.dialog-content-large {
+  max-width: 700px;
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dialog-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.dialog-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.dialog-close:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f8fafc;
+}
+
+.dialog-body {
+  padding: 24px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.game-info-preview {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(15, 15, 19, 0.6);
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.preview-image {
+  width: 60px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.preview-info {
+  flex: 1;
+}
+
+.preview-info h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #f8fafc;
+}
+
+.preview-price {
+  font-size: 14px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-original {
+  font-size: 12px;
+  color: #64748b;
+  text-decoration: line-through;
+  margin-top: 4px;
+}
+
+.discount-badge-small {
+  padding: 2px 6px;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.alert-options {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.option-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+
+.radio-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.option-input {
+  margin-left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-field {
+  padding: 10px 12px;
+  background: rgba(15, 15, 19, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #f8fafc;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  background: rgba(20, 20, 23, 0.9);
+}
+
+.input-hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #7c3aed;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  padding: 10px 20px;
+  background: rgba(20, 20, 23, 0.8);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(30, 30, 35, 0.9);
+  color: #f8fafc;
+}
+
+/* 价格历史对话框样式 */
+.loading-center,
+.empty-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #94a3b8;
+  gap: 12px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: rgba(15, 15, 19, 0.6);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s;
+}
+
+.history-item:hover {
+  background: rgba(20, 20, 23, 0.8);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.history-date {
+  font-size: 14px;
+  color: #94a3b8;
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.history-price-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.history-price-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.price-current {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.discount-tag {
+  padding: 2px 8px;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.history-price-detail {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.price-original-text {
+  color: #64748b;
+  text-decoration: line-through;
+}
+
+.price-savings {
+  color: #10b981;
+  font-weight: 500;
 }
 </style>

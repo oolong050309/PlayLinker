@@ -101,5 +101,58 @@ public class EmailService : IEmailService
 <p>如果这不是您本人的操作，请忽略本邮件。</p>";
         return SendAsync(to, subject, body);
     }
+
+    public Task SendPriceAlertAsync(string to, string username, string gameName, string alertType, decimal currentPrice, decimal? originalPrice, int? discountRate, decimal? targetPrice, int? targetDiscount)
+    {
+        var subject = $"价格提醒：{WebUtility.HtmlEncode(gameName)}";
+        
+        string alertMessage = "";
+        if (alertType == "target_price" && targetPrice.HasValue)
+        {
+            alertMessage = $"游戏价格已降至 ¥{currentPrice:F2}，低于您设置的目标价格 ¥{targetPrice.Value:F2}。";
+        }
+        else if (alertType == "target_discount" && targetDiscount.HasValue)
+        {
+            alertMessage = $"游戏折扣已达到 {discountRate}%，达到您设置的目标折扣 {targetDiscount.Value}%。";
+        }
+        else if (alertType == "price_drop")
+        {
+            alertMessage = $"游戏价格出现下降，当前价格为 ¥{currentPrice:F2}。";
+        }
+
+        var body = $@"
+<div style=""font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;"">
+    <div style=""background-color: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"">
+        <h2 style=""color: #8b5cf6; margin-top: 0;"">🎮 价格提醒</h2>
+        <p style=""font-size: 16px; color: #333;"">Hi {WebUtility.HtmlEncode(username)},</p>
+        <p style=""font-size: 16px; color: #333;"">{alertMessage}</p>
+        
+        <div style=""background-color: #f8f9fa; border-left: 4px solid #8b5cf6; padding: 15px; margin: 20px 0; border-radius: 4px;"">
+            <h3 style=""margin-top: 0; color: #333;"">{WebUtility.HtmlEncode(gameName)}</h3>
+            <p style=""margin: 5px 0; font-size: 18px; font-weight: bold; color: #8b5cf6;"">当前价格：¥{currentPrice:F2}</p>";
+        
+        if (originalPrice.HasValue && originalPrice.Value > currentPrice)
+        {
+            body += $@"
+            <p style=""margin: 5px 0; color: #666; text-decoration: line-through;"">原价：¥{originalPrice.Value:F2}</p>
+            <p style=""margin: 5px 0; color: #22c55e; font-weight: bold;"">节省：¥{(originalPrice.Value - currentPrice):F2}</p>";
+        }
+        
+        if (discountRate.HasValue && discountRate.Value > 0)
+        {
+            body += $@"
+            <p style=""margin: 5px 0; color: #ef4444; font-weight: bold;"">折扣：-{discountRate.Value}%</p>";
+        }
+        
+        body += $@"
+        </div>
+        
+        <p style=""font-size: 14px; color: #666; margin-top: 20px;"">您可以在 PlayLinker 应用中查看详细信息并管理您的价格提醒。</p>
+        <p style=""font-size: 12px; color: #999; margin-top: 20px;"">此邮件由 PlayLinker 价格监控系统自动发送。</p>
+    </div>
+</div>";
+        
+        return SendAsync(to, subject, body);
+    }
 }
 
