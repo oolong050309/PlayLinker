@@ -495,6 +495,13 @@ public class SteamService : ISteamService
                             };
                         }
 
+                        // 解析支持的语言
+                        string? supportedLanguages = null;
+                        if (data.TryGetProperty("supported_languages", out var langProp))
+                        {
+                            supportedLanguages = langProp.GetString();
+                        }
+
                         var result = new SteamGameDto
                         {
                             AppId = appId,
@@ -514,6 +521,7 @@ public class SteamService : ISteamService
                             },
                             Categories = categories,
                             Genres = genres,
+                            SupportedLanguages = supportedLanguages,
                             ReleaseDate = data.TryGetProperty("release_date", out var rd) && rd.TryGetProperty("date", out var date) ? date.GetString() ?? "" : "",
                             RequiredAge = data.TryGetProperty("required_age", out var ra) ? SafeGetInt32(ra) : 0,
                             PriceOverview = priceOverview,

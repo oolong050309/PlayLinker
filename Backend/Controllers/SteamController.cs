@@ -8,7 +8,9 @@ using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
 using PlayLinker.Services;
 using System.Data.Common;
+using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace PlayLinker.Controllers;
 
@@ -50,6 +52,48 @@ public class SteamController : ControllerBase
     {
         var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
         return int.TryParse(userIdClaim, out var userId) ? userId : 1;
+    }
+
+    /// <summary>
+    /// 解析 supported_languages 字符串，提取语言名称
+    /// 去除 HTML 标签、特殊字符和说明文字
+    /// </summary>
+    private List<string> ParseSupportedLanguages(string? supportedLanguages)
+    {
+        var languages = new List<string>();
+        if (string.IsNullOrEmpty(supportedLanguages))
+        {
+            return languages;
+        }
+
+        // 解码 HTML 实体（如 \u003C 转为 <）
+        var decoded = System.Net.WebUtility.HtmlDecode(supportedLanguages);
+        
+        // 移除 HTML 标签（如 <strong>、</strong>、<br> 等）
+        decoded = System.Text.RegularExpressions.Regex.Replace(decoded, @"<[^>]+>", "");
+        
+        // 移除特殊字符（如 *）
+        decoded = decoded.Replace("*", "");
+        
+        // 按逗号分割
+        var parts = decoded.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            // 跳过说明文字（包含"具有"、"支持"等关键词的说明性文字）
+            if (string.IsNullOrWhiteSpace(trimmed) || 
+                trimmed.Contains("具有") || 
+                trimmed.Contains("支持") ||
+                trimmed.Contains("音频") ||
+                trimmed.Length < 2)
+            {
+                continue;
+            }
+            languages.Add(trimmed);
+        }
+        
+        return languages;
     }
 
     // 从数据库获取Steam API Key
@@ -373,6 +417,122 @@ public class SteamController : ControllerBase
                                                 PlatformGameId = appId.ToString(),
                                                 GamePlatformUrl = $"https://store.steampowered.com/app/{appId}"
                                             });
+                                        }
+
+                                        // 处理 categories（如果游戏的 categories 为空，则从 Steam API 获取并存储）
+                                        var existingCategories = await _context.GameCategories
+                                            .Where(gc => gc.GameId == game.GameId)
+                                            .ToListAsync();
+                                        
+                                        if (existingCategories.Count == 0 && steamGame.Categories.Count > 0)
+                                        {
+                                            foreach (var categoryName in steamGame.Categories)
+                                            {
+                                                if (string.IsNullOrEmpty(categoryName)) continue;
+                                                
+                                                // 截断名称到50个字符（数据库限制）
+                                                var truncatedName = categoryName.Length > 50 ? categoryName.Substring(0, 50) : categoryName;
+                                                
+                                                var category = await _context.Categories
+                                                    .FirstOrDefaultAsync(c => c.Name == truncatedName);
+                                                
+                                                if (category == null)
+                                                {
+                                                    category = new Category { Name = truncatedName };
+                                                    _context.Categories.Add(category);
+                                                    await _context.SaveChangesAsync();
+                                                }
+                                                
+                                                if (!await _context.GameCategories.AnyAsync(gc => gc.GameId == game.GameId && gc.CategoryId == category.CategoryId))
+                                                {
+                                                    _context.GameCategories.Add(new GameCategory 
+                                                    { 
+                                                        GameId = game.GameId, 
+                                                        CategoryId = category.CategoryId 
+                                                    });
+                                                }
+                                            }
+                                            await _context.SaveChangesAsync();
+                                            _logger.LogInformation("为游戏添加 categories: gameId={GameId}, count={Count}", 
+                                                game.GameId, steamGame.Categories.Count);
+                                        }
+
+                                        // 处理 genres（如果游戏的 genres 为空，则从 Steam API 获取并存储）
+                                        var existingGenres = await _context.GameGenres
+                                            .Where(gg => gg.GameId == game.GameId)
+                                            .ToListAsync();
+                                        
+                                        if (existingGenres.Count == 0 && steamGame.Genres.Count > 0)
+                                        {
+                                            foreach (var genreName in steamGame.Genres)
+                                            {
+                                                if (string.IsNullOrEmpty(genreName)) continue;
+                                                
+                                                // 截断名称到20个字符（数据库限制）
+                                                var truncatedName = genreName.Length > 20 ? genreName.Substring(0, 20) : genreName;
+                                                
+                                                var genre = await _context.Genres
+                                                    .FirstOrDefaultAsync(g => g.Name == truncatedName);
+                                                
+                                                if (genre == null)
+                                                {
+                                                    genre = new Genre { Name = truncatedName };
+                                                    _context.Genres.Add(genre);
+                                                    await _context.SaveChangesAsync();
+                                                }
+                                                
+                                                if (!await _context.GameGenres.AnyAsync(gg => gg.GameId == game.GameId && gg.GenreId == genre.GenreId))
+                                                {
+                                                    _context.GameGenres.Add(new GameGenre 
+                                                    { 
+                                                        GameId = game.GameId, 
+                                                        GenreId = genre.GenreId 
+                                                    });
+                                                }
+                                            }
+                                            await _context.SaveChangesAsync();
+                                            _logger.LogInformation("为游戏添加 genres: gameId={GameId}, count={Count}", 
+                                                game.GameId, steamGame.Genres.Count);
+                                        }
+
+                                        // 处理 supported_languages（如果游戏的 languages 为空，则从 Steam API 获取并存储）
+                                        var existingLanguages = await _context.GameLanguages
+                                            .Where(gl => gl.GameId == game.GameId)
+                                            .ToListAsync();
+                                        
+                                        if (existingLanguages.Count == 0 && !string.IsNullOrEmpty(steamGame.SupportedLanguages))
+                                        {
+                                            var parsedLanguages = ParseSupportedLanguages(steamGame.SupportedLanguages);
+                                            
+                                            foreach (var languageName in parsedLanguages)
+                                            {
+                                                if (string.IsNullOrEmpty(languageName)) continue;
+                                                
+                                                // 截断名称到50个字符（数据库限制）
+                                                var truncatedName = languageName.Length > 50 ? languageName.Substring(0, 50) : languageName;
+                                                
+                                                var language = await _context.Languages
+                                                    .FirstOrDefaultAsync(l => l.LanguageName == truncatedName);
+                                                
+                                                if (language == null)
+                                                {
+                                                    language = new Language { LanguageName = truncatedName };
+                                                    _context.Languages.Add(language);
+                                                    await _context.SaveChangesAsync();
+                                                }
+                                                
+                                                if (!await _context.GameLanguages.AnyAsync(gl => gl.GameId == game.GameId && gl.LanguageId == language.LanguageId))
+                                                {
+                                                    _context.GameLanguages.Add(new GameLanguage 
+                                                    { 
+                                                        GameId = game.GameId, 
+                                                        LanguageId = language.LanguageId 
+                                                    });
+                                                }
+                                            }
+                                            await _context.SaveChangesAsync();
+                                            _logger.LogInformation("为游戏添加 languages: gameId={GameId}, count={Count}", 
+                                                game.GameId, parsedLanguages.Count);
                                         }
 
                                         // 创建或更新用户平台游戏库记录
