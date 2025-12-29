@@ -80,31 +80,50 @@ public class PricesController : ControllerBase
     [HttpGet("current")]
     public async Task<ActionResult<ApiResponse<object>>> GetCurrentPrices([FromQuery] string game_ids)
     {
-        if (string.IsNullOrEmpty(game_ids)) return BadRequest();
+        if (string.IsNullOrEmpty(game_ids)) 
+            return BadRequest(ApiResponse<object>.ErrorResponse("ERR_BAD_REQUEST", "game_ids 参数不能为空"));
 
-        var ids = game_ids.Split(',').Select(long.Parse).ToList();
-        
-        var prices = await _context.PriceHistories
-            .Where(p => ids.Contains(p.GameId))
-            .GroupBy(p => p.GameId)
-            .Select(g => g.OrderByDescending(p => p.RecordDate).First())
-            .Include(p => p.Game)
-            .Include(p => p.Platform)
-            .ToListAsync();
-
-        var result = prices.Select(p => new
+        try
         {
-            p.GameId,
-            GameName = p.Game.Name,
-            Platform = p.Platform.PlatformName,
-            p.CurrentPrice,
-            p.OriginalPrice,
-            Discount = p.DiscountRate,
-            p.IsDiscount,
-            LastUpdated = p.RecordDate
-        });
+            var ids = game_ids.Split(',').Select(long.Parse).ToList();
+            
+            // 获取所有相关游戏的价格历史记录（包括关联数据）
+            var allPrices = await _context.PriceHistories
+                .Where(p => ids.Contains(p.GameId))
+                .Include(p => p.Game)
+                .Include(p => p.Platform)
+                .ToListAsync();
 
-        return Ok(ApiResponse<object>.SuccessResponse(new { prices = result, totalCount = result.Count() }));
+            // 按游戏ID分组，获取每个游戏的最新价格记录
+            var prices = allPrices
+                .GroupBy(p => p.GameId)
+                .Select(g => g.OrderByDescending(p => p.RecordDate).First())
+                .ToList();
+
+            var result = prices.Select(p => new
+            {
+                gameId = p.GameId,
+                GameName = p.Game?.Name ?? "未知游戏",
+                Platform = p.Platform?.PlatformName ?? "未知平台",
+                currentPrice = p.CurrentPrice,
+                originalPrice = p.OriginalPrice,
+                discount = p.DiscountRate,
+                discountRate = p.DiscountRate, // 兼容字段
+                isDiscount = p.IsDiscount,
+                LastUpdated = p.RecordDate
+            }).ToList();
+
+            return Ok(ApiResponse<object>.SuccessResponse(new { prices = result, totalCount = result.Count }));
+        }
+        catch (FormatException)
+        {
+            return BadRequest(ApiResponse<object>.ErrorResponse("ERR_BAD_REQUEST", "game_ids 参数格式错误"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取当前价格时发生错误: game_ids={GameIds}", game_ids);
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
     }
 
     [HttpGet("predictions/{gameId}")]
@@ -296,6 +315,16 @@ public class PricesController : ControllerBase
 
             _context.PriceAlertLogs.Add(alertLog);
             await _context.SaveChangesAsync();
+
+            // 提醒后将订阅设为非active（仅针对目标价格和目标折扣提醒）
+            if (alertType == "target_price" || alertType == "target_discount")
+            {
+                subscription.IsActive = false;
+                _context.PriceAlertSubscriptions.Update(subscription);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("已将订阅 {SubscriptionId} 设为非active: GameId={GameId}, UserId={UserId}",
+                    subscription.SubscriptionId, subscription.GameId, userId);
+            }
 
             // 发送邮件提醒
             var user = await _context.Users.FindAsync(userId);

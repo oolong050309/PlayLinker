@@ -506,6 +506,16 @@ public class PriceMonitoringService : BackgroundService
                         }
                     }
 
+                    // 提醒后将订阅设为非active（仅针对目标价格和目标折扣提醒）
+                    if (alertType == "target_price" || alertType == "target_discount")
+                    {
+                        subscription.IsActive = false;
+                        context.PriceAlertSubscriptions.Update(subscription);
+                        await context.SaveChangesAsync(cancellationToken);
+                        _logger.LogInformation("已将订阅 {SubscriptionId} 设为非active: GameId={GameId}, UserId={UserId}",
+                            subscription.SubscriptionId, gameId, subscription.UserId);
+                    }
+
                     _logger.LogInformation("已为用户 {UserId} 创建价格提醒通知: GameId={GameId}, Price={Price}, Discount={Discount}%, AlertType={AlertType}",
                         subscription.UserId, gameId, newPrice.CurrentPrice, newPrice.DiscountRate, alertType);
                 }

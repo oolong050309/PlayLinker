@@ -92,7 +92,7 @@
             </div>
           </section>
 
-          <!-- 基本信息：发行日期 / 开发商 / 发行商 -->
+          <!-- 基本信息：发行日期 / 开发商 / 发行商 / 分类 / 类型 / 语言 -->
           <section class="section-card">
             <h2 class="section-title">基本信息</h2>
             <div class="basic-info-grid">
@@ -110,6 +110,24 @@
                 <div class="basic-label">发行商</div>
                 <div class="basic-value">
                   {{ game.publishers.map(p => p.name || p.Name).join('，') }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.categories && game.categories.length">
+                <div class="basic-label">分类</div>
+                <div class="basic-value">
+                  {{ formatGameCategories(game.categories) }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.genres && game.genres.length">
+                <div class="basic-label">类型</div>
+                <div class="basic-value">
+                  {{ formatGameGenres(game.genres) }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.languages && game.languages.length">
+                <div class="basic-label">支持语言</div>
+                <div class="basic-value">
+                  {{ formatGameLanguages(game.languages) }}
                 </div>
               </div>
             </div>
@@ -237,10 +255,6 @@
                     <Bell class="icon" size="16" />
                     {{ hasPriceAlert ? '管理提醒' : '设置价格提醒' }}
                   </button>
-                  <button v-if="priceHistory.length > 0" class="btn-outline" @click="viewPriceHistory">
-                    <TrendingUp class="icon" size="16" />
-                    查看历史
-                  </button>
                 </div>
               </div>
             </div>
@@ -250,7 +264,7 @@
           <div v-if="showAlertDialog" class="dialog-overlay" @click.self="closeAlertDialog">
             <div class="dialog-content">
               <div class="dialog-header">
-                <h3>设置价格提醒</h3>
+                <h3>{{ currentSubscription ? '管理价格提醒' : '设置价格提醒' }}</h3>
                 <button class="dialog-close" @click="closeAlertDialog">
                   <X class="icon" size="20" />
                 </button>
@@ -260,8 +274,19 @@
                   <img v-if="game.headerImage" :src="game.headerImage" class="preview-image" />
                   <div class="preview-info">
                     <h4>{{ game.name }}</h4>
-                    <p class="preview-price">当前价格: ¥{{ priceInfo.currentPrice?.toFixed(2) || '0.00' }}</p>
+                    <p class="preview-price">
+                      当前价格: ¥{{ priceInfo.currentPrice?.toFixed(2) || '0.00' }}
+                      <span v-if="priceInfo.isDiscount && priceInfo.discountRate > 0" class="discount-badge-small">
+                        -{{ priceInfo.discountRate }}%
+                      </span>
+                    </p>
+                    <p v-if="priceInfo.originalPrice && priceInfo.originalPrice > 0" class="preview-original">
+                      原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}
+                    </p>
                   </div>
+                </div>
+                <div v-if="currentSubscription && !currentSubscription.isActive" class="subscription-inactive-notice">
+                  <span>⚠️ 此提醒已触发，当前为非活跃状态</span>
                 </div>
                 <div class="alert-options">
                   <div class="option-group">
@@ -308,12 +333,36 @@
                       <span class="input-hint">当折扣达到或超过此百分比时提醒</span>
                     </div>
                   </div>
+                  <div class="option-group">
+                    <label class="option-label">
+                      <input 
+                        type="radio" 
+                        v-model="alertType" 
+                        value="none"
+                        class="radio-input"
+                      />
+                      <span>取消提醒</span>
+                    </label>
+                  </div>
                 </div>
               </div>
               <div class="dialog-footer">
                 <button class="btn-secondary" @click="closeAlertDialog">取消</button>
-                <button class="btn-primary" @click="savePriceAlert" :disabled="savingAlert">
-                  {{ savingAlert ? '保存中...' : '保存' }}
+                <button 
+                  v-if="currentSubscription && alertType === 'none'" 
+                  class="btn-danger" 
+                  @click="deletePriceAlert" 
+                  :disabled="savingAlert"
+                >
+                  {{ savingAlert ? '删除中...' : '删除提醒' }}
+                </button>
+                <button 
+                  v-else-if="alertType !== 'none'" 
+                  class="btn-primary" 
+                  @click="savePriceAlert" 
+                  :disabled="savingAlert"
+                >
+                  {{ savingAlert ? '保存中...' : (currentSubscription ? '更新' : '保存') }}
                 </button>
               </div>
             </div>
@@ -369,7 +418,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { gameApi, achievementApi, libraryApi } from '@/api'
 import { priceApi } from '@/api/price'
-import { ArrowLeft, Clock, Trophy, Calendar, Play, Settings, Bell, Package, Lock, TrendingUp, X } from 'lucide-vue-next'
+import { ArrowLeft, Clock, Trophy, Calendar, Play, Settings, Bell, Package, Lock, X } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -393,6 +442,7 @@ const priceHistory = ref([])
 const priceLoading = ref(false)
 const priceError = ref(null)
 const hasPriceAlert = ref(false)
+const currentSubscription = ref(null) // 当前游戏的订阅信息
 const mods = ref([]) // 预留的 Mod 列表
 
 // 价格提醒对话框
@@ -453,6 +503,9 @@ const loadGameDetail = async () => {
             reviews: null,
             developers: [],
             publishers: [],
+            categories: [],
+            genres: [],
+            languages: [],
             playtimeMinutes,
             lastPlayed: libraryGame.lastPlayed ?? libraryGame.LastPlayed,
             achievementsUnlocked: unlocked,
@@ -467,15 +520,25 @@ const loadGameDetail = async () => {
       console.log('从游戏库获取失败:', libErr)
     }
 
-    // 2. 使用通用游戏API获取“公共详情”（题材/开发商/系统需求等）
+    // 2. 使用通用游戏API获取"公共详情"（题材/开发商/系统需求等）
     const gameResponse = await gameApi.getGame(gameId)
     console.log('通用游戏详情响应:', gameResponse)
     if (gameResponse.success && gameResponse.data) {
       const detail = gameResponse.data
 
+      // 提取分类、类型和语言数据（支持多种命名格式）
+      const categories = detail.categories ?? detail.Categories ?? []
+      const genres = detail.genres ?? detail.Genres ?? []
+      const languages = detail.languages ?? detail.Languages ?? []
+      
+      // 格式化数据为统一格式
+      const formattedCategories = Array.isArray(categories) ? categories : []
+      const formattedGenres = Array.isArray(genres) ? genres : []
+      const formattedLanguages = Array.isArray(languages) ? languages : []
+
       if (!game.value) {
         // 如果游戏库里没有记录，就完全使用公共详情
-        const genres = (detail.genres ?? detail.Genres ?? []).map(g => g.name ?? g.Name)
+        const genreNames = formattedGenres.map(g => g.name ?? g.Name ?? g)
         const developers = detail.developers ?? detail.Developers ?? []
         const publishers = detail.publishers ?? detail.Publishers ?? []
 
@@ -485,7 +548,7 @@ const loadGameDetail = async () => {
           headerImage: detail.media?.headerImage ?? detail.Media?.HeaderImage,
           description: detail.shortDescription ?? detail.ShortDescription ?? detail.detailedDescription ?? detail.DetailedDescription,
           platform: detail.platforms ? formatPlatforms(detail.platforms) : '',
-          genre: genres.join(' / '),
+          genre: genreNames.join(' / '),
           isFree: detail.isFree ?? detail.IsFree ?? null,
           releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? '',
           shortDescription: detail.shortDescription ?? detail.ShortDescription,
@@ -494,6 +557,9 @@ const loadGameDetail = async () => {
           reviews: detail.reviews ?? detail.Reviews,
           developers,
           publishers,
+          categories: formattedCategories,
+          genres: formattedGenres,
+          languages: formattedLanguages,
           playtimeMinutes: 0,
           lastPlayed: null,
           achievementsUnlocked: 0,
@@ -501,7 +567,7 @@ const loadGameDetail = async () => {
         }
       } else {
         // 合并个人数据与公共详情
-        const genres = (detail.genres ?? detail.Genres ?? []).map(g => g.name ?? g.Name)
+        const genreNames = formattedGenres.map(g => g.name ?? g.Name ?? g)
         const developers = detail.developers ?? detail.Developers ?? game.value.developers ?? []
         const publishers = detail.publishers ?? detail.Publishers ?? game.value.publishers ?? []
 
@@ -511,7 +577,7 @@ const loadGameDetail = async () => {
           headerImage: game.value.headerImage || detail.media?.headerImage || detail.Media?.HeaderImage,
           description: game.value.description || detail.shortDescription || detail.ShortDescription || detail.detailedDescription || detail.DetailedDescription,
           platform: game.value.platform || (detail.platforms ? formatPlatforms(detail.platforms) : ''),
-          genre: genres.join(' / ') || game.value.genre,
+          genre: genreNames.join(' / ') || game.value.genre,
           isFree: detail.isFree ?? detail.IsFree ?? game.value.isFree,
           releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? game.value.releaseDate,
           shortDescription: detail.shortDescription ?? detail.ShortDescription ?? game.value.shortDescription,
@@ -519,7 +585,10 @@ const loadGameDetail = async () => {
           requirements: detail.requirements ?? detail.Requirements ?? game.value.requirements,
           reviews: detail.reviews ?? detail.Reviews ?? game.value.reviews,
           developers,
-          publishers
+          publishers,
+          categories: formattedCategories.length > 0 ? formattedCategories : (game.value.categories ?? []),
+          genres: formattedGenres.length > 0 ? formattedGenres : (game.value.genres ?? []),
+          languages: formattedLanguages.length > 0 ? formattedLanguages : (game.value.languages ?? [])
         }
       }
     }
@@ -601,6 +670,34 @@ const formatPlatforms = (platforms) => {
   return list.join(' / ')
 }
 
+// 格式化游戏分类
+const formatGameCategories = (categories) => {
+  if (!categories || !Array.isArray(categories) || categories.length === 0) return ''
+  return categories.map(cat => {
+    if (typeof cat === 'string') return cat
+    return cat.name ?? cat.Name ?? cat.description ?? cat.Description ?? cat.id ?? cat.Id ?? ''
+  }).filter(Boolean).join('，')
+}
+
+// 格式化游戏类型
+const formatGameGenres = (genres) => {
+  if (!genres || !Array.isArray(genres) || genres.length === 0) return ''
+  return genres.map(genre => {
+    if (typeof genre === 'string') return genre
+    return genre.name ?? genre.Name ?? genre.description ?? genre.Description ?? genre.id ?? genre.Id ?? ''
+  }).filter(Boolean).join('，')
+}
+
+// 格式化游戏语言
+const formatGameLanguages = (languages) => {
+  if (!languages || !Array.isArray(languages) || languages.length === 0) return ''
+  return languages.map(lang => {
+    if (typeof lang === 'string') return lang
+    // 语言可能有 name、description、languageName 等字段
+    return lang.name ?? lang.Name ?? lang.languageName ?? lang.LanguageName ?? lang.description ?? lang.Description ?? lang.id ?? lang.Id ?? ''
+  }).filter(Boolean).join('，')
+}
+
 // 格式化日期
 const formatDate = (date) => {
   if (!date) return ''
@@ -678,10 +775,15 @@ const checkPriceAlert = async () => {
     const response = await priceApi.getSubscriptions()
     if (response.success && response.data) {
       const subscriptions = response.data.subscriptions || response.data.items || []
-      const gameId = game.value?.id || route.params.id
-      hasPriceAlert.value = subscriptions.some(sub => 
-        sub.gameId === gameId && sub.isActive !== false
-      )
+      const gameId = parseInt(game.value?.id || route.params.id)
+      
+      // 查找当前游戏的订阅
+      currentSubscription.value = subscriptions.find(sub => 
+        parseInt(sub.gameId) === gameId
+      ) || null
+      
+      // 检查是否有活跃的订阅
+      hasPriceAlert.value = currentSubscription.value !== null
     }
   } catch (err) {
     console.error('检查价格提醒失败:', err)
@@ -713,17 +815,42 @@ const formatChartDate = (dateString) => {
 }
 
 // 显示价格提醒对话框
-const showPriceAlertDialog = () => {
+const showPriceAlertDialog = async () => {
+  // 确保先加载最新的订阅信息
+  await checkPriceAlert()
+  
   showAlertDialog.value = true
-  // 重置表单
-  alertType.value = 'price'
-  targetPrice.value = null
-  targetDiscount.value = null
+  
+  // 如果有现有订阅，加载其设置
+  if (currentSubscription.value) {
+    if (currentSubscription.value.targetPrice !== null && currentSubscription.value.targetPrice !== undefined) {
+      alertType.value = 'price'
+      targetPrice.value = currentSubscription.value.targetPrice
+      targetDiscount.value = null
+    } else if (currentSubscription.value.targetDiscount !== null && currentSubscription.value.targetDiscount !== undefined) {
+      alertType.value = 'discount'
+      targetDiscount.value = currentSubscription.value.targetDiscount
+      targetPrice.value = null
+    } else {
+      alertType.value = 'price'
+      targetPrice.value = null
+      targetDiscount.value = null
+    }
+  } else {
+    // 重置表单
+    alertType.value = 'price'
+    targetPrice.value = null
+    targetDiscount.value = null
+  }
 }
 
 // 关闭价格提醒对话框
 const closeAlertDialog = () => {
   showAlertDialog.value = false
+  // 重置表单
+  alertType.value = 'price'
+  targetPrice.value = null
+  targetDiscount.value = null
 }
 
 // 保存价格提醒
@@ -742,40 +869,63 @@ const savePriceAlert = async () => {
   
   savingAlert.value = true
   try {
-    const gameId = game.value.id || route.params.id
+    const gameId = parseInt(game.value.id || route.params.id)
     // 获取平台ID，默认为Steam (1)
     const platformId = 1 // 可以根据实际情况获取
     
     const data = {
-      gameId: parseInt(gameId),
+      gameId: gameId,
       platformId: platformId,
       targetPrice: alertType.value === 'price' ? targetPrice.value : null,
       targetDiscount: alertType.value === 'discount' ? targetDiscount.value : null
     }
     
-    const response = await priceApi.trackPrice(data)
+    let response
+    if (currentSubscription.value) {
+      // 更新现有订阅
+      response = await priceApi.updateSubscription(currentSubscription.value.subscriptionId, data)
+    } else {
+      // 创建新订阅
+      response = await priceApi.trackPrice(data)
+    }
+    
     if (response.success) {
-      alert('价格提醒设置成功！')
-      hasPriceAlert.value = true
+      // 刷新订阅信息
+      await checkPriceAlert()
       closeAlertDialog()
     } else {
-      alert(response.message || '设置失败，请重试')
+      alert(response.message || '操作失败，请重试')
     }
   } catch (err) {
     console.error('保存价格提醒失败:', err)
-    alert('设置失败: ' + (err.message || '未知错误'))
+    alert('操作失败: ' + (err.message || '未知错误'))
   } finally {
     savingAlert.value = false
   }
 }
 
-// 查看价格历史
-const viewPriceHistory = () => {
-  // 跳转到价格监控页面，显示该游戏的历史
-  router.push({
-    path: '/price-monitor',
-    query: { gameId: game.value?.id || route.params.id }
-  })
+// 删除价格提醒
+const deletePriceAlert = async () => {
+  if (!currentSubscription.value) return
+  
+  if (!confirm('确定要删除这个价格提醒吗？')) return
+  
+  savingAlert.value = true
+  try {
+    const response = await priceApi.unsubscribeAlert(currentSubscription.value.subscriptionId)
+    if (response.success) {
+      // 刷新订阅信息
+      await checkPriceAlert()
+      closeAlertDialog()
+    } else {
+      alert(response.message || '删除失败，请重试')
+    }
+  } catch (err) {
+    console.error('删除价格提醒失败:', err)
+    alert('删除失败: ' + (err.message || '未知错误'))
+  } finally {
+    savingAlert.value = false
+  }
 }
 
 // Mod 管理处理（预留）
@@ -1484,6 +1634,35 @@ onMounted(() => {
   .preview-price {
     font-size: 14px;
     color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .preview-original {
+    font-size: 12px;
+    color: #64748b;
+    text-decoration: line-through;
+    margin-top: 4px;
+  }
+
+  .discount-badge-small {
+    padding: 2px 6px;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .subscription-inactive-notice {
+    padding: 12px;
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #fbbf24;
   }
 
   .alert-options {
@@ -1548,6 +1727,29 @@ onMounted(() => {
     gap: 12px;
     padding: 20px 24px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .btn-danger {
+    padding: 10px 20px;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #f87171;
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
 .price-actions {

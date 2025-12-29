@@ -29,6 +29,10 @@ export const priceApi = {
   unsubscribeAlert(id) {
     return request.delete(`/prices/subscriptions/${id}`)
   },
+  // 更新价格订阅
+  updateSubscription(id, data) {
+    return request.put(`/prices/subscriptions/${id}`, data)
+  },
   // 获取价格监控状态和统计信息
   getMonitoringStatus() {
     return request.get('/prices/monitoring-status')
