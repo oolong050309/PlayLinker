@@ -109,14 +109,20 @@
             </div>
           </div>
           <div class="game-info">
-            <div v-if="game.achievementProgress" class="achievement-progress">
+            <!-- 有成就（总数 > 0）才展示成就区域；即便解锁为 0 也展示 -->
+            <div v-if="game.achievementsTotal > 0" class="achievement-progress">
               <div class="progress-bar">
                 <div 
                   class="progress-fill" 
                   :style="{ width: `${game.achievementProgress}%` }"
                 ></div>
               </div>
-              <span class="progress-text">{{ game.achievementProgress.toFixed(2) }}% 成就完成</span>
+              <span class="progress-text">
+                已解锁 {{ game.achievementsUnlocked }} / {{ game.achievementsTotal }} 个成就
+                <template v-if="game.achievementProgress > 0">
+                  （{{ game.achievementProgress.toFixed(2) }}% 完成）
+                </template>
+              </span>
             </div>
           </div>
         </div>
@@ -240,6 +246,9 @@ const loadGames = async () => {
           platformName: platformName,
           playtimeMinutes: game.playtimeMinutes ?? game.PlaytimeMinutes ?? 0,
           lastPlayed: game.lastPlayed ?? game.LastPlayed,
+          // 成就相关：总数和已解锁数都保留，方便展示
+          achievementsUnlocked: unlocked,
+          achievementsTotal: total,
           achievementProgress: achievementProgress
         }
       })
@@ -310,7 +319,7 @@ const changePage = (page) => {
 }
 
 const viewGameDetails = (gameId) => {
-  router.push(`/games/${gameId}`)
+  router.push(`/app/game/${gameId}`)
 }
 
 // 监听筛选条件变化
@@ -520,7 +529,7 @@ onMounted(() => {
 
 .game-image {
   width: 100%;
-  height: 200px;
+  height: 160px;
   overflow: hidden;
   background: #1a1a1f;
   position: relative;

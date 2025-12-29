@@ -129,7 +129,8 @@ const changePage = (newPage) => {
 }
 
 const goToDetail = (id) => {
-  router.push(`/games/${id}`)
+  // 与应用内其它地方（例如我的游戏库）保持一致，使用 /app/game/:id 路由
+  router.push(`/app/game/${id}`)
 }
 
 onMounted(() => {

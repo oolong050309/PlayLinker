@@ -11,7 +11,7 @@ export default [
   {
     path: '/game/:id',
     name: 'GameDetail',
-    component: () => import('@/views/ComingSoon.vue'),
+    component: () => import('@/views/GameDetail/GameDetail.vue'),
     meta: {
       title: '游戏详情',
       requiresAuth: true

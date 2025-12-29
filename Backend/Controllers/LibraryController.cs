@@ -132,6 +132,7 @@ public class LibraryController : ControllerBase
     /// </summary>
     /// <param name="platform">平台筛选</param>
     /// <param name="sortBy">排序字段</param>
+    /// <param name="gameId">可选：指定游戏ID，仅返回该游戏</param>
     /// <param name="page">页码</param>
     /// <param name="pageSize">每页数量</param>
     [HttpGet("games")]
@@ -140,7 +141,8 @@ public class LibraryController : ControllerBase
         [FromQuery] string? platform = null,
         [FromQuery] string? sortBy = null,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        [FromQuery] long? gameId = null)
     {
         try
         {
@@ -218,6 +220,13 @@ public class LibraryController : ControllerBase
             {
                 userGames = userGames.Where(upl => upl.PlatformId == platformId).ToList();
                 _logger.LogInformation("平台筛选后剩余 {Count} 条记录", userGames.Count);
+            }
+
+            // 按游戏ID筛选（用于游戏详情页只取当前游戏）
+            if (gameId.HasValue)
+            {
+                userGames = userGames.Where(upl => upl.GameId == gameId.Value).ToList();
+                _logger.LogInformation("按 gameId={GameId} 筛选后剩余 {Count} 条记录", gameId.Value, userGames.Count);
             }
 
             // 去重（同一游戏可能在不同平台）- 在内存中处理

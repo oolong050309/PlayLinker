@@ -108,84 +108,10 @@ public class AchievementsController : ControllerBase
                 .Where(a => a.GameId == gameId)
                 .ToListAsync();
 
-            // 获取Steam全局成就解锁率
+            // 构建成就DTO列表（不再请求 Steam，全局解锁率统一为 0）
             var achievements = new List<AchievementDto>();
-            var steamBaseUrl = _configuration["SteamAPI:BaseUrl"] ?? "https://api.steampowered.com";
-            
-            // 尝试获取游戏的Steam AppID
-            int? appId = null;
-            try
-            {
-                // 从game_platform表查询Steam平台映射
-                var connection = _context.Database.GetDbConnection();
-                if (connection.State != System.Data.ConnectionState.Open)
-                {
-                    await connection.OpenAsync();
-                }
-                
-                using var command = connection.CreateCommand();
-                command.CommandText = "SELECT platform_game_id FROM game_platform WHERE game_id = @gameId AND platform_id = 1 LIMIT 1";
-                var param = command.CreateParameter();
-                param.ParameterName = "@gameId";
-                param.Value = gameId;
-                command.Parameters.Add(param);
-                
-                var platformGameIdResult = await command.ExecuteScalarAsync();
-                if (platformGameIdResult != null && int.TryParse(platformGameIdResult.ToString(), out int parsedAppId))
-                {
-                    appId = parsedAppId;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "获取Steam AppID失败");
-            }
-
-            // 获取全局成就解锁率（如果有AppID）
-            Dictionary<string, double> globalRates = new();
-            if (appId.HasValue)
-            {
-                try
-                {
-                    var url = $"{steamBaseUrl}/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid={appId.Value}";
-                    var response = await _httpClient.GetAsync(url);
-                    
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var content = await response.Content.ReadAsStringAsync();
-                        var jsonDoc = JsonDocument.Parse(content);
-                        
-                        if (jsonDoc.RootElement.TryGetProperty("achievementpercentages", out var percentages))
-                        {
-                            if (percentages.TryGetProperty("achievements", out var achievementsArray))
-                            {
-                                foreach (var ach in achievementsArray.EnumerateArray())
-                                {
-                                    if (ach.TryGetProperty("name", out var name) && 
-                                        ach.TryGetProperty("percent", out var percent))
-                                    {
-                                        var achName = name.GetString();
-                                        if (!string.IsNullOrEmpty(achName))
-                                        {
-                                            globalRates[achName] = percent.GetDouble() / 100.0;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "获取Steam全局成就解锁率失败");
-                }
-            }
-
-            // 构建成就DTO列表
             foreach (var achievement in achievementsList)
             {
-                var globalUnlockRate = globalRates.TryGetValue(achievement.AchievementName, out var rate) ? rate : 0.0;
-
                 achievements.Add(new AchievementDto
                 {
                     AchievementId = achievement.AchievementId,
@@ -195,7 +121,7 @@ public class AchievementsController : ControllerBase
                     Hidden = achievement.Hidden,
                     IconUnlocked = achievement.IconUnlocked,
                     IconLocked = achievement.IconLocked,
-                    GlobalUnlockRate = globalUnlockRate
+                    GlobalUnlockRate = 0.0
                 });
             }
 
@@ -287,8 +213,7 @@ public class AchievementsController : ControllerBase
                     string.IsNullOrEmpty(unlock.IconUnlocked) ? "空" : unlock.IconUnlocked.Substring(0, Math.Min(50, unlock.IconUnlocked.Length)));
             }
 
-            // 获取稀有成就（暂时返回所有已解锁的成就，因为数据库中没有GlobalUnlockRate字段）
-            // 未来可以从Steam API获取全局解锁率数据
+            // 获取稀有成就（暂时返回所有已解锁的成就，GlobalUnlockRate 固定为 0）
             _logger.LogInformation("查询所有已解锁的成就，userId={UserId}", userId);
             
             // 先查询数据，然后在内存中格式化日期
@@ -316,7 +241,7 @@ public class AchievementsController : ControllerBase
                 GameName = x.Game.Name ?? "",
                 AchievementName = x.Achievement.AchievementName,
                 DisplayName = x.Achievement.DisplayName ?? x.Achievement.AchievementName,
-                GlobalUnlockRate = 0.05, // 暂时使用默认值，未来可以从Steam API获取
+                GlobalUnlockRate = 0.0,
                 UnlockTime = x.UserAchievement.UnlockTime.HasValue
                     ? x.UserAchievement.UnlockTime.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")
                     : "",
@@ -408,6 +333,7 @@ public class AchievementsController : ControllerBase
 
     /// <summary>
     /// 获取用户游戏成就(需要认证)
+    /// 返回指定游戏的成就列表，包含当前用户是否已解锁、解锁时间等
     /// </summary>
     /// <param name="id">游戏ID</param>
     [HttpGet("library/games/{id}/achievements")]
@@ -426,22 +352,47 @@ public class AchievementsController : ControllerBase
                 return NotFound(ApiResponse<GameAchievementsDto>.ErrorResponse("ERR_GAME_NOT_FOUND", "游戏不存在"));
             }
 
-            var achievements = await _context.Achievements
+            // 先获取该游戏的所有成就
+            var achievementsList = await _context.Achievements
                 .Where(a => a.GameId == id)
-                .Select(a => new AchievementDto
-                {
-                    AchievementId = a.AchievementId,
-                    AchievementName = a.AchievementName,
-                    DisplayName = a.DisplayName,
-                    Description = a.Description,
-                    Hidden = a.Hidden,
-                    IconUnlocked = a.IconUnlocked,
-                    IconLocked = a.IconLocked,
-                    GlobalUnlockRate = 0.5,
-                    Unlocked = false, // 应该从user_achievements表查询
-                    UnlockTime = null
-                })
                 .ToListAsync();
+
+            // 获取当前用户在该游戏下已解锁的成就
+            var achievementIds = achievementsList.Select(a => a.AchievementId).ToList();
+            var userAchievements = await _context.UserAchievements
+                .Where(ua => ua.UserId == userId && achievementIds.Contains(ua.AchievementId))
+                .ToListAsync();
+
+            var userAchievementDict = userAchievements
+                .ToDictionary(ua => ua.AchievementId, ua => ua);
+
+            // 组装带有个人解锁状态的成就列表（不再请求 Steam，全局解锁率统一为 0）
+            var achievements = new List<AchievementDto>();
+
+            foreach (var achievement in achievementsList)
+            {
+                userAchievementDict.TryGetValue(achievement.AchievementId, out var ua);
+                var unlocked = ua?.Unlocked ?? false;
+                string? unlockTimeStr = null;
+                if (ua?.UnlockTime != null)
+                {
+                    unlockTimeStr = ua.UnlockTime.Value.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                }
+
+                achievements.Add(new AchievementDto
+                {
+                    AchievementId = achievement.AchievementId,
+                    AchievementName = achievement.AchievementName,
+                    DisplayName = achievement.DisplayName,
+                    Description = achievement.Description,
+                    Hidden = achievement.Hidden,
+                    IconUnlocked = achievement.IconUnlocked,
+                    IconLocked = achievement.IconLocked,
+                    GlobalUnlockRate = 0.0,
+                    Unlocked = unlocked,
+                    UnlockTime = unlockTimeStr
+                });
+            }
 
             var result = new GameAchievementsDto
             {
