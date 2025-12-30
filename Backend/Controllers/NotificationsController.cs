@@ -178,6 +178,17 @@ public class NotificationsController : ControllerBase
                 return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "通知不存在"));
             }
 
+            // 先删除相关的报警日志（避免外键约束错误）
+            var alertLogs = await _dbContext.ParentalAlertLogs
+                .Where(l => l.NotificationId == id)
+                .ToListAsync();
+
+            if (alertLogs.Any())
+            {
+                _dbContext.ParentalAlertLogs.RemoveRange(alertLogs);
+                _logger.LogInformation($"删除通知 {id} 相关的 {alertLogs.Count} 条报警日志");
+            }
+
             _dbContext.NotificationCenters.Remove(notification);
             await _dbContext.SaveChangesAsync();
 
