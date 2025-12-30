@@ -35,7 +35,7 @@ public class RegisterResponseDto
 public class LoginRequestDto
 {
     /// <summary>
-    /// 用户名或邮箱地址
+    /// 用户名或邮箱地址（系统会自动识别输入格式）
     /// </summary>
     [Required(ErrorMessage = "用户名或邮箱不能为空")]
     public string Username { get; set; } = string.Empty;

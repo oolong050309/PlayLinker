@@ -80,6 +80,9 @@ builder.Services.AddScoped<IAiService, AiService>();
 builder.Services.AddHttpClient<PriceMonitoringService>();
 builder.Services.AddHostedService<PriceMonitoringService>();
 
+// --- 家长监管监控后台服务 ---
+builder.Services.AddHostedService<ParentalMonitoringService>();
+
 // 4. 添加控制器
 builder.Services.AddControllers();
 
