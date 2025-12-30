@@ -866,6 +866,17 @@ public class ParentalController : ControllerBase
                 return Forbid();
             }
 
+             // 先删除相关的报警日志（避免外键约束错误）
+            var alertLogs = await _dbContext.ParentalAlertLogs
+                .Where(l => l.RuleId == ruleId)
+                .ToListAsync();
+
+            if (alertLogs.Any())
+            {
+                _dbContext.ParentalAlertLogs.RemoveRange(alertLogs);
+                _logger.LogInformation($"删除规则 {ruleId} 相关的 {alertLogs.Count} 条报警日志");
+            }
+            
             // 删除规则
             _dbContext.ParentalControlRules.Remove(rule);
             await _dbContext.SaveChangesAsync();
