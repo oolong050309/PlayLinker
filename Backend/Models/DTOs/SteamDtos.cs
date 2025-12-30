@@ -102,3 +102,38 @@ public class SteamRecommendationsDto
     public int Total { get; set; }
 }
 
+/// <summary>
+/// Steam热门游戏导入请求DTO
+/// </summary>
+public class SteamImportHotGamesRequestDto
+{
+    /// <summary>
+    /// 用户ID（可选，用于获取API Key）
+    /// </summary>
+    public long? UserId { get; set; }
+    
+    /// <summary>
+    /// 是否导入游戏详情
+    /// </summary>
+    public bool ImportGames { get; set; } = true;
+    
+    /// <summary>
+    /// 是否导入成就数据
+    /// </summary>
+    public bool ImportAchievements { get; set; } = true;
+}
+
+/// <summary>
+/// Steam热门游戏导入响应DTO
+/// </summary>
+public class SteamImportHotGamesResponseDto
+{
+    public string TaskId { get; set; } = string.Empty;
+    public string Status { get; set; } = "processing";
+    public int WishlistGamesCount { get; set; }
+    public int TopSellersGamesCount { get; set; }
+    public int TotalUniqueGames { get; set; }
+    public SteamImportItemsDto Items { get; set; } = new();
+    public List<string> Errors { get; set; } = new();
+}
+
