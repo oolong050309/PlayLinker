@@ -102,7 +102,8 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Gamepad2, Compass, List, Library, BarChart2, Newspaper,
-  ChevronLeft, ChevronRight, Settings, Bell, Link, LogOut, Shield, Heart
+  ChevronLeft, ChevronRight, Settings, Bell, Link, LogOut, Shield, Heart,
+  Package, PieChart
 } from 'lucide-vue-next'
 import { authApi } from '@/api/auth'
 import { usersApi } from '@/api/users'
@@ -217,7 +218,9 @@ const mainMenuItems = [
   { path: '/app/ranking', label: '排行榜', icon: BarChart2 },
   { path: '/app/library', label: '我的游戏库', icon: Library },
   { path: '/app/price-monitor', label: '愿望单', icon: Heart },
-  { path: '/app/news', label: '资讯', icon: Newspaper }
+  { path: '/app/news', label: '资讯', icon: Newspaper },
+  { path: '/app/analytics', label: '数据分析', icon: PieChart },
+  { path: '/app/mods', label: 'Mod与存档', icon: Package }
 ]
 
 const extraMenuItems = [

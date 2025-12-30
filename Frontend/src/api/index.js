@@ -201,6 +201,13 @@ export const newsApi = {
   // 获取游戏新闻
   getGameNews(gameId, params) {
     return api.get(`/games/${gameId}/news`, { params })
+  },
+  // 同步指定游戏的Steam新闻
+  syncSteamNews(gameId, count = 20) {
+    return api.post('/news/steam/sync', {
+      gameId: gameId,
+      count: count
+    })
   }
 }
 

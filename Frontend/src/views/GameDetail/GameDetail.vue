@@ -280,6 +280,64 @@
               </div>
             </div>
           </section>
+
+          <!-- 游戏新闻 -->
+          <section class="section-card">
+            <h2 class="section-title">新闻</h2>
+            <div v-if="newsLoading" class="loading-small">
+              <div class="loading-spinner-small"></div>
+              <span>加载新闻中...</span>
+            </div>
+            <div v-else-if="gameNews.length === 0" class="empty-state">
+              <p>暂无新闻</p>
+            </div>
+            <div v-else class="news-list">
+              <div 
+                v-for="news in gameNews" 
+                :key="news.newsId || news.NewsId"
+                class="news-item"
+              >
+                <div class="news-header">
+                  <h3 class="news-title">
+                    <a 
+                      href="javascript:void(0)"
+                      @click="openNewsModal(news)"
+                      class="news-link"
+                    >
+                      {{ news.title || news.Title }}
+                    </a>
+                  </h3>
+                  <div class="news-meta">
+                    <span v-if="news.author || news.Author" class="news-author">
+                      作者: {{ news.author || news.Author }}
+                    </span>
+                    <span v-if="news.date || news.Date" class="news-date">
+                      日期: {{ formatNewsDate(news.date || news.Date) }}
+                    </span>
+                  </div>
+                </div>
+                <div 
+                  v-if="news.contents || news.Contents" 
+                  class="news-content"
+                >
+                  {{ formatNewsContent(news.contents || news.Contents) }}
+                </div>
+                <div v-if="news.relatedGames && news.relatedGames.length > 0" class="related-games">
+                  <span>相关游戏: </span>
+                  <span v-for="game in news.relatedGames" :key="game.gameId || game.GameId" class="game-tag">
+                    {{ game.gameName || game.GameName }}
+                  </span>
+                </div>
+              </div>
+              <button 
+                v-if="hasMoreNews" 
+                @click="loadMoreNews"
+                class="show-more-news-btn"
+              >
+                显示更多
+              </button>
+            </div>
+          </section>
         </div>
 
         <!-- 右侧边栏 -->
@@ -498,13 +556,60 @@
         </div>
       </div>
     </div>
+
+    <!-- 新闻详情弹窗 -->
+    <div v-if="showNewsModal" class="news-modal-overlay" @click.self="closeNewsModal">
+      <div class="news-modal">
+        <div class="news-modal-header">
+          <h2 class="news-modal-title">{{ currentNews?.title || currentNews?.Title || '新闻详情' }}</h2>
+          <button @click="closeNewsModal" class="news-modal-close">
+            <X size="24" />
+          </button>
+        </div>
+        <div class="news-modal-content">
+          <div v-if="newsDetailLoading" class="loading-small">
+            <div class="loading-spinner-small"></div>
+            <span>加载中...</span>
+          </div>
+          <div v-else class="news-detail">
+            <div class="news-detail-meta">
+              <span v-if="currentNews?.author || currentNews?.Author" class="news-detail-author">
+                作者: {{ currentNews.author || currentNews.Author }}
+              </span>
+              <span v-if="currentNews?.date || currentNews?.Date" class="news-detail-date">
+                日期: {{ formatNewsDate(currentNews.date || currentNews.Date) }}
+              </span>
+            </div>
+            <div class="news-detail-body" v-html="newsDetailContent || (currentNews?.contents || currentNews?.Contents || '暂无内容')"></div>
+            <div v-if="currentNews?.relatedGames && currentNews.relatedGames.length > 0" class="news-detail-related">
+              <span>相关游戏: </span>
+              <span v-for="game in currentNews.relatedGames" :key="game.gameId || game.GameId" class="game-tag">
+                {{ game.gameName || game.GameName }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="news-modal-footer">
+          <button 
+            v-if="currentNews?.newsUrl || currentNews?.NewsUrl"
+            @click="openOriginalNews"
+            class="btn-primary"
+          >
+            显示原文
+          </button>
+          <button @click="closeNewsModal" class="btn-secondary">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { gameApi, achievementApi, libraryApi } from '@/api'
+import { gameApi, achievementApi, libraryApi, newsApi } from '@/api'
 import { priceApi } from '@/api/price'
 import { ArrowLeft, Clock, Trophy, Calendar, Play, Settings, Bell, Package, Lock, X } from 'lucide-vue-next'
 
@@ -540,6 +645,20 @@ const newlyRevealedAchievements = ref(new Set()) // 刚刚被点击显示的成�
 
 // 游戏介绍展开状态
 const showDetailedDescription = ref(false) // 是否显示详细描述
+
+// 新闻相关状态
+const gameNews = ref([]) // 游戏新闻列表
+const newsLoading = ref(false) // 新闻加载状态
+const newsPage = ref(1) // 当前新闻页码
+const newsPageSize = ref(5) // 每页新闻数量（初始显示5条）
+const newsTotal = ref(0) // 新闻总数
+const hasMoreNews = computed(() => gameNews.value.length < newsTotal.value) // 是否还有更多新闻
+
+// 新闻详情弹窗状态
+const showNewsModal = ref(false) // 是否显示新闻详情弹窗
+const currentNews = ref(null) // 当前查看的新闻
+const newsDetailLoading = ref(false) // 新闻详情加载状态
+const newsDetailContent = ref('') // 新闻详情内容
 
 // 价格提醒对话框
 const showAlertDialog = ref(false)
@@ -787,6 +906,175 @@ const formatGameGenres = (genres) => {
     if (typeof genre === 'string') return genre
     return genre.name ?? genre.Name ?? genre.description ?? genre.Description ?? genre.id ?? genre.Id ?? ''
   }).filter(Boolean).join('，')
+}
+
+// 加载游戏新闻
+const loadGameNews = async (reset = false) => {
+  // 尝试多种方式获取 gameId
+  const gameId = game.value?.gameId || game.value?.GameId || game.value?.id || route.params.id
+  
+  if (!gameId) {
+    console.warn('无法获取游戏ID，跳过加载新闻')
+    return
+  }
+  
+  console.log('加载游戏新闻，gameId:', gameId, 'game.value:', game.value)
+  newsLoading.value = true
+  
+  try {
+    if (reset) {
+      newsPage.value = 1
+      gameNews.value = []
+      
+      // 先尝试同步Steam新闻（静默失败，不影响后续获取）
+      try {
+        console.log('尝试同步游戏新闻:', gameId)
+        await newsApi.syncSteamNews(gameId, 20)
+        console.log('游戏新闻同步成功')
+      } catch (syncErr) {
+        console.warn('同步游戏新闻失败（继续尝试获取已有新闻）:', syncErr)
+        // 同步失败不影响后续获取，继续执行
+      }
+    }
+    
+    const params = {
+      page: newsPage.value,
+      pageSize: newsPageSize.value
+    }
+    
+    console.log('获取游戏新闻:', gameId, params)
+    const response = await newsApi.getGameNews(gameId, params)
+    console.log('游戏新闻响应:', response)
+    
+    if (response.success && response.data) {
+      const data = response.data
+      const newsItems = data.news || data.News || []
+      
+      console.log('获取到新闻数量:', newsItems.length)
+      
+      if (reset) {
+        gameNews.value = newsItems
+      } else {
+        gameNews.value.push(...newsItems)
+      }
+      
+      const meta = data.meta || data.Meta
+      if (meta) {
+        newsTotal.value = meta.total || meta.Total || 0
+        console.log('新闻总数:', newsTotal.value)
+      }
+    } else {
+      console.warn('获取游戏新闻失败，响应:', response)
+      if (reset) {
+        gameNews.value = []
+      }
+    }
+  } catch (err) {
+    console.error('加载游戏新闻失败，错误详情:', err)
+    console.error('错误响应:', err.response)
+    console.error('错误消息:', err.message)
+    // 不显示错误，只是没有新闻数据
+    if (reset) {
+      gameNews.value = []
+    }
+  } finally {
+    newsLoading.value = false
+  }
+}
+
+// 加载更多新闻
+const loadMoreNews = () => {
+  newsPage.value++
+  loadGameNews(false)
+}
+
+// 格式化新闻日期
+const formatNewsDate = (timestamp) => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp * 1000) // Steam 日期是 Unix 时间戳（秒）
+  const now = new Date()
+  const diff = now - date
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  
+  if (days === 0) {
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    if (hours === 0) {
+      const minutes = Math.floor(diff / (1000 * 60))
+      return minutes <= 0 ? '刚刚' : `${minutes} 分钟前`
+    }
+    return `${hours} 小时前`
+  } else if (days < 7) {
+    return `${days} 天前`
+  } else {
+    return date.toLocaleDateString('zh-CN', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    })
+  }
+}
+
+// 格式化新闻内容（截取前200字符，保留 HTML 格式）
+const formatNewsContent = (content) => {
+  if (!content) return ''
+  // 移除 HTML 标签，只保留文本用于预览
+  const text = content.replace(/<[^>]*>/g, '')
+  // 截取前200字符
+  if (text.length > 200) {
+    return text.substring(0, 200) + '...'
+  }
+  return text
+}
+
+// 打开新闻详情弹窗
+const openNewsModal = async (news) => {
+  currentNews.value = news
+  showNewsModal.value = true
+  newsDetailLoading.value = true
+  newsDetailContent.value = ''
+  
+  try {
+    // 尝试获取新闻详情（如果有 newsId）
+    const newsId = news.newsId || news.NewsId
+    if (newsId) {
+      const response = await newsApi.getNewsDetail(newsId)
+      if (response.success && response.data) {
+        const data = response.data
+        newsDetailContent.value = data.contents || data.Contents || news.contents || news.Contents || ''
+        // 更新当前新闻数据（包含相关游戏等信息）
+        if (data.relatedGames) {
+          currentNews.value = { ...currentNews.value, relatedGames: data.relatedGames }
+        }
+      } else {
+        // 如果获取详情失败，使用列表中的内容
+        newsDetailContent.value = news.contents || news.Contents || ''
+      }
+    } else {
+      // 没有 newsId，直接使用列表中的内容
+      newsDetailContent.value = news.contents || news.Contents || ''
+    }
+  } catch (err) {
+    console.error('加载新闻详情失败:', err)
+    // 失败时使用列表中的内容
+    newsDetailContent.value = news.contents || news.Contents || ''
+  } finally {
+    newsDetailLoading.value = false
+  }
+}
+
+// 关闭新闻详情弹窗
+const closeNewsModal = () => {
+  showNewsModal.value = false
+  currentNews.value = null
+  newsDetailContent.value = ''
+}
+
+// 打开原文链接
+const openOriginalNews = () => {
+  const url = currentNews.value?.newsUrl || currentNews.value?.NewsUrl
+  if (url) {
+    window.open(url, '_blank')
+  }
 }
 
 // 格式化游戏语言
@@ -1065,15 +1353,31 @@ const handleToggleMod = (mod) => {
   // TODO: 实现 Mod 启用/禁用功能
 }
 
-// 监听游戏ID变化，重新加载价格数据
+// 监听游戏ID变化，重新加载价格数据和新闻
 watch(() => route.params.id, () => {
   if (route.params.id) {
     loadPriceData()
+    loadGameNews(true)
+  }
+})
+
+// 监听游戏数据加载完成，然后加载新闻
+watch(() => game.value?.id || game.value?.gameId || game.value?.GameId, (newId) => {
+  if (newId && !newsLoading.value && gameNews.value.length === 0) {
+    console.log('游戏数据已加载，开始加载新闻，gameId:', newId)
+    loadGameNews(true)
   }
 })
 
 onMounted(() => {
   loadGameDetail()
+  // 延迟加载游戏新闻，确保游戏数据先加载完成
+  setTimeout(() => {
+    const gameId = game.value?.gameId || game.value?.GameId || game.value?.id || route.params.id
+    if (gameId) {
+      loadGameNews(true)
+    }
+  }, 1000)
 })
 </script>
 
@@ -1499,6 +1803,108 @@ onMounted(() => {
 
 .show-details-btn:hover {
   color: #8b5cf6;
+}
+
+/* 游戏新闻 */
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.news-item {
+  padding: 16px;
+  background: rgba(20, 20, 23, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.news-item:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+  background: rgba(20, 20, 23, 0.7);
+}
+
+.news-header {
+  margin-bottom: 12px;
+}
+
+.news-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.news-link {
+  color: #f8fafc;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.news-link:hover {
+  color: #8b5cf6;
+}
+
+.news-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.news-author {
+  color: #94a3b8;
+}
+
+.news-date {
+  color: #64748b;
+}
+
+.news-content {
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.show-more-news-btn {
+  margin-top: 8px;
+  padding: 12px 24px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.show-more-news-btn:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #8b5cf6;
+}
+
+.related-games {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.game-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 4px;
+  margin-left: 8px;
+  color: #c4b5fd;
+  font-size: 12px;
 }
 
 /* 基本信息 */
@@ -2245,6 +2651,278 @@ onMounted(() => {
   .game-stats {
     flex-direction: column;
     gap: 12px;
+  }
+}
+
+/* 新闻详情弹窗 */
+.news-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.news-modal {
+  background: #1a1a1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease-out;
+}
+
+.news-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.news-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin: 0;
+  flex: 1;
+  padding-right: 16px;
+}
+
+.news-modal-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.news-modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.news-modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.news-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.news-detail-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 14px;
+  color: #94a3b8;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.news-detail-author,
+.news-detail-date {
+  color: #94a3b8;
+}
+
+.news-detail-body {
+  color: #cbd5e1;
+  font-size: 15px;
+  line-height: 1.8;
+  word-wrap: break-word;
+}
+
+.news-detail-body :deep(p) {
+  margin-bottom: 12px;
+  color: #cbd5e1;
+}
+
+.news-detail-body :deep(h1),
+.news-detail-body :deep(h2),
+.news-detail-body :deep(h3),
+.news-detail-body :deep(h4),
+.news-detail-body :deep(h5),
+.news-detail-body :deep(h6) {
+  color: #f8fafc;
+  font-weight: 600;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.news-detail-body :deep(h1) {
+  font-size: 24px;
+}
+
+.news-detail-body :deep(h2) {
+  font-size: 20px;
+}
+
+.news-detail-body :deep(h3) {
+  font-size: 18px;
+}
+
+.news-detail-body :deep(strong),
+.news-detail-body :deep(b) {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.news-detail-body :deep(em),
+.news-detail-body :deep(i) {
+  font-style: italic;
+}
+
+.news-detail-body :deep(ul),
+.news-detail-body :deep(ol) {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.news-detail-body :deep(li) {
+  margin-bottom: 6px;
+  color: #cbd5e1;
+}
+
+.news-detail-body :deep(a) {
+  color: #8b5cf6;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.news-detail-body :deep(a:hover) {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+.news-detail-body :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 12px 0;
+  display: block;
+}
+
+.news-detail-body :deep(blockquote) {
+  border-left: 3px solid rgba(139, 92, 246, 0.5);
+  padding-left: 16px;
+  margin: 12px 0;
+  color: #94a3b8;
+  font-style: italic;
+  background: rgba(20, 20, 23, 0.5);
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+
+.news-detail-body :deep(code) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #c4b5fd;
+}
+
+.news-detail-body :deep(pre) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.news-detail-body :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #cbd5e1;
+}
+
+.news-detail-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.news-detail-body :deep(table th),
+.news-detail-body :deep(table td) {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+}
+
+.news-detail-body :deep(table th) {
+  background: rgba(139, 92, 246, 0.1);
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.news-detail-body :deep(table tr:nth-child(even)) {
+  background: rgba(20, 20, 23, 0.3);
+}
+
+.news-detail-body :deep(hr) {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 16px 0;
+}
+
+.news-detail-body :deep(br) {
+  line-height: 1.8;
+}
+
+.news-detail-related {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.news-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  justify-content: flex-end;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 </style>
