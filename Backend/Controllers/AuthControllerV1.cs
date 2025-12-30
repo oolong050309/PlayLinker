@@ -106,9 +106,9 @@ public class AuthControllerV1 : ControllerBase
     /// 用户登录
     /// </summary>
     /// <remarks>
-    /// 使用用户名或邮箱和密码登录，成功后返回用户信息与JWT Token。
+    /// 使用用户名或邮箱和密码登录，系统会自动识别输入格式。成功后返回用户信息与JWT Token。
     /// 
-    /// 示例请求（使用用户名）:
+    /// 示例请求（用户名登录）:
     /// ```
     /// POST /api/v1/auth/login
     /// {
@@ -117,7 +117,7 @@ public class AuthControllerV1 : ControllerBase
     /// }
     /// ```
     /// 
-    /// 示例请求（使用邮箱）:
+    /// 示例请求（邮箱登录）:
     /// ```
     /// POST /api/v1/auth/login
     /// {
@@ -127,11 +127,11 @@ public class AuthControllerV1 : ControllerBase
     /// ```
     /// 
     /// 可能的错误码：
-    /// - ERR_INVALID_CREDENTIALS 用户名/邮箱或密码错误
+    /// - ERR_INVALID_CREDENTIALS 用户名或邮箱错误，或密码错误
     /// - ERR_ACCOUNT_DISABLED 账户已被禁用
     /// </remarks>
-    /// <param name="request">登录请求</param>
-    [SwaggerOperation(Summary = "用户登录", Description = "使用用户名或邮箱和密码登录，成功后返回用户信息与JWT Token。可能错误码：ERR_INVALID_CREDENTIALS, ERR_ACCOUNT_DISABLED。")]
+    /// <param name="request">登录请求（username字段支持用户名或邮箱）</param>
+    [SwaggerOperation(Summary = "用户登录", Description = "使用用户名或邮箱和密码登录，系统会自动识别输入格式。成功后返回用户信息与JWT Token。可能错误码：ERR_INVALID_CREDENTIALS, ERR_ACCOUNT_DISABLED。")]
     [HttpPost("login")]
     [ProducesResponseType(typeof(ApiResponse<LoginResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
