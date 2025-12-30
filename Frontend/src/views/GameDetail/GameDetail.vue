@@ -85,10 +85,38 @@
           <!-- 游戏介绍 -->
           <section class="section-card">
             <h2 class="section-title">游戏介绍</h2>
-            <div class="game-description">
-              <p v-if="game.description" class="description-text">{{ game.description }}</p>
-              <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
-              <p v-else class="description-text text-muted">暂无游戏介绍</p>
+            <div class="game-description" :class="{ expanded: showDetailedDescription }">
+              <div class="description-content">
+                <!-- 展开状态：优先显示详细描述（HTML格式） -->
+                <template v-if="showDetailedDescription">
+                  <div v-if="game.detailedDescription" class="description-text description-html" v-html="game.detailedDescription"></div>
+                  <p v-else-if="game.description" class="description-text">{{ game.description }}</p>
+                  <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
+                  <p v-else class="description-text text-muted">暂无游戏介绍</p>
+                </template>
+                <!-- 收起状态：显示简短描述 -->
+                <template v-else>
+                  <p v-if="game.description" class="description-text">{{ game.description }}</p>
+                  <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
+                  <p v-else class="description-text text-muted">暂无游戏介绍</p>
+                </template>
+              </div>
+              <!-- 显示详情按钮（仅在未展开且有详细描述时显示） -->
+              <button 
+                v-if="game.detailedDescription && !showDetailedDescription" 
+                @click="showDetailedDescription = true"
+                class="show-details-btn"
+              >
+                显示详情
+              </button>
+              <!-- 收起详情按钮（仅在展开时显示） -->
+              <button 
+                v-if="showDetailedDescription" 
+                @click="showDetailedDescription = false"
+                class="show-details-btn"
+              >
+                收起详情
+              </button>
             </div>
           </section>
 
@@ -161,34 +189,88 @@
 
             <div v-else class="achievements-grid">
               <div 
-                v-for="achievement in achievements" 
+                v-for="(achievement, index) in achievements" 
                 :key="achievement.id || achievement.achievementId"
                 class="achievement-card"
-                :class="{ unlocked: achievement.isUnlocked }"
+                :class="{ 
+                  unlocked: achievement.isUnlocked,
+                  hidden: achievement.hidden && !achievement.isUnlocked,
+                  revealed: achievement.hidden && !achievement.isUnlocked && revealedHiddenAchievements.has(achievement.id),
+                  hovered: hoveredAchievementId === achievement.id
+                }"
+                :style="{ animationDelay: `${index * 0.05}s` }"
+                @mouseenter="hoveredAchievementId = achievement.id"
+                @mouseleave="hoveredAchievementId = null"
+                @click="handleHiddenAchievementClick(achievement)"
               >
                 <div class="achievement-icon-wrapper">
+                  <!-- 隐藏且未解锁且未点击：显示问号 -->
+                  <div 
+                    v-if="achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.has(achievement.id)"
+                    class="achievement-icon-placeholder hidden-icon"
+                  >
+                    <span class="question-mark">?</span>
+                  </div>
+                  <!-- 已解锁：显示解锁图标 -->
                   <img 
-                    v-if="achievement.iconUnlocked && achievement.isUnlocked" 
+                    v-else-if="achievement.iconUnlocked && achievement.isUnlocked" 
                     :src="achievement.iconUnlocked" 
                     :alt="achievement.name"
                     class="achievement-icon"
                     @error="handleImageError"
                   />
+                  <!-- 未解锁（包括已显示剧透的隐藏成就）：显示锁定图标 -->
                   <img 
-                    v-else-if="achievement.iconLocked && !achievement.isUnlocked" 
+                    v-else-if="achievement.iconLocked" 
                     :src="achievement.iconLocked" 
                     :alt="achievement.name"
                     class="achievement-icon locked"
+                    :class="{ 'reveal-fade-in': newlyRevealedAchievements.has(achievement.id) }"
                     @error="handleImageError"
                   />
+                  <!-- 没有图标时的占位符 -->
                   <div v-else class="achievement-icon-placeholder">
                     <Trophy v-if="achievement.isUnlocked" class="placeholder-icon" size="24" />
                     <Lock v-else class="placeholder-icon" size="24" />
                   </div>
                 </div>
                 <div class="achievement-info">
-                  <h3 class="achievement-name">{{ achievement.name || achievement.achievementName }}</h3>
-                  <p class="achievement-desc">{{ achievement.description || achievement.achievementDescription || '暂无描述' }}</p>
+                  <!-- 隐藏且未解锁且未点击：显示占位文本 -->
+                  <template v-if="achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.has(achievement.id)">
+                    <h3 
+                      class="achievement-name"
+                      :class="{ 'fade-out': hoveredAchievementId === achievement.id }"
+                    >
+                      隐藏的成就
+                    </h3>
+                    <p 
+                      class="achievement-desc"
+                      :class="{ 'fade-out': hoveredAchievementId === achievement.id }"
+                    >
+                      此成就的详情将在解锁后显示
+                    </p>
+                    <div 
+                      class="achievement-spoiler-hint"
+                      :class="{ 'fade-in': hoveredAchievementId === achievement.id }"
+                    >
+                      点击以显示剧透
+                    </div>
+                  </template>
+                  <!-- 已解锁或已显示剧透：显示正常内容 -->
+                  <template v-else>
+                    <h3 
+                      class="achievement-name"
+                      :class="{ 'reveal-fade-in': newlyRevealedAchievements.has(achievement.id) }"
+                    >
+                      {{ achievement.name || achievement.displayName || achievement.achievementName }}
+                    </h3>
+                    <p 
+                      class="achievement-desc"
+                      :class="{ 'reveal-fade-in': newlyRevealedAchievements.has(achievement.id) }"
+                    >
+                      {{ achievement.description || achievement.achievementDescription || '暂无描述' }}
+                    </p>
+                  </template>
                   <div class="achievement-meta">
                     <span v-if="achievement.unlockTime" class="unlock-time">
                       {{ formatDate(achievement.unlockTime) }}
@@ -451,6 +533,14 @@ const hasPriceAlert = ref(false)
 const currentSubscription = ref(null) // 当前游戏的订阅信息
 const mods = ref([]) // 预留的 Mod 列表
 
+// 隐藏成就相关状态
+const revealedHiddenAchievements = ref(new Set()) // 已点击显示剧透的隐藏成就ID集合
+const hoveredAchievementId = ref(null) // 当前鼠标悬停的成就ID
+const newlyRevealedAchievements = ref(new Set()) // 刚刚被点击显示的成就ID集合（用于触发动画）
+
+// 游戏介绍展开状态
+const showDetailedDescription = ref(false) // 是否显示详细描述
+
 // 价格提醒对话框
 const showAlertDialog = ref(false)
 const alertType = ref('price')
@@ -641,15 +731,17 @@ const loadAchievements = async () => {
       achievements.value = list.map(a => {
         const unlocked = a.unlocked ?? a.Unlocked
         const unlockTime = a.unlockTime ?? a.UnlockTime
+        const hidden = a.hidden ?? a.Hidden ?? false
 
         return {
           id: a.id || a.achievementId || a.AchievementId,
-          name: a.name || a.achievementName || a.AchievementName,
+          name: a.displayName || a.DisplayName || a.name || a.achievementName || a.AchievementName,
           description: a.description || a.achievementDescription || a.Description,
           iconUnlocked: a.iconUnlocked || a.IconUnlocked || a.icon,
           iconLocked: a.iconLocked || a.IconLocked,
           isUnlocked: unlocked !== undefined ? unlocked : (unlockTime != null),
-          unlockTime
+          unlockTime,
+          hidden
         }
       })
       console.log('处理后的成就数据:', achievements.value.length, achievements.value)
@@ -721,6 +813,20 @@ const formatDate = (date) => {
 // 图片加载错误处理
 const handleImageError = (event) => {
   event.target.style.display = 'none'
+}
+
+// 处理隐藏成就点击
+const handleHiddenAchievementClick = (achievement) => {
+  if (achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.value.has(achievement.id)) {
+    // 只允许显示一次，不允许再次隐藏
+    revealedHiddenAchievements.value.add(achievement.id)
+    // 标记为刚刚显示，用于触发动画
+    newlyRevealedAchievements.value.add(achievement.id)
+    // 动画结束后移除标记（动画持续0.5秒）
+    setTimeout(() => {
+      newlyRevealedAchievements.value.delete(achievement.id)
+    }, 500)
+  }
 }
 
 // 加载价格数据
@@ -1255,16 +1361,134 @@ onMounted(() => {
 /* 游戏介绍 */
 .game-description {
   line-height: 1.6;
+  transition: all 0.3s ease;
+}
+
+.description-content {
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
 }
 
 .description-text {
   color: #cbd5e1;
   font-size: 15px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .description-text.text-muted {
   color: #64748b;
   font-style: italic;
+}
+
+/* HTML 格式的描述内容样式 */
+.description-html {
+  color: #cbd5e1;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.description-html :deep(p) {
+  margin-bottom: 12px;
+  color: #cbd5e1;
+}
+
+.description-html :deep(h1),
+.description-html :deep(h2),
+.description-html :deep(h3),
+.description-html :deep(h4),
+.description-html :deep(h5),
+.description-html :deep(h6) {
+  color: #f8fafc;
+  font-weight: 600;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.description-html :deep(strong),
+.description-html :deep(b) {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.description-html :deep(em),
+.description-html :deep(i) {
+  font-style: italic;
+}
+
+.description-html :deep(ul),
+.description-html :deep(ol) {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.description-html :deep(li) {
+  margin-bottom: 6px;
+}
+
+.description-html :deep(a) {
+  color: #8b5cf6;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.description-html :deep(a:hover) {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+.description-html :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.description-html :deep(blockquote) {
+  border-left: 3px solid rgba(139, 92, 246, 0.5);
+  padding-left: 16px;
+  margin: 12px 0;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.description-html :deep(code) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #c4b5fd;
+}
+
+.description-html :deep(pre) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.description-html :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #cbd5e1;
+}
+
+.show-details-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: all 0.2s;
+  text-align: left;
+  font-weight: 500;
+}
+
+.show-details-btn:hover {
+  color: #8b5cf6;
 }
 
 /* 基本信息 */
@@ -1305,6 +1529,9 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   transition: all 0.2s;
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeInUp 0.6s ease-out forwards;
 }
 
 .achievement-card:hover {
@@ -1315,6 +1542,26 @@ onMounted(() => {
 
 .achievement-card.unlocked {
   border-color: rgba(234, 179, 8, 0.3);
+}
+
+.achievement-card.hidden {
+  cursor: pointer;
+}
+
+.achievement-card.hidden:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+/* 成就卡片出场动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .achievement-icon-wrapper {
@@ -1346,6 +1593,18 @@ onMounted(() => {
   justify-content: center;
 }
 
+.achievement-icon-placeholder.hidden-icon {
+  background: rgba(30, 30, 35, 0.9);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.question-mark {
+  font-size: 32px;
+  font-weight: bold;
+  color: #64748b;
+  user-select: none;
+}
+
 .placeholder-icon {
   color: #64748b;
 }
@@ -1357,6 +1616,7 @@ onMounted(() => {
 .achievement-info {
   flex: 1;
   min-width: 0;
+  position: relative;
 }
 
 .achievement-name {
@@ -1364,6 +1624,7 @@ onMounted(() => {
   font-weight: 600;
   margin-bottom: 4px;
   color: #f8fafc;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .achievement-card:not(.unlocked) .achievement-name {
@@ -1375,6 +1636,56 @@ onMounted(() => {
   color: #94a3b8;
   margin-bottom: 8px;
   line-height: 1.4;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* 渐变消失效果 */
+.fade-out {
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+}
+
+/* 渐变出现效果 */
+.fade-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 隐藏成就显示原内容的渐变动画 */
+.reveal-fade-in {
+  animation: revealFadeIn 0.5s ease-out forwards;
+}
+
+@keyframes revealFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 隐藏成就的剧透提示 */
+.achievement-spoiler-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  color: #94a3b8;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.achievement-spoiler-hint.fade-in {
+  opacity: 1;
+  transform: translate(-50%, -50%);
 }
 
 .achievement-meta {

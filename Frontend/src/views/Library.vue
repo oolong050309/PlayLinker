@@ -151,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { libraryApi, achievementApi } from '../api'
 import { Gamepad2, Play, Clock, Trophy, Search } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
@@ -185,6 +185,9 @@ const platforms = ref([
   { id: 6, name: 'PSN' },
   { id: 7, name: 'Xbox' }
 ])
+
+// 搜索防抖定时器
+let searchTimeout = null
 
 const loadOverview = async () => {
   try {
@@ -220,6 +223,10 @@ const loadGames = async () => {
     }
     if (sortBy.value) {
       params.sortBy = sortBy.value
+    }
+    // 添加搜索参数
+    if (searchQuery.value && searchQuery.value.trim()) {
+      params.search = searchQuery.value.trim()
     }
 
     console.log('请求游戏列表，参数:', params)
@@ -270,32 +277,10 @@ const loadGames = async () => {
   }
 }
 
+// 直接使用后端返回的游戏列表，不再进行前端过滤
+// 排序和搜索都在后端完成
 const filteredGames = computed(() => {
-  let result = games.value
-
-  // 搜索过滤
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    result = result.filter(game => 
-      game.name.toLowerCase().includes(query)
-    )
-  }
-
-  // 排序
-  if (sortBy.value === 'name') {
-    result = [...result].sort((a, b) => a.name.localeCompare(b.name))
-  } else if (sortBy.value === 'playtime') {
-    result = [...result].sort((a, b) => b.playtimeMinutes - a.playtimeMinutes)
-  } else if (sortBy.value === 'lastPlayed') {
-    result = [...result].sort((a, b) => {
-      if (!a.lastPlayed && !b.lastPlayed) return 0
-      if (!a.lastPlayed) return 1
-      if (!b.lastPlayed) return -1
-      return new Date(b.lastPlayed) - new Date(a.lastPlayed)
-    })
-  }
-
-  return result
+  return games.value
 })
 
 const formatPlaytime = (minutes) => {
@@ -323,10 +308,26 @@ const viewGameDetails = (gameId) => {
 }
 
 // 监听筛选条件变化
-const watchFilters = () => {
+watch([selectedPlatform, sortBy], () => {
   currentPage.value = 1
   loadGames()
-}
+})
+
+// 监听搜索关键词变化，使用防抖
+watch(searchQuery, () => {
+  // 清除之前的定时器
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
+  
+  // 重置到第一页
+  currentPage.value = 1
+  
+  // 防抖：500ms 后执行搜索
+  searchTimeout = setTimeout(() => {
+    loadGames()
+  }, 500)
+})
 
 onMounted(() => {
   loadOverview()

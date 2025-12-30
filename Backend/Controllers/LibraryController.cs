@@ -133,6 +133,7 @@ public class LibraryController : ControllerBase
     /// <param name="platform">平台筛选</param>
     /// <param name="sortBy">排序字段</param>
     /// <param name="gameId">可选：指定游戏ID，仅返回该游戏</param>
+    /// <param name="search">搜索关键词（游戏名称）</param>
     /// <param name="page">页码</param>
     /// <param name="pageSize">每页数量</param>
     [HttpGet("games")]
@@ -142,7 +143,8 @@ public class LibraryController : ControllerBase
         [FromQuery] string? sortBy = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
-        [FromQuery] long? gameId = null)
+        [FromQuery] long? gameId = null,
+        [FromQuery] string? search = null)
     {
         try
         {
@@ -242,6 +244,17 @@ public class LibraryController : ControllerBase
                     PlatformLibraries = g.ToList()
                 })
                 .ToList();
+
+            // 搜索筛选（按游戏名称）
+            if (!string.IsNullOrEmpty(search))
+            {
+                var searchLower = search.ToLower();
+                distinctGamesList = distinctGamesList
+                    .Where(g => g.Game != null && !string.IsNullOrEmpty(g.Game.Name) && 
+                           g.Game.Name.ToLower().Contains(searchLower))
+                    .ToList();
+                _logger.LogInformation("搜索关键词 '{Search}' 筛选后剩余 {Count} 条记录", search, distinctGamesList.Count);
+            }
 
             // 排序（在内存中）
             switch (sortBy?.ToLower())
