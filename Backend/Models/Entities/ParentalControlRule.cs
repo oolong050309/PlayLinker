@@ -20,7 +20,7 @@ public partial class ParentalControlRule
     [Column("child_user_id")]
     public int ChildUserId { get; set; }
 
-    [Column("rule_type", TypeName = "enum('playtime_daily_limit','playtime_curfew','spending_limit','game_restriction','age_restriction')")]
+    [Column("rule_type", TypeName = "enum('playtime_daily_limit','playtime_curfew','game_restriction','age_restriction')")]
     public string RuleType { get; set; } = null!;
 
     [Column("rule_value", TypeName = "json")]

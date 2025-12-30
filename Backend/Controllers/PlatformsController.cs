@@ -7,6 +7,7 @@ using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
 using PlayLinker.Services;
 using Swashbuckle.AspNetCore.Annotations;
+using System.Linq;
 
 namespace PlayLinker.Controllers;
 
@@ -661,7 +662,7 @@ public class PlatformsController : ControllerBase
     /// 解绑平台
     /// </summary>
     /// <param name="id">绑定ID</param>
-    [SwaggerOperation(Summary = "解绑平台", Description = "解绑指定平台的绑定记录。路径参数：id=绑定ID。需要JWT认证。")]
+    [SwaggerOperation(Summary = "解绑平台", Description = "解绑指定平台的绑定记录，同时删除相关的游戏库和成就数据，并重新计算统计数据。路径参数：id=绑定ID。需要JWT认证。")]
     [HttpDelete("bindings/{id}")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
@@ -685,17 +686,133 @@ public class PlatformsController : ControllerBase
                 return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "绑定记录不存在"));
             }
 
+            var platformUserId = binding.PlatformUserId;
+            var platformId = binding.PlatformId;
+
+            // 1. 删除该平台账号相关的游戏库记录
+            var platformLibraryRecords = _dbContext.UserPlatformLibraries
+                .Where(upl => upl.PlatformUserId == platformUserId && upl.PlatformId == platformId)
+                .ToList();
+
+            if (platformLibraryRecords.Any())
+            {
+                _dbContext.UserPlatformLibraries.RemoveRange(platformLibraryRecords);
+                _logger.LogInformation($"删除 {platformLibraryRecords.Count} 条游戏库记录: user {userId}, platform {platformId}, platformUserId {platformUserId}");
+            }
+
+            // 2. 删除该平台账号相关的成就记录（通过 PlatformId 和 UserId）
+            var achievementsToDelete = _dbContext.UserAchievements
+                .Where(ua => ua.UserId == userId && ua.PlatformId == platformId)
+                .ToList();
+
+            if (achievementsToDelete.Any())
+            {
+                _dbContext.UserAchievements.RemoveRange(achievementsToDelete);
+                _logger.LogInformation($"删除 {achievementsToDelete.Count} 条成就记录: user {userId}, platform {platformId}");
+            }
+
+            // 3. 更新绑定状态
             binding.BindingStatus = false;
             _dbContext.UserPlatformBindings.Update(binding);
+
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation($"Platform unbound: user {userId}, binding {id}");
-            return Ok(ApiResponse<object>.SuccessResponse(new { }, $"{binding.Platform?.PlatformName}平台解绑成功"));
+            // 4. 重新计算用户统计数据
+            await RecalculateUserLibraryStats(userId);
+
+            _logger.LogInformation($"Platform unbound: user {userId}, binding {id}, platform {platformId}");
+            return Ok(ApiResponse<object>.SuccessResponse(new { }, $"{binding.Platform?.PlatformName}平台解绑成功，相关数据已清理"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error unbinding platform");
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
+    /// 重新计算用户游戏库统计数据
+    /// </summary>
+    private async Task RecalculateUserLibraryStats(int userId)
+    {
+        try
+        {
+            // 获取用户所有活跃绑定的平台账号
+            var activeBindings = await _dbContext.UserPlatformBindings
+                .Where(upb => upb.UserId == userId && upb.BindingStatus == true)
+                .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
+                .ToListAsync();
+
+            // 获取这些平台账号的所有游戏库记录
+            var allLibraryRecords = new List<UserPlatformLibrary>();
+            foreach (var binding in activeBindings)
+            {
+                var records = await _dbContext.UserPlatformLibraries
+                    .Where(upl => upl.PlatformUserId == binding.PlatformUserId && upl.PlatformId == binding.PlatformId)
+                    .ToListAsync();
+                allLibraryRecords.AddRange(records);
+            }
+
+            // 计算统计数据
+            var totalGamesOwned = allLibraryRecords.Select(upl => upl.GameId).Distinct().Count();
+            var gamesPlayed = allLibraryRecords.Count(upl => upl.PlaytimeMinutes > 0);
+            var totalPlaytimeMinutes = allLibraryRecords.Sum(upl => upl.PlaytimeMinutes);
+            
+            // 计算最近30天内的游戏数和游戏时长
+            var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+            var recentGames = allLibraryRecords
+                .Where(upl => upl.LastPlayed.HasValue && upl.LastPlayed.Value >= thirtyDaysAgo)
+                .ToList();
+            var recentlyPlayedCount = recentGames.Select(upl => upl.GameId).Distinct().Count();
+            var recentPlaytimeMinutes = recentGames.Sum(upl => upl.PlaytimeMinutes);
+
+            // 计算成就统计（统计所有活跃绑定平台的成就）
+            var activePlatformIds = activeBindings.Select(b => b.PlatformId).Distinct().ToList();
+            var totalAchievements = await _dbContext.UserAchievements
+                .Where(ua => ua.UserId == userId && activePlatformIds.Contains(ua.PlatformId))
+                .CountAsync();
+            var unlockedAchievements = await _dbContext.UserAchievements
+                .Where(ua => ua.UserId == userId && activePlatformIds.Contains(ua.PlatformId) && ua.UnlockTime != null)
+                .CountAsync();
+
+            // 更新或创建 UserGameLibrary 记录
+            var library = await _dbContext.UserGameLibraries
+                .FirstOrDefaultAsync(ugl => ugl.UserId == userId);
+
+            if (library == null)
+            {
+                library = new UserGameLibrary
+                {
+                    UserId = userId,
+                    TotalGamesOwned = totalGamesOwned,
+                    GamesPlayed = gamesPlayed,
+                    TotalPlaytimeMinutes = totalPlaytimeMinutes,
+                    TotalAchievements = totalAchievements,
+                    UnlockedAchievements = unlockedAchievements,
+                    RecentlyPlayedCount = recentlyPlayedCount,
+                    RecentPlaytimeMinutes = recentPlaytimeMinutes
+                };
+                _dbContext.UserGameLibraries.Add(library);
+            }
+            else
+            {
+                library.TotalGamesOwned = totalGamesOwned;
+                library.GamesPlayed = gamesPlayed;
+                library.TotalPlaytimeMinutes = totalPlaytimeMinutes;
+                library.TotalAchievements = totalAchievements;
+                library.UnlockedAchievements = unlockedAchievements;
+                library.RecentlyPlayedCount = recentlyPlayedCount;
+                library.RecentPlaytimeMinutes = recentPlaytimeMinutes;
+                _dbContext.UserGameLibraries.Update(library);
+            }
+
+            await _dbContext.SaveChangesAsync();
+            _logger.LogInformation($"重新计算用户统计数据: user {userId}, games={totalGamesOwned}, playtime={totalPlaytimeMinutes}, achievements={totalAchievements}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"重新计算用户统计数据失败: user {userId}");
+            throw;
         }
     }
 }

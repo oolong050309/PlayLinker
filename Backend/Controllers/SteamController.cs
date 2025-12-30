@@ -422,10 +422,13 @@ public class SteamController : ControllerBase
                                         // 处理 categories（如果游戏的 categories 为空，则从 Steam API 获取并存储）
                                         var existingCategories = await _context.GameCategories
                                             .Where(gc => gc.GameId == game.GameId)
+                                            .Select(gc => gc.CategoryId)
                                             .ToListAsync();
                                         
                                         if (existingCategories.Count == 0 && steamGame.Categories.Count > 0)
                                         {
+                                            var categoriesToAdd = new List<GameCategory>();
+                                            
                                             foreach (var categoryName in steamGame.Categories)
                                             {
                                                 if (string.IsNullOrEmpty(categoryName)) continue;
@@ -443,27 +446,51 @@ public class SteamController : ControllerBase
                                                     await _context.SaveChangesAsync();
                                                 }
                                                 
-                                                if (!await _context.GameCategories.AnyAsync(gc => gc.GameId == game.GameId && gc.CategoryId == category.CategoryId))
+                                                // 检查是否已存在（包括已添加到列表中的）
+                                                if (!existingCategories.Contains(category.CategoryId) && 
+                                                    !categoriesToAdd.Any(gc => gc.CategoryId == category.CategoryId))
                                                 {
-                                                    _context.GameCategories.Add(new GameCategory 
+                                                    categoriesToAdd.Add(new GameCategory 
                                                     { 
                                                         GameId = game.GameId, 
                                                         CategoryId = category.CategoryId 
                                                     });
                                                 }
                                             }
-                                            await _context.SaveChangesAsync();
-                                            _logger.LogInformation("为游戏添加 categories: gameId={GameId}, count={Count}", 
-                                                game.GameId, steamGame.Categories.Count);
+                                            
+                                            // 批量添加前再次检查数据库中是否已存在（防止并发问题）
+                                            if (categoriesToAdd.Any())
+                                            {
+                                                var categoryIdsToAdd = categoriesToAdd.Select(gc => gc.CategoryId).ToList();
+                                                var alreadyExists = await _context.GameCategories
+                                                    .Where(gc => gc.GameId == game.GameId && categoryIdsToAdd.Contains(gc.CategoryId))
+                                                    .Select(gc => gc.CategoryId)
+                                                    .ToListAsync();
+                                                
+                                                var finalCategoriesToAdd = categoriesToAdd
+                                                    .Where(gc => !alreadyExists.Contains(gc.CategoryId))
+                                                    .ToList();
+                                                
+                                                if (finalCategoriesToAdd.Any())
+                                                {
+                                                    _context.GameCategories.AddRange(finalCategoriesToAdd);
+                                                    await _context.SaveChangesAsync();
+                                                    _logger.LogInformation("为游戏添加 categories: gameId={GameId}, count={Count}", 
+                                                        game.GameId, finalCategoriesToAdd.Count);
+                                                }
+                                            }
                                         }
 
                                         // 处理 genres（如果游戏的 genres 为空，则从 Steam API 获取并存储）
                                         var existingGenres = await _context.GameGenres
                                             .Where(gg => gg.GameId == game.GameId)
+                                            .Select(gg => gg.GenreId)
                                             .ToListAsync();
                                         
                                         if (existingGenres.Count == 0 && steamGame.Genres.Count > 0)
                                         {
+                                            var genresToAdd = new List<GameGenre>();
+                                            
                                             foreach (var genreName in steamGame.Genres)
                                             {
                                                 if (string.IsNullOrEmpty(genreName)) continue;
@@ -481,28 +508,51 @@ public class SteamController : ControllerBase
                                                     await _context.SaveChangesAsync();
                                                 }
                                                 
-                                                if (!await _context.GameGenres.AnyAsync(gg => gg.GameId == game.GameId && gg.GenreId == genre.GenreId))
+                                                // 检查是否已存在（包括已添加到列表中的）
+                                                if (!existingGenres.Contains(genre.GenreId) && 
+                                                    !genresToAdd.Any(gg => gg.GenreId == genre.GenreId))
                                                 {
-                                                    _context.GameGenres.Add(new GameGenre 
+                                                    genresToAdd.Add(new GameGenre 
                                                     { 
                                                         GameId = game.GameId, 
                                                         GenreId = genre.GenreId 
                                                     });
                                                 }
                                             }
-                                            await _context.SaveChangesAsync();
-                                            _logger.LogInformation("为游戏添加 genres: gameId={GameId}, count={Count}", 
-                                                game.GameId, steamGame.Genres.Count);
+                                            
+                                            // 批量添加前再次检查数据库中是否已存在（防止并发问题）
+                                            if (genresToAdd.Any())
+                                            {
+                                                var genreIdsToAdd = genresToAdd.Select(gg => gg.GenreId).ToList();
+                                                var alreadyExists = await _context.GameGenres
+                                                    .Where(gg => gg.GameId == game.GameId && genreIdsToAdd.Contains(gg.GenreId))
+                                                    .Select(gg => gg.GenreId)
+                                                    .ToListAsync();
+                                                
+                                                var finalGenresToAdd = genresToAdd
+                                                    .Where(gg => !alreadyExists.Contains(gg.GenreId))
+                                                    .ToList();
+                                                
+                                                if (finalGenresToAdd.Any())
+                                                {
+                                                    _context.GameGenres.AddRange(finalGenresToAdd);
+                                                    await _context.SaveChangesAsync();
+                                                    _logger.LogInformation("为游戏添加 genres: gameId={GameId}, count={Count}", 
+                                                        game.GameId, finalGenresToAdd.Count);
+                                                }
+                                            }
                                         }
 
                                         // 处理 supported_languages（如果游戏的 languages 为空，则从 Steam API 获取并存储）
                                         var existingLanguages = await _context.GameLanguages
                                             .Where(gl => gl.GameId == game.GameId)
+                                            .Select(gl => gl.LanguageId)
                                             .ToListAsync();
                                         
                                         if (existingLanguages.Count == 0 && !string.IsNullOrEmpty(steamGame.SupportedLanguages))
                                         {
                                             var parsedLanguages = ParseSupportedLanguages(steamGame.SupportedLanguages);
+                                            var languagesToAdd = new List<GameLanguage>();
                                             
                                             foreach (var languageName in parsedLanguages)
                                             {
@@ -521,18 +571,39 @@ public class SteamController : ControllerBase
                                                     await _context.SaveChangesAsync();
                                                 }
                                                 
-                                                if (!await _context.GameLanguages.AnyAsync(gl => gl.GameId == game.GameId && gl.LanguageId == language.LanguageId))
+                                                // 检查是否已存在（包括已添加到列表中的）
+                                                if (!existingLanguages.Contains(language.LanguageId) && 
+                                                    !languagesToAdd.Any(gl => gl.LanguageId == language.LanguageId))
                                                 {
-                                                    _context.GameLanguages.Add(new GameLanguage 
+                                                    languagesToAdd.Add(new GameLanguage 
                                                     { 
                                                         GameId = game.GameId, 
                                                         LanguageId = language.LanguageId 
                                                     });
                                                 }
                                             }
-                                            await _context.SaveChangesAsync();
-                                            _logger.LogInformation("为游戏添加 languages: gameId={GameId}, count={Count}", 
-                                                game.GameId, parsedLanguages.Count);
+                                            
+                                            // 批量添加前再次检查数据库中是否已存在（防止并发问题）
+                                            if (languagesToAdd.Any())
+                                            {
+                                                var languageIdsToAdd = languagesToAdd.Select(gl => gl.LanguageId).ToList();
+                                                var alreadyExists = await _context.GameLanguages
+                                                    .Where(gl => gl.GameId == game.GameId && languageIdsToAdd.Contains(gl.LanguageId))
+                                                    .Select(gl => gl.LanguageId)
+                                                    .ToListAsync();
+                                                
+                                                var finalLanguagesToAdd = languagesToAdd
+                                                    .Where(gl => !alreadyExists.Contains(gl.LanguageId))
+                                                    .ToList();
+                                                
+                                                if (finalLanguagesToAdd.Any())
+                                                {
+                                                    _context.GameLanguages.AddRange(finalLanguagesToAdd);
+                                                    await _context.SaveChangesAsync();
+                                                    _logger.LogInformation("为游戏添加 languages: gameId={GameId}, count={Count}", 
+                                                        game.GameId, finalLanguagesToAdd.Count);
+                                                }
+                                            }
                                         }
 
                                         // 创建或更新用户平台游戏库记录
@@ -1466,10 +1537,13 @@ public class SteamController : ControllerBase
                             // 处理 categories、genres、languages
                             var existingCategories = await _context.GameCategories
                                 .Where(gc => gc.GameId == game.GameId)
+                                .Select(gc => gc.CategoryId)
                                 .ToListAsync();
                             
                             if (existingCategories.Count == 0 && steamGame.Categories.Count > 0)
                             {
+                                var categoriesToAdd = new List<GameCategory>();
+                                
                                 foreach (var categoryName in steamGame.Categories)
                                 {
                                     if (string.IsNullOrEmpty(categoryName)) continue;
@@ -1481,20 +1555,45 @@ public class SteamController : ControllerBase
                                         _context.Categories.Add(category);
                                         await _context.SaveChangesAsync();
                                     }
-                                    if (!await _context.GameCategories.AnyAsync(gc => gc.GameId == game.GameId && gc.CategoryId == category.CategoryId))
+                                    
+                                    // 检查是否已存在（包括已添加到列表中的）
+                                    if (!existingCategories.Contains(category.CategoryId) && 
+                                        !categoriesToAdd.Any(gc => gc.CategoryId == category.CategoryId))
                                     {
-                                        _context.GameCategories.Add(new GameCategory { GameId = game.GameId, CategoryId = category.CategoryId });
+                                        categoriesToAdd.Add(new GameCategory { GameId = game.GameId, CategoryId = category.CategoryId });
                                     }
                                 }
-                                await _context.SaveChangesAsync();
+                                
+                                // 批量添加前再次检查数据库中是否已存在（防止并发问题）
+                                if (categoriesToAdd.Any())
+                                {
+                                    var categoryIdsToAdd = categoriesToAdd.Select(gc => gc.CategoryId).ToList();
+                                    var alreadyExists = await _context.GameCategories
+                                        .Where(gc => gc.GameId == game.GameId && categoryIdsToAdd.Contains(gc.CategoryId))
+                                        .Select(gc => gc.CategoryId)
+                                        .ToListAsync();
+                                    
+                                    var finalCategoriesToAdd = categoriesToAdd
+                                        .Where(gc => !alreadyExists.Contains(gc.CategoryId))
+                                        .ToList();
+                                    
+                                    if (finalCategoriesToAdd.Any())
+                                    {
+                                        _context.GameCategories.AddRange(finalCategoriesToAdd);
+                                        await _context.SaveChangesAsync();
+                                    }
+                                }
                             }
 
                             var existingGenres = await _context.GameGenres
                                 .Where(gg => gg.GameId == game.GameId)
+                                .Select(gg => gg.GenreId)
                                 .ToListAsync();
                             
                             if (existingGenres.Count == 0 && steamGame.Genres.Count > 0)
                             {
+                                var genresToAdd = new List<GameGenre>();
+                                
                                 foreach (var genreName in steamGame.Genres)
                                 {
                                     if (string.IsNullOrEmpty(genreName)) continue;
@@ -1506,23 +1605,48 @@ public class SteamController : ControllerBase
                                         _context.Genres.Add(genre);
                                         await _context.SaveChangesAsync();
                                     }
-                                    if (!await _context.GameGenres.AnyAsync(gg => gg.GameId == game.GameId && gg.GenreId == genre.GenreId))
+                                    
+                                    // 检查是否已存在（包括已添加到列表中的）
+                                    if (!existingGenres.Contains(genre.GenreId) && 
+                                        !genresToAdd.Any(gg => gg.GenreId == genre.GenreId))
                                     {
-                                        _context.GameGenres.Add(new GameGenre { GameId = game.GameId, GenreId = genre.GenreId });
+                                        genresToAdd.Add(new GameGenre { GameId = game.GameId, GenreId = genre.GenreId });
                                     }
                                 }
-                                await _context.SaveChangesAsync();
+                                
+                                // 批量添加前再次检查数据库中是否已存在（防止并发问题）
+                                if (genresToAdd.Any())
+                                {
+                                    var genreIdsToAdd = genresToAdd.Select(gg => gg.GenreId).ToList();
+                                    var alreadyExists = await _context.GameGenres
+                                        .Where(gg => gg.GameId == game.GameId && genreIdsToAdd.Contains(gg.GenreId))
+                                        .Select(gg => gg.GenreId)
+                                        .ToListAsync();
+                                    
+                                    var finalGenresToAdd = genresToAdd
+                                        .Where(gg => !alreadyExists.Contains(gg.GenreId))
+                                        .ToList();
+                                    
+                                    if (finalGenresToAdd.Any())
+                                    {
+                                        _context.GameGenres.AddRange(finalGenresToAdd);
+                                        await _context.SaveChangesAsync();
+                                    }
+                                }
                             }
 
                             if (!string.IsNullOrEmpty(steamGame.SupportedLanguages))
                             {
                                 var existingLanguages = await _context.GameLanguages
                                     .Where(gl => gl.GameId == game.GameId)
+                                    .Select(gl => gl.LanguageId)
                                     .ToListAsync();
                                 
                                 if (existingLanguages.Count == 0)
                                 {
                                     var parsedLanguages = ParseSupportedLanguages(steamGame.SupportedLanguages);
+                                    var languagesToAdd = new List<GameLanguage>();
+                                    
                                     foreach (var languageName in parsedLanguages)
                                     {
                                         if (string.IsNullOrEmpty(languageName)) continue;
@@ -1534,12 +1658,34 @@ public class SteamController : ControllerBase
                                             _context.Languages.Add(language);
                                             await _context.SaveChangesAsync();
                                         }
-                                        if (!await _context.GameLanguages.AnyAsync(gl => gl.GameId == game.GameId && gl.LanguageId == language.LanguageId))
+                                        
+                                        // 检查是否已存在（包括已添加到列表中的）
+                                        if (!existingLanguages.Contains(language.LanguageId) && 
+                                            !languagesToAdd.Any(gl => gl.LanguageId == language.LanguageId))
                                         {
-                                            _context.GameLanguages.Add(new GameLanguage { GameId = game.GameId, LanguageId = language.LanguageId });
+                                            languagesToAdd.Add(new GameLanguage { GameId = game.GameId, LanguageId = language.LanguageId });
                                         }
                                     }
-                                    await _context.SaveChangesAsync();
+                                    
+                                    // 批量添加前再次检查数据库中是否已存在（防止并发问题）
+                                    if (languagesToAdd.Any())
+                                    {
+                                        var languageIdsToAdd = languagesToAdd.Select(gl => gl.LanguageId).ToList();
+                                        var alreadyExists = await _context.GameLanguages
+                                            .Where(gl => gl.GameId == game.GameId && languageIdsToAdd.Contains(gl.LanguageId))
+                                            .Select(gl => gl.LanguageId)
+                                            .ToListAsync();
+                                        
+                                        var finalLanguagesToAdd = languagesToAdd
+                                            .Where(gl => !alreadyExists.Contains(gl.LanguageId))
+                                            .ToList();
+                                        
+                                        if (finalLanguagesToAdd.Any())
+                                        {
+                                            _context.GameLanguages.AddRange(finalLanguagesToAdd);
+                                            await _context.SaveChangesAsync();
+                                        }
+                                    }
                                 }
                             }
 

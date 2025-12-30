@@ -1087,12 +1087,22 @@ const formatGameLanguages = (languages) => {
   }).filter(Boolean).join('，')
 }
 
-// 格式化日期
+// 格式化日期（中国时区）
 const formatDate = (date) => {
   if (!date) return ''
   try {
     const d = new Date(date)
-    return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+    // 转换为中国时区（UTC+8）
+    const chinaTime = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+    
+    // 格式化显示：年月日 时分
+    const year = chinaTime.getFullYear()
+    const month = String(chinaTime.getMonth() + 1).padStart(2, '0')
+    const day = String(chinaTime.getDate()).padStart(2, '0')
+    const hour = String(chinaTime.getHours()).padStart(2, '0')
+    const minute = String(chinaTime.getMinutes()).padStart(2, '0')
+    
+    return `${year}-${month}-${day} ${hour}:${minute}`
   } catch {
     return date
   }

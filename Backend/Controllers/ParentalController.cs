@@ -1,13 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using System.Text.Json;
 using Swashbuckle.AspNetCore.Annotations;
+using PlayLinker.Services;
 
 namespace PlayLinker.Controllers;
 
@@ -21,11 +24,13 @@ public class ParentalController : ControllerBase
 {
     private readonly PlayLinkerDbContext _dbContext;
     private readonly ILogger<ParentalController> _logger;
+    private readonly IServiceProvider _serviceProvider;
 
-    public ParentalController(PlayLinkerDbContext dbContext, ILogger<ParentalController> logger)
+    public ParentalController(PlayLinkerDbContext dbContext, ILogger<ParentalController> logger, IServiceProvider serviceProvider)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
 
     /// <summary>
@@ -471,7 +476,7 @@ public class ParentalController : ControllerBase
     /// 设置监管规则
     /// </summary>
     /// <param name="request">规则设置请求</param>
-    [SwaggerOperation(Summary = "设置监管规则", Description = "为子账户设置家长监管规则，支持：playtime_daily_limit、playtime_curfew、spending_limit、game_restriction、age_restriction。需要parent角色。")]
+    [SwaggerOperation(Summary = "设置监管规则", Description = "为子账户设置家长监管规则，支持：playtime_daily_limit、playtime_curfew、game_restriction、age_restriction。需要parent角色。")]
     [HttpPost("rules")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
@@ -528,10 +533,44 @@ public class ParentalController : ControllerBase
             }
 
             // 验证规则类型
-            var validRuleTypes = new[] { "playtime_daily_limit", "playtime_curfew", "spending_limit", "game_restriction", "age_restriction" };
+            var validRuleTypes = new[] { "playtime_daily_limit", "playtime_curfew", "game_restriction", "age_restriction" };
             if (!validRuleTypes.Contains(request.RuleType))
             {
                 return BadRequest(ApiResponse<object>.ErrorResponse("ERR_INVALID_RULE_TYPE", "无效的规则类型"));
+            }
+            
+            // 验证游戏限制规则的数据格式（应使用游戏名而非游戏ID）
+            if (request.RuleType == "game_restriction" && request.RuleValue != null)
+            {
+                try
+                {
+                    var ruleValueJson = JsonSerializer.Serialize(request.RuleValue);
+                    var ruleValueObj = JsonSerializer.Deserialize<Dictionary<string, object>>(ruleValueJson);
+                    
+                    // 检查是否包含 blockedGameNames（新格式）或 blockedGameIds（旧格式，已废弃）
+                    if (ruleValueObj != null)
+                    {
+                        // 如果只有 blockedGameIds 而没有 blockedGameNames，提示用户使用新格式
+                        if (ruleValueObj.ContainsKey("blockedGameIds") && !ruleValueObj.ContainsKey("blockedGameNames"))
+                        {
+                            return BadRequest(ApiResponse<object>.ErrorResponse("ERR_DEPRECATED_FORMAT", "游戏限制规则已改为使用游戏名称（blockedGameNames），请使用游戏名称而非游戏ID"));
+                        }
+                        
+                        // 验证 blockedGameNames 是否为字符串数组
+                        if (ruleValueObj.ContainsKey("blockedGameNames"))
+                        {
+                            var gameNames = JsonSerializer.Deserialize<List<string>>(JsonSerializer.Serialize(ruleValueObj["blockedGameNames"]));
+                            if (gameNames == null || gameNames.Any(name => string.IsNullOrWhiteSpace(name)))
+                            {
+                                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_INVALID_RULE_VALUE", "游戏名称列表不能为空或包含空字符串"));
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // JSON 解析失败，让后续代码处理
+                }
             }
 
             var rule = new ParentalControlRule
@@ -546,6 +585,29 @@ public class ParentalController : ControllerBase
 
             _dbContext.ParentalControlRules.Add(rule);
             await _dbContext.SaveChangesAsync();
+
+            // 规则建立后立即进行一次检测
+            try
+            {
+                var monitoringService = _serviceProvider.GetRequiredService<ParentalMonitoringService>();
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await monitoringService.CheckSingleRuleAsync(rule.RuleId);
+                        _logger.LogInformation("规则 {RuleId} 创建后立即检测完成", rule.RuleId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "规则 {RuleId} 创建后立即检测失败", rule.RuleId);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                // 监控服务不可用时不影响规则创建
+                _logger.LogWarning(ex, "无法触发规则 {RuleId} 的立即检测", rule.RuleId);
+            }
 
             var response = new
             {
@@ -640,6 +702,32 @@ public class ParentalController : ControllerBase
             rule.UpdatedAt = DateTime.UtcNow;
 
             await _dbContext.SaveChangesAsync();
+
+            // 规则更新后立即进行一次检测（仅当规则激活时）
+            if (rule.IsActive == true)
+            {
+                try
+                {
+                    var monitoringService = _serviceProvider.GetRequiredService<ParentalMonitoringService>();
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await monitoringService.CheckSingleRuleAsync(rule.RuleId);
+                            _logger.LogInformation("规则 {RuleId} 更新后立即检测完成", rule.RuleId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "规则 {RuleId} 更新后立即检测失败", rule.RuleId);
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // 监控服务不可用时不影响规则更新
+                    _logger.LogWarning(ex, "无法触发规则 {RuleId} 的立即检测", rule.RuleId);
+                }
+            }
 
             var response = new
             {
@@ -1088,7 +1176,7 @@ public class ParentalController : ControllerBase
             {
                 UserId = childUserId,
                 SourceModule = "parental_control",
-                NotificationType = "relationship_terminated",
+                NotificationType = "warning", // 使用合法的通知类型
                 Title = "监管关系已解除",
                 Content = JsonSerializer.Serialize(new
                 {
@@ -1100,6 +1188,7 @@ public class ParentalController : ControllerBase
                     message = $"家长 {parentUsername} 已解除与您的监管关系"
                 }),
                 IsRead = false,
+                RelatedId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), // 生成唯一ID
                 CreatedAt = DateTime.UtcNow
             };
 
