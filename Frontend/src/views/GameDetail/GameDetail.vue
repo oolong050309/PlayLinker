@@ -85,10 +85,38 @@
           <!-- 游戏介绍 -->
           <section class="section-card">
             <h2 class="section-title">游戏介绍</h2>
-            <div class="game-description">
-              <p v-if="game.description" class="description-text">{{ game.description }}</p>
-              <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
-              <p v-else class="description-text text-muted">暂无游戏介绍</p>
+            <div class="game-description" :class="{ expanded: showDetailedDescription }">
+              <div class="description-content">
+                <!-- 展开状态：优先显示详细描述（HTML格式） -->
+                <template v-if="showDetailedDescription">
+                  <div v-if="game.detailedDescription" class="description-text description-html" v-html="game.detailedDescription"></div>
+                  <p v-else-if="game.description" class="description-text">{{ game.description }}</p>
+                  <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
+                  <p v-else class="description-text text-muted">暂无游戏介绍</p>
+                </template>
+                <!-- 收起状态：显示简短描述 -->
+                <template v-else>
+                  <p v-if="game.description" class="description-text">{{ game.description }}</p>
+                  <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
+                  <p v-else class="description-text text-muted">暂无游戏介绍</p>
+                </template>
+              </div>
+              <!-- 显示详情按钮（仅在未展开且有详细描述时显示） -->
+              <button 
+                v-if="game.detailedDescription && !showDetailedDescription" 
+                @click="showDetailedDescription = true"
+                class="show-details-btn"
+              >
+                显示详情
+              </button>
+              <!-- 收起详情按钮（仅在展开时显示） -->
+              <button 
+                v-if="showDetailedDescription" 
+                @click="showDetailedDescription = false"
+                class="show-details-btn"
+              >
+                收起详情
+              </button>
             </div>
           </section>
 
@@ -503,6 +531,9 @@ const mods = ref([]) // 预留的 Mod 列表
 const revealedHiddenAchievements = ref(new Set()) // 已点击显示剧透的隐藏成就ID集合
 const hoveredAchievementId = ref(null) // 当前鼠标悬停的成就ID
 const newlyRevealedAchievements = ref(new Set()) // 刚刚被点击显示的成就ID集合（用于触发动画）
+
+// 游戏介绍展开状态
+const showDetailedDescription = ref(false) // 是否显示详细描述
 
 // 价格提醒对话框
 const showAlertDialog = ref(false)
@@ -1321,16 +1352,134 @@ onMounted(() => {
 /* 游戏介绍 */
 .game-description {
   line-height: 1.6;
+  transition: all 0.3s ease;
+}
+
+.description-content {
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
 }
 
 .description-text {
   color: #cbd5e1;
   font-size: 15px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .description-text.text-muted {
   color: #64748b;
   font-style: italic;
+}
+
+/* HTML 格式的描述内容样式 */
+.description-html {
+  color: #cbd5e1;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.description-html :deep(p) {
+  margin-bottom: 12px;
+  color: #cbd5e1;
+}
+
+.description-html :deep(h1),
+.description-html :deep(h2),
+.description-html :deep(h3),
+.description-html :deep(h4),
+.description-html :deep(h5),
+.description-html :deep(h6) {
+  color: #f8fafc;
+  font-weight: 600;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.description-html :deep(strong),
+.description-html :deep(b) {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.description-html :deep(em),
+.description-html :deep(i) {
+  font-style: italic;
+}
+
+.description-html :deep(ul),
+.description-html :deep(ol) {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.description-html :deep(li) {
+  margin-bottom: 6px;
+}
+
+.description-html :deep(a) {
+  color: #8b5cf6;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.description-html :deep(a:hover) {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+.description-html :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.description-html :deep(blockquote) {
+  border-left: 3px solid rgba(139, 92, 246, 0.5);
+  padding-left: 16px;
+  margin: 12px 0;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.description-html :deep(code) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #c4b5fd;
+}
+
+.description-html :deep(pre) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.description-html :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #cbd5e1;
+}
+
+.show-details-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: all 0.2s;
+  text-align: left;
+  font-weight: 500;
+}
+
+.show-details-btn:hover {
+  color: #8b5cf6;
 }
 
 /* 基本信息 */
