@@ -113,6 +113,14 @@
               </button>
             </div>
           </div>
+          
+          <!-- 保存按钮 -->
+          <div class="setting-actions">
+            <button class="btn btn-primary save-button" @click="handleSave" :disabled="saving">
+              <span v-if="saving" class="loading-spinner"></span>
+              {{ saving ? '保存中...' : '保存设置' }}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -201,212 +209,6 @@
         </div>
       </section>
 
-      <!-- 偏好设置 -->
-      <section class="settings-section">
-        <h2 class="section-title">偏好设置</h2>
-        <div class="settings-card">
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">主题模式</h3>
-              <p class="setting-desc">选择您喜欢的界面主题</p>
-            </div>
-            <div class="setting-action">
-              <select v-model="settings.theme" class="setting-select">
-                <option value="dark">深色模式</option>
-                <option value="light">浅色模式</option>
-                <option value="auto">跟随系统</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">语言</h3>
-              <p class="setting-desc">选择界面显示语言</p>
-            </div>
-            <div class="setting-action">
-              <select v-model="settings.language" class="setting-select">
-                <option value="zh-CN">简体中文</option>
-                <option value="zh-TW">繁体中文</option>
-                <option value="en-US">English</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">自动同步</h3>
-              <p class="setting-desc">自动同步游戏库数据</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.autoSync"
-                />
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">启用自动同步</span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 通知设置 -->
-      <section class="settings-section">
-        <h2 class="section-title">通知设置</h2>
-        <div class="settings-card">
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">价格下降提醒</h3>
-              <p class="setting-desc">当愿望单中的游戏降价时通知您</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.notifications.priceDrop"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">游戏更新</h3>
-              <p class="setting-desc">游戏补丁和DLC发布通知</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.notifications.gameUpdates"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">成就解锁</h3>
-              <p class="setting-desc">当您解锁新成就时通知</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.notifications.achievements"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">游戏推荐</h3>
-              <p class="setting-desc">基于您的喜好提供AI游戏推荐</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.notifications.recommendations"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">家长监管提醒</h3>
-              <p class="setting-desc">家长监管违规通知</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.notifications.parentalControl"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">邮件通知</h3>
-              <p class="setting-desc">通过邮件接收通知</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.notifications.email"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 隐私与安全 -->
-      <section class="settings-section">
-        <h2 class="section-title">隐私与安全</h2>
-        <div class="settings-card">
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">双因素认证</h3>
-              <p class="setting-desc">为您的账户添加额外的安全保护</p>
-            </div>
-            <div class="setting-action">
-              <button 
-                class="btn btn-secondary"
-                @click="handleEnable2FA"
-              >
-                {{ settings.twoFactorEnabled ? '已启用' : '启用 2FA' }}
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">资料可见性</h3>
-              <p class="setting-desc">让其他用户可以看到您的游戏资料</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.privacy.publicProfile"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <h3 class="setting-label">分享游戏时间统计</h3>
-              <p class="setting-desc">允许他人查看您的游戏统计数据</p>
-            </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="settings.privacy.showStats"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- 数据与存储 -->
       <section class="settings-section">
         <h2 class="section-title">数据与存储</h2>
@@ -463,16 +265,6 @@
           </div>
         </div>
       </section>
-
-      <!-- 保存按钮 -->
-      <div class="settings-actions">
-        <button class="btn btn-primary" @click="handleSave" :disabled="saving">
-          {{ saving ? '保存中...' : '保存设置' }}
-        </button>
-        <button class="btn btn-secondary" @click="handleReset">
-          重置
-        </button>
-      </div>
     </div>
 
     <!-- 修改密码对话框 -->
@@ -1440,6 +1232,55 @@ const handleDeleteAccount = () => {
   padding: var(--spacing-xl);
   color: var(--text-primary);
   font-size: 16px;
+}
+
+/* 保存按钮样式 */
+.setting-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.save-button {
+  position: relative;
+  min-width: 120px;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.save-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.save-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.save-button .loading-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  padding: 0;
+}
+
+@keyframes spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
 }
 </style>
 

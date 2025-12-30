@@ -127,6 +127,41 @@ public class ParentalMonitoringService : BackgroundService
     }
 
     /// <summary>
+    /// 检查单个规则是否违规（公共方法，允许从外部调用）
+    /// </summary>
+    public async Task<bool> CheckSingleRuleAsync(long ruleId, CancellationToken cancellationToken = default)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<PlayLinkerDbContext>();
+
+        try
+        {
+            var rule = await context.ParentalControlRules
+                .Include(r => r.ChildUser)
+                .FirstOrDefaultAsync(r => r.RuleId == ruleId, cancellationToken);
+
+            if (rule == null)
+            {
+                _logger.LogWarning("规则 {RuleId} 不存在", ruleId);
+                return false;
+            }
+
+            if (rule.IsActive != true)
+            {
+                _logger.LogDebug("规则 {RuleId} 未激活，跳过检查", ruleId);
+                return false;
+            }
+
+            return await CheckRuleViolationAsync(context, rule, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "检查规则 {RuleId} 时发生错误", ruleId);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 检查单个规则是否违规
     /// </summary>
     private async Task<bool> CheckRuleViolationAsync(
@@ -500,26 +535,56 @@ public class ParentalMonitoringService : BackgroundService
     {
         try
         {
-            if (!ruleValue.TryGetProperty("blockedGameIds", out var blockedGameIdsProp))
-            {
-                _logger.LogWarning("规则 {RuleId} 缺少 blockedGameIds 属性", rule.RuleId);
-                return false;
-            }
+            // 优先使用 blockedGameNames（新格式），兼容 blockedGameIds（旧格式）
+            List<string> blockedGameNames = new List<string>();
+            List<long> blockedGameIds = new List<long>();
+            bool useGameNames = false;
 
-            // 解析被限制的游戏ID列表
-            var blockedGameIds = new List<long>();
-            if (blockedGameIdsProp.ValueKind == JsonValueKind.Array)
+            if (ruleValue.TryGetProperty("blockedGameNames", out var blockedGameNamesProp))
             {
-                foreach (var item in blockedGameIdsProp.EnumerateArray())
+                // 使用游戏名称（新格式）
+                useGameNames = true;
+                if (blockedGameNamesProp.ValueKind == JsonValueKind.Array)
                 {
-                    if (item.ValueKind == JsonValueKind.Number && item.TryGetInt64(out var gameId))
+                    foreach (var item in blockedGameNamesProp.EnumerateArray())
                     {
-                        blockedGameIds.Add(gameId);
+                        if (item.ValueKind == JsonValueKind.String)
+                        {
+                            var gameName = item.GetString();
+                            if (!string.IsNullOrWhiteSpace(gameName))
+                            {
+                                blockedGameNames.Add(gameName.Trim());
+                            }
+                        }
                     }
                 }
             }
+            else if (ruleValue.TryGetProperty("blockedGameIds", out var blockedGameIdsProp))
+            {
+                // 兼容旧格式：使用游戏ID
+                _logger.LogWarning("规则 {RuleId} 使用已废弃的 blockedGameIds 格式，建议使用 blockedGameNames", rule.RuleId);
+                if (blockedGameIdsProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in blockedGameIdsProp.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.Number && item.TryGetInt64(out var gameId))
+                        {
+                            blockedGameIds.Add(gameId);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                _logger.LogWarning("规则 {RuleId} 缺少 blockedGameNames 或 blockedGameIds 属性", rule.RuleId);
+                return false;
+            }
 
-            if (blockedGameIds.Count == 0)
+            if (useGameNames && blockedGameNames.Count == 0)
+            {
+                return false; // 没有限制的游戏
+            }
+            if (!useGameNames && blockedGameIds.Count == 0)
             {
                 return false; // 没有限制的游戏
             }
@@ -553,26 +618,64 @@ public class ParentalMonitoringService : BackgroundService
             // 去重
             childGameIds = childGameIds.Distinct().ToList();
 
-            // 检查是否有被限制的游戏
-            var violatingGameIds = childGameIds.Intersect(blockedGameIds).ToList();
-
-            if (violatingGameIds.Count > 0)
+            if (childGameIds.Count == 0)
             {
-                // 获取违规游戏的名称
-                var violatingGames = await context.Games
-                    .Where(g => violatingGameIds.Contains(g.GameId))
-                    .Select(g => new { g.GameId, g.Name })
-                    .ToListAsync(cancellationToken);
+                return false; // 孩子没有游戏
+            }
 
-                var blockedGameNames = violatingGames.Select(g => g.Name).ToList();
+            // 获取孩子游戏库中的所有游戏名称
+            var childGames = await context.Games
+                .Where(g => childGameIds.Contains(g.GameId))
+                .Select(g => new { g.GameId, g.Name })
+                .ToListAsync(cancellationToken);
 
-                violationDetails["blockedGameIds"] = blockedGameIds;
-                violationDetails["violatingGameIds"] = violatingGameIds;
-                violationDetails["blockedGameNames"] = blockedGameNames;
-                violationDetails["totalBlockedGames"] = blockedGameIds.Count;
-                violationDetails["violatingGamesCount"] = violatingGameIds.Count;
+            var childGameNames = childGames.Select(g => g.Name).ToList();
 
-                return true;
+            if (useGameNames)
+            {
+                // 使用游戏名称匹配（不区分大小写）
+                var violatingGameNames = childGameNames
+                    .Where(name => blockedGameNames.Any(blocked => 
+                        string.Equals(name, blocked, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+
+                if (violatingGameNames.Count > 0)
+                {
+                    var violatingGameIds = childGames
+                        .Where(g => violatingGameNames.Contains(g.Name))
+                        .Select(g => g.GameId)
+                        .ToList();
+
+                    violationDetails["blockedGameNames"] = blockedGameNames;
+                    violationDetails["violatingGameNames"] = violatingGameNames;
+                    violationDetails["violatingGameIds"] = violatingGameIds;
+                    violationDetails["totalBlockedGames"] = blockedGameNames.Count;
+                    violationDetails["violatingGamesCount"] = violatingGameNames.Count;
+
+                    return true;
+                }
+            }
+            else
+            {
+                // 使用游戏ID匹配（兼容旧格式）
+                var violatingGameIds = childGameIds.Intersect(blockedGameIds).ToList();
+
+                if (violatingGameIds.Count > 0)
+                {
+                    var violatingGames = childGames
+                        .Where(g => violatingGameIds.Contains(g.GameId))
+                        .ToList();
+
+                    var violatingGameNames = violatingGames.Select(g => g.Name).ToList();
+
+                    violationDetails["blockedGameIds"] = blockedGameIds;
+                    violationDetails["violatingGameIds"] = violatingGameIds;
+                    violationDetails["blockedGameNames"] = violatingGameNames;
+                    violationDetails["totalBlockedGames"] = blockedGameIds.Count;
+                    violationDetails["violatingGamesCount"] = violatingGameIds.Count;
+
+                    return true;
+                }
             }
 
             return false;
@@ -654,7 +757,10 @@ public class ParentalMonitoringService : BackgroundService
             if (violatingGames.Count > 0)
             {
                 var violatingGameNames = violatingGames.Select(g => g.Name).ToList();
-                var violatingGameAges = violatingGames.Select(g => g.RequireAge.Value).ToList();
+                var violatingGameAges = violatingGames
+                    .Where(g => g.RequireAge.HasValue)
+                    .Select(g => g.RequireAge!.Value)
+                    .ToList();
 
                 violationDetails["maxAgeRating"] = maxAgeRating;
                 violationDetails["violatingGameIds"] = violatingGames.Select(g => g.GameId).ToList();

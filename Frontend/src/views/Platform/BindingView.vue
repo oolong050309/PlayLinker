@@ -567,24 +567,24 @@ const handleBind = async () => {
 
     const response = await platformsApi.bindPlatform(bindData)
     if (response.success) {
-      alert(`${platform.name}绑定成功！`)
+      alert(`${platform.name}绑定成功！正在同步数据...`)
 
       // 绑定成功后，根据平台调用对应的导入接口
-      const userId = getCurrentUserId()
-      if (userId) {
+      // 注意：导入接口会自动从JWT token获取userId，不需要传递userId
+      try {
         switch (platform.id) {
           case 1: // Steam
             try {
               await steamApi.importData({
-                userId,
                 steamId: bindForm.value.steamId,
                 importGames: true,
                 importAchievements: true,
                 importFriends: false
               })
-              await new Promise(resolve => setTimeout(resolve, 500))
+              await new Promise(resolve => setTimeout(resolve, 1000))
             } catch (e) {
               console.error('Steam 数据导入失败:', e)
+              alert('Steam 数据同步失败，请稍后手动同步')
             }
             break
           
@@ -593,15 +593,15 @@ const handleBind = async () => {
               const xboxUserId = bindForm.value.xboxUserId || response.data?.platformUserId
               if (xboxUserId) {
                 await xboxApi.importData({
-                  userId,
                   xboxUserId,
                   importGames: true,
                   importAchievements: true
                 })
-                await new Promise(resolve => setTimeout(resolve, 500))
+                await new Promise(resolve => setTimeout(resolve, 1000))
               }
             } catch (e) {
               console.error('Xbox 数据导入失败:', e)
+              alert('Xbox 数据同步失败，请稍后手动同步')
             }
             break
           
@@ -610,15 +610,15 @@ const handleBind = async () => {
               const psnOnlineId = bindForm.value.psnOnlineId || response.data?.platformUserId
               if (psnOnlineId) {
                 await psnApi.importData({
-                  userId,
                   psnOnlineId,
                   importGames: true,
                   importTrophies: true
                 })
-                await new Promise(resolve => setTimeout(resolve, 500))
+                await new Promise(resolve => setTimeout(resolve, 1000))
               }
             } catch (e) {
               console.error('PSN 数据导入失败:', e)
+              alert('PSN 数据同步失败，请稍后手动同步')
             }
             break
           
@@ -627,23 +627,27 @@ const handleBind = async () => {
               const gogUserId = bindForm.value.gogUserId || response.data?.platformUserId
               if (gogUserId) {
                 await gogApi.importData({
-                  userId,
                   gogUserId,
                   importGames: true
                 })
-                await new Promise(resolve => setTimeout(resolve, 500))
+                await new Promise(resolve => setTimeout(resolve, 1000))
               }
             } catch (e) {
               console.error('GOG 数据导入失败:', e)
+              alert('GOG 数据同步失败，请稍后手动同步')
             }
             break
         }
+      } catch (error) {
+        console.error('数据同步过程出错:', error)
       }
 
       closeBindModal()
       await loadBindings()
-      // 刷新统计数据，确保显示最新的成就数量
+      // 等待数据同步完成后再刷新统计数据
+      await new Promise(resolve => setTimeout(resolve, 2000))
       await refreshStats()
+      alert('数据同步完成！')
     }
   } catch (error) {
     console.error('绑定平台失败:', error)
@@ -790,17 +794,49 @@ const getPlatformConfig = (platformId) => {
   return platformConfig[platformId] || { name: 'Unknown', gradient: '' }
 }
 
-// 格式化时间
+// 格式化时间（中国时区）
 const formatTime = (dateString) => {
   if (!dateString) return '未知'
-  const date = new Date(dateString)
-  const now = new Date()
-  const diff = Math.floor((now - date) / 1000 / 60) // 分钟差
   
-  if (diff < 1) return '刚刚'
-  if (diff < 60) return `${diff}分钟前`
-  if (diff < 1440) return `${Math.floor(diff / 60)}小时前`
-  return `${Math.floor(diff / 1440)}天前`
+  try {
+    // 创建日期对象（假设后端返回的是 UTC 时间字符串）
+    const date = new Date(dateString)
+    
+    // 计算时间差（直接使用 UTC 时间戳）
+    const now = new Date()
+    const diff = Math.floor((now - date) / 1000 / 60) // 分钟差
+    
+    if (diff < 1) return '刚刚'
+    if (diff < 60) return `${diff}分钟前`
+    if (diff < 1440) {
+      const hours = Math.floor(diff / 60)
+      return `${hours}小时前`
+    }
+    
+    // 超过1天，显示具体日期和时间（格式：YYYY-MM-DD HH:mm）
+    // 使用 Intl.DateTimeFormat 直接格式化为中国时区
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+    
+    const parts = formatter.formatToParts(date)
+    const year = parts.find(p => p.type === 'year').value
+    const month = parts.find(p => p.type === 'month').value
+    const day = parts.find(p => p.type === 'day').value
+    const hour = parts.find(p => p.type === 'hour').value
+    const minute = parts.find(p => p.type === 'minute').value
+    
+    return `${year}-${month}-${day} ${hour}:${minute}`
+  } catch (error) {
+    console.error('格式化时间失败:', error)
+    return '未知'
+  }
 }
 
 // 获取平台Logo

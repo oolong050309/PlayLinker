@@ -62,8 +62,8 @@
           </div>
           <p class="notification-message">{{ notification.message }}</p>
           <div class="notification-action">
-            <!-- 家长监管邀请：显示“同意 / 拒绝”两个按钮 -->
-            <template v-if="notification.type === 'parental' && notification.action?.kind === 'parental_invite'">
+            <!-- 家长监管邀请：显示"同意 / 拒绝"两个按钮（仅未读且未处理过的邀请） -->
+            <template v-if="notification.type === 'parental' && notification.action?.kind === 'parental_invite' && !notification.read && !notification.processed">
               <button 
                 class="btn btn-sm btn-primary"
                 @click.stop="handleParentalInvite(notification, true)"
@@ -78,9 +78,10 @@
                 拒绝
               </button>
             </template>
+            <!-- 解除绑定通知：不显示任何按钮 -->
             <!-- 其他类型通知：保持原来的单按钮行为 -->
             <button 
-              v-else-if="notification.action"
+              v-else-if="notification.action && notification.action.kind !== 'relationship_terminated'"
               class="btn btn-sm btn-primary"
               @click.stop="handleAction(notification)"
             >
@@ -194,10 +195,9 @@ const formatTime = (date) => {
   // 如果date是字符串，先转换为Date对象
   const dateObj = date instanceof Date ? date : new Date(date)
   
-  // 如果后端返回的是UTC时间字符串，需要转换为中国时区
-  // 假设后端返回的时间已经是UTC时间，需要加8小时
-  const chinaTime = new Date(dateObj.getTime() + 8 * 60 * 60 * 1000)
-  const now = new Date()
+  // 转换为中国时区（UTC+8）
+  const chinaTime = new Date(dateObj.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
   
   // 计算时间差（使用中国时区时间）
   const diff = now - chinaTime
@@ -210,15 +210,14 @@ const formatTime = (date) => {
   if (hours < 24) return `${hours}小时前`
   if (days < 7) return `${days}天前`
   
-  // 超过7天，显示具体日期和时间（中国时区）
-  return chinaTime.toLocaleString('zh-CN', { 
-    year: 'numeric', 
-    month: '2-digit', 
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Asia/Shanghai'
-  })
+  // 超过7天，显示具体日期和时间（中国时区，格式化更美观）
+  const year = chinaTime.getFullYear()
+  const month = String(chinaTime.getMonth() + 1).padStart(2, '0')
+  const day = String(chinaTime.getDate()).padStart(2, '0')
+  const hour = String(chinaTime.getHours()).padStart(2, '0')
+  const minute = String(chinaTime.getMinutes()).padStart(2, '0')
+  
+  return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
 // 从后端加载通知
@@ -250,19 +249,45 @@ const loadNotifications = async () => {
           try {
             const payload = JSON.parse(rawContent || '{}')
             const parentName = payload.parentUsername || payload.ParentUsername || '家长'
-            const extra = (payload.message || payload.Message) ? `：${payload.message || payload.Message}` : ''
             const token = payload.token || payload.Token
+            const terminatedAt = payload.terminatedAt || payload.TerminatedAt
+            const relationshipMessage = payload.message || payload.Message
 
-            message = `${parentName} 想要对你的账号开启家长监管${extra}`
-            // 创建 parental_invite 动作
-            action = {
-              label: '处理邀请',
-              kind: 'parental_invite',
-              token,
-              parentUsername: parentName
+            // 判断是邀请还是解除绑定通知
+            if (token) {
+              // 这是邀请通知
+              const extra = relationshipMessage ? `：${relationshipMessage}` : ''
+              message = `${parentName} 想要对你的账号开启家长监管${extra}`
+              // 创建 parental_invite 动作
+              action = {
+                label: '处理邀请',
+                kind: 'parental_invite',
+                token,
+                parentUsername: parentName
+              }
+            } else if (terminatedAt || relationshipMessage) {
+              // 这是解除绑定通知
+              message = relationshipMessage || `${parentName} 已解除与您的监管关系`
+              // 不创建动作，不显示按钮
+              action = {
+                kind: 'relationship_terminated'
+              }
+            } else {
+              // 其他类型的家长监管通知（如同意/拒绝结果）
+              message = rawContent
+              // 不创建动作
             }
           } catch (e) {
-            // 内容不是 JSON 时，直接使用原始文本，不创建邀请动作
+            // 内容不是 JSON 时，检查是否是纯文本的解除绑定消息
+            if (rawContent && (rawContent.includes('解除') || rawContent.includes('监管关系'))) {
+              message = rawContent
+              action = {
+                kind: 'relationship_terminated'
+              }
+            } else {
+              // 其他情况，直接使用原始文本
+              message = rawContent
+            }
           }
         }
 
@@ -273,6 +298,7 @@ const loadNotifications = async () => {
           title: rawTitle,
           message,
           read: rawIsRead,
+          processed: rawIsRead, // 已读的通知视为已处理
           createdAt: rawCreatedAt ? new Date(rawCreatedAt) : new Date(),
           action
         }
@@ -306,8 +332,9 @@ const handleParentalInvite = async (notification, accept) => {
 
   try {
     await parentalApi.respondInvitation({ token, accept })
-    // 标记这条通知为已读
+    // 标记这条通知为已读和已处理
     notification.read = true
+    notification.processed = true
     try {
       await notificationsApi.markAsRead(notification.rawId || notification.id)
     } catch (e) {

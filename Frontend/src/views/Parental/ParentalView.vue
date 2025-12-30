@@ -9,7 +9,7 @@
         class="header-status role-toggle-btn" 
         :class="{ active: isParent }"
         @click="handleToggleRole"
-        :disabled="switchingRole"
+        :disabled="switchingRole || (isParent && children.length > 0) || (!isParent && parentInfo)"
       >
         <span class="status-dot"></span>
         <span class="status-text">{{ isParent ? '家长角色' : '普通用户' }}</span>
@@ -209,7 +209,6 @@
             >
               <option value="playtime_daily_limit">每日时长限制</option>
               <option value="playtime_curfew">宵禁时间</option>
-              <option value="spending_limit">消费限制</option>
               <option value="game_restriction">游戏限制</option>
               <option value="age_restriction">年龄限制</option>
             </select>
@@ -261,34 +260,17 @@
             />
           </div>
 
-          <!-- 消费限制 -->
-          <div v-if="ruleForm.ruleType === 'spending_limit'" class="form-group">
-            <label class="form-label">限制金额</label>
-            <input 
-              v-model.number="ruleForm.ruleValue.limitAmount"
-              type="number"
-              class="form-input"
-              min="0"
-              placeholder="100"
-            />
-            <label class="form-label" style="margin-top: 10px;">限制周期</label>
-            <select v-model="ruleForm.ruleValue.period" class="form-input">
-              <option value="daily">每日</option>
-              <option value="weekly">每周</option>
-              <option value="monthly">每月</option>
-            </select>
-          </div>
-
           <!-- 游戏限制 -->
           <div v-if="ruleForm.ruleType === 'game_restriction'" class="form-group">
-            <label class="form-label">禁止的游戏ID列表（用逗号分隔）</label>
+            <label class="form-label">禁止的游戏名称列表（用逗号分隔）</label>
             <input 
-              :value="Array.isArray(ruleForm.ruleValue.blockedGameIds) ? ruleForm.ruleValue.blockedGameIds.join(',') : ''"
+              :value="Array.isArray(ruleForm.ruleValue.blockedGameNames) ? ruleForm.ruleValue.blockedGameNames.join(',') : (typeof ruleForm.ruleValue.blockedGameNames === 'string' ? ruleForm.ruleValue.blockedGameNames : '')"
               type="text"
               class="form-input"
-              placeholder="例如: 1,2,3"
+              placeholder="例如: 游戏1,游戏2,游戏3"
               @input="(e) => updateGameRestriction(e.target.value)"
             />
+            <p class="form-hint">请输入游戏名称，多个游戏用逗号分隔</p>
           </div>
 
           <!-- 年龄限制 -->
@@ -421,7 +403,6 @@ const getRuleTypeLabel = (ruleType) => {
   const labels = {
     'playtime_daily_limit': '每日时长限制',
     'playtime_curfew': '宵禁时间',
-    'spending_limit': '消费限制',
     'game_restriction': '游戏限制',
     'age_restriction': '年龄限制'
   }
@@ -500,6 +481,18 @@ const loadCurrentRole = () => {
 // 切换用户角色
 const handleToggleRole = async () => {
   if (switchingRole.value) return
+
+  // 如果已存在监管关系，则禁止切换角色
+  // 1) 家长已有孩子：不能切回普通用户
+  if (isParent.value && children.value && children.value.length > 0) {
+    alert('当前账号已建立家长监管关系（存在被监管的子账户），无法切换角色。请先解除所有监管关系后再切换。')
+    return
+  }
+  // 2) 当前账号有家长：不能切到家长角色（避免出现同时被监管又监管他人等混乱状态）
+  if (!isParent.value && parentInfo.value) {
+    alert('当前账号已被家长监管，无法切换为家长角色。')
+    return
+  }
 
   const newRole = !isParent.value ? 'parent' : 'user'
   const confirmMessage = newRole === 'parent' 
@@ -633,9 +626,16 @@ const openRuleDialog = (child) => {
 const openEditRuleDialog = (child, rule) => {
   selectedChild.value = child
   editingRule.value = rule
+  let ruleValue = rule.ruleValue ? JSON.parse(JSON.stringify(rule.ruleValue)) : {}
+  
+  // 兼容旧数据：如果存在 blockedGameIds，转换为 blockedGameNames（显示为占位符）
+  if (rule.ruleType === 'game_restriction' && ruleValue.blockedGameIds && !ruleValue.blockedGameNames) {
+    ruleValue.blockedGameNames = [] // 旧数据无法直接转换游戏名，清空让用户重新输入
+  }
+  
   ruleForm.value = {
     ruleType: rule.ruleType,
-    ruleValue: rule.ruleValue ? JSON.parse(JSON.stringify(rule.ruleValue)) : {},
+    ruleValue: ruleValue,
     isActive: rule.isActive
   }
   showRuleDialog.value = true
@@ -645,16 +645,16 @@ const openEditRuleDialog = (child, rule) => {
 const handleSaveRule = async () => {
   if (!selectedChild.value) return
 
-  // 处理游戏限制：确保 blockedGameIds 是数组
+  // 处理游戏限制：确保 blockedGameNames 是数组
   let ruleValue = { ...ruleForm.value.ruleValue }
   if (ruleForm.value.ruleType === 'game_restriction') {
-    if (typeof ruleValue.blockedGameIds === 'string') {
-      ruleValue.blockedGameIds = ruleValue.blockedGameIds.split(',')
-        .map(id => parseInt(id.trim()))
-        .filter(id => !isNaN(id))
+    if (typeof ruleValue.blockedGameNames === 'string') {
+      ruleValue.blockedGameNames = ruleValue.blockedGameNames.split(',')
+        .map(name => name.trim())
+        .filter(name => name.length > 0)
     }
-    if (!Array.isArray(ruleValue.blockedGameIds)) {
-      ruleValue.blockedGameIds = []
+    if (!Array.isArray(ruleValue.blockedGameNames)) {
+      ruleValue.blockedGameNames = []
     }
   }
 
@@ -724,15 +724,9 @@ const updateRuleValue = () => {
         endTime: '07:00'
       }
       break
-    case 'spending_limit':
-      ruleForm.value.ruleValue = {
-        limitAmount: 100,
-        period: 'monthly'
-      }
-      break
     case 'game_restriction':
       ruleForm.value.ruleValue = {
-        blockedGameIds: []
+        blockedGameNames: []
       }
       break
     case 'age_restriction':
@@ -748,9 +742,9 @@ const updateRuleValue = () => {
 // 更新游戏限制（将字符串转换为数组）
 const updateGameRestriction = (value) => {
   if (typeof value === 'string') {
-    ruleForm.value.ruleValue.blockedGameIds = value.split(',')
-      .map(id => parseInt(id.trim()))
-      .filter(id => !isNaN(id))
+    ruleForm.value.ruleValue.blockedGameNames = value.split(',')
+      .map(name => name.trim())
+      .filter(name => name.length > 0)
   }
 }
 
