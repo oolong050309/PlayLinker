@@ -1,142 +1,128 @@
 <template>
-  <div class="flex-1 overflow-y-auto p-8">
-    
-    <div class="mb-8">
-      <div class="relative max-w-2xl">
-        <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500"></i>
+  <div class="discover-container">
+    <!-- 搜索和分类区域 -->
+    <div class="search-section">
+      <div class="search-wrapper">
+        <Search class="search-icon" size="20" />
         <input 
           v-model="searchQuery"
           @keyup.enter="handleSearch"
           type="text" 
           placeholder="搜索游戏、题材或平台..." 
-          class="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
-        >
+          class="search-input"
+        />
       </div>
-      <div class="flex gap-2 mt-4 overflow-x-auto scroll-hide">
+      
+      <div class="categories-wrapper">
         <button 
           v-for="cat in categories" 
           :key="cat"
           @click="activeCategory = cat"
-          class="px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
-          :class="activeCategory === cat ? 'bg-indigo-600 text-white' : 'bg-white/5 text-zinc-400 hover:text-white'"
+          class="category-btn"
+          :class="{ active: activeCategory === cat }"
         >
           {{ cat }}
         </button>
       </div>
     </div>
 
-    <section class="mb-12">
-      <div class="flex items-center justify-between mb-6">
-        <div>
-          <h2 class="text-2xl font-bold mb-1">为你推荐</h2>
-          <p class="text-sm text-zinc-400">基于你的游戏偏好和游玩时长</p>
+    <!-- 为你推荐（显示AI智能探索内容） -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="section-header-left">
+          <div class="ai-icon-wrapper-small">
+            <Sparkles class="ai-icon-small" size="20" />
+          </div>
+          <div>
+            <h2 class="section-title">{{ exploreTitle }}</h2>
+            <p class="section-subtitle">发现更多符合您口味的宝藏游戏</p>
+          </div>
         </div>
-        <button @click="loadRecommendations" class="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-2">
-          刷新 <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        <button @click="loadRecommendations" class="refresh-btn">
+          <RefreshCw class="icon" size="16" />
+          刷新
         </button>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div v-if="aiRecommendationsLoading" class="loading-small">
+        <div class="loading-spinner-small"></div>
+        <span>加载中...</span>
+      </div>
+
+      <div v-else-if="aiRecommendations.length === 0" class="empty-state">
+        <Sparkles class="empty-icon" size="48" />
+        <p>暂无 AI 探索推荐</p>
+      </div>
+
+      <div v-else class="recommendations-grid">
         <div 
-          v-for="game in recommendations" 
-          :key="game.recommendationId"
-          class="glass-panel rounded-2xl overflow-hidden group cursor-pointer hover:border-indigo-500/50 transition-all block relative"
-          @click="$router.push({ name: 'GameDetail', params: { id: game.gameId } })"
+          v-for="(item, index) in aiRecommendations" 
+          :key="item.gameId"
+          class="game-card ai-game-card"
+          :style="{ animationDelay: `${index * 0.1}s` }"
+          @click="$router.push({ name: 'GameDetail', params: { id: item.gameId } })"
         >
-          <div class="relative h-64 overflow-hidden">
-            <img :src="game.headerImage" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
-            <div class="absolute top-3 right-3 px-2 py-1 rounded-lg bg-emerald-500 text-white text-xs font-bold">
-              {{ Math.round(game.score * 100) }}% 匹配
-            </div>
-            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
-          </div>
-          <div class="p-4">
-            <div class="flex flex-wrap gap-2 mb-2">
-              <span v-for="tag in (game.tags || []).slice(0, 2)" :key="tag" class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 text-xs font-medium">{{ tag }}</span>
-            </div>
-            <h3 class="font-bold text-lg mb-1 truncate">{{ game.gameName }}</h3>
-            <p class="text-sm text-zinc-400 mb-3 line-clamp-2">{{ game.reason }}</p>
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-1 text-amber-400">
-                <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-                <span class="text-sm font-bold">{{ game.reviewScore }}</span>
+          <div class="game-card-image">
+            <img :src="item.headerImage || '/placeholder-game.png'" :alt="item.gameName" @error="handleImageError" />
+            <div class="game-card-overlay">
+              <div class="ai-badge">
+                <Sparkles class="ai-badge-icon" size="12" />
+                <span>AI 推荐</span>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="mb-12" v-if="aiRecommendations.length > 0">
-      <div class="glass-panel p-6 rounded-2xl border-2 border-indigo-500/30">
-        <div class="flex items-start gap-4 mb-4">
-          <div class="p-3 bg-indigo-500/20 rounded-xl">
-            <i data-lucide="sparkles" class="w-6 h-6 text-indigo-400"></i>
-          </div>
-          <div class="flex-1">
-            <h3 class="text-lg font-bold mb-2">{{ exploreTitle }}</h3>
-            <p class="text-sm text-zinc-400 mb-4">发现更多符合您口味的宝藏游戏：</p>
-            
-            <div class="grid grid-cols-1 gap-4">
-              <div 
-                v-for="item in aiRecommendations" 
-                :key="item.gameId"
-                class="flex flex-col md:flex-row items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
-                @click="$router.push({ name: 'GameDetail', params: { id: item.gameId } })"
+          <div class="game-card-content">
+            <div class="game-tags">
+              <span 
+                v-for="feature in (item.uniqueFeatures || []).slice(0, 2)" 
+                :key="feature"
+                class="game-tag"
               >
-                <img :src="item.headerImage" class="w-48 h-28 rounded-lg object-cover flex-shrink-0 bg-zinc-800">
-                
-                <div class="flex-1 w-full text-center md:text-left">
-                  <h4 class="font-bold text-lg mb-1">{{ item.gameName }}</h4>
-                  <div class="flex gap-2 mb-2 justify-center md:justify-start">
-                     <span 
-                       v-for="feature in (item.uniqueFeatures || []).slice(0, 3)" 
-                       :key="feature"
-                       class="px-2 py-0.5 rounded bg-white/10 text-zinc-400 text-xs"
-                     >
-                       {{ feature }}
-                     </span>
-                  </div>
-                  <p class="text-xs text-zinc-500 line-clamp-1">{{ item.whyExplore }}</p>
-                </div>
-                
-                <div class="flex gap-2">
-                  <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium whitespace-nowrap">
-                    查看详情
-                  </button>
-                </div>
+                {{ feature }}
+              </span>
+            </div>
+            <h3 class="game-card-title">{{ item.gameName }}</h3>
+            <p class="game-card-reason">{{ item.whyExplore || 'AI 智能推荐' }}</p>
+            <div class="game-card-footer">
+              <div class="game-rating" v-if="item.reviewScore">
+                <Star class="star-icon" size="14" />
+                <span>{{ item.reviewScore }}</span>
               </div>
             </div>
-            
           </div>
         </div>
       </div>
     </section>
-    
-    <div v-if="aiRecommendations.length === 0" class="text-center text-zinc-500 py-4">
-       [调试] 暂无探索推荐数据，请查看控制台日志。
-    </div>
-
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { recommendationApi } from '@/api/recommendation'
-import { createIcons, icons } from 'lucide'
+import { Search, RefreshCw, Gamepad2, Star, Sparkles } from 'lucide-vue-next'
 
 const searchQuery = ref('')
 const activeCategory = ref('全部')
 const categories = ['全部', 'RPG', '动作', 'FPS', '策略', '独立游戏']
 const recommendations = ref([])
+const recommendationsLoading = ref(false)
 const aiRecommendations = ref([])
+const aiRecommendationsLoading = ref(false)
 const exploreTitle = ref('AI 智能探索')
 
 const handleSearch = () => {
   console.log('Search:', searchQuery.value)
+  // TODO: 实现搜索功能
+}
+
+const handleImageError = (event) => {
+  event.target.src = '/placeholder-game.png'
 }
 
 const loadRecommendations = async () => {
+  recommendationsLoading.value = true
+  aiRecommendationsLoading.value = true
+  
   console.log('[Frontend] Starting loadRecommendations...')
   try {
     // 1. 加载常规推荐
@@ -162,20 +148,392 @@ const loadRecommendations = async () => {
     }
   } catch (error) {
     console.error('[Frontend] Failed to load recommendations:', error)
+  } finally {
+    recommendationsLoading.value = false
+    aiRecommendationsLoading.value = false
   }
 }
 
 onMounted(() => {
   loadRecommendations()
-  nextTick(() => createIcons({ icons }))
 })
 </script>
 
 <style scoped>
-.glass-panel {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  backdrop-filter: blur(10px);
+.discover-container {
+  min-height: 100vh;
+  background: #0f0f13;
+  color: #f8fafc;
+  padding: 24px;
 }
-.scroll-hide::-webkit-scrollbar { display: none; }
+
+/* 搜索区域 */
+.search-section {
+  margin-bottom: 32px;
+}
+
+.search-wrapper {
+  position: relative;
+  max-width: 800px;
+  margin-bottom: 16px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  background: rgba(20, 20, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px 16px 14px 48px;
+  color: #f8fafc;
+  font-size: 15px;
+  transition: all 0.2s;
+  backdrop-filter: blur(20px);
+}
+
+.search-input::placeholder {
+  color: #64748b;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(20, 20, 23, 0.9);
+}
+
+.categories-wrapper {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.categories-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.category-btn {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background: rgba(20, 20, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  backdrop-filter: blur(20px);
+}
+
+.category-btn:hover {
+  background: rgba(30, 30, 35, 0.9);
+  color: #f8fafc;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.category-btn.active {
+  background: #8b5cf6;
+  border-color: #8b5cf6;
+  color: white;
+}
+
+/* 卡片样式 */
+.section-card {
+  background: rgba(20, 20, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(20px);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.section-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-icon-wrapper-small {
+  padding: 8px;
+  background: rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.ai-icon-small {
+  color: #8b5cf6;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #f8fafc;
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(20, 20, 23, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: rgba(30, 30, 35, 0.9);
+  color: #8b5cf6;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.refresh-btn .icon {
+  color: #8b5cf6;
+}
+
+/* 推荐游戏网格 */
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.game-card {
+  background: rgba(15, 15, 19, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s;
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.game-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.2);
+}
+
+.game-card-image {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+}
+
+.game-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s;
+}
+
+.game-card:hover .game-card-image img {
+  transform: scale(1.1);
+}
+
+.game-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 12px;
+}
+
+.match-badge {
+  padding: 4px 12px;
+  background: rgba(16, 185, 129, 0.9);
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  background: rgba(139, 92, 246, 0.9);
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-badge-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.ai-game-card {
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.ai-game-card:hover {
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.3);
+}
+
+.game-card-content {
+  padding: 16px;
+}
+
+.game-tags {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.game-tag {
+  padding: 4px 10px;
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.game-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #f8fafc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-card-reason {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.game-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.game-rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.star-icon {
+  fill: currentColor;
+}
+
+
+/* 加载和空状态 */
+.loading-small {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: #94a3b8;
+  justify-content: center;
+}
+
+.loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(139, 92, 246, 0.2);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #64748b;
+}
+
+.empty-icon {
+  margin-bottom: 16px;
+  opacity: 0.3;
+  color: #64748b;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .recommendations-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .discover-container {
+    padding: 16px;
+  }
+  
+  .recommendations-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .search-wrapper {
+    max-width: 100%;
+  }
+  
+  .section-card {
+    padding: 16px;
+  }
+}
 </style>
