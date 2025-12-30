@@ -85,14 +85,14 @@ public class PricesController : ControllerBase
 
         try
         {
-            var ids = game_ids.Split(',').Select(long.Parse).ToList();
-            
+        var ids = game_ids.Split(',').Select(long.Parse).ToList();
+        
             // 获取所有相关游戏的价格历史记录（包括关联数据）
             var allPrices = await _context.PriceHistories
-                .Where(p => ids.Contains(p.GameId))
-                .Include(p => p.Game)
-                .Include(p => p.Platform)
-                .ToListAsync();
+            .Where(p => ids.Contains(p.GameId))
+            .Include(p => p.Game)
+            .Include(p => p.Platform)
+            .ToListAsync();
 
             // 按游戏ID分组，获取每个游戏的最新价格记录
             var prices = allPrices
@@ -100,8 +100,8 @@ public class PricesController : ControllerBase
                 .Select(g => g.OrderByDescending(p => p.RecordDate).First())
                 .ToList();
 
-            var result = prices.Select(p => new
-            {
+        var result = prices.Select(p => new
+        {
                 gameId = p.GameId,
                 GameName = p.Game?.Name ?? "未知游戏",
                 Platform = p.Platform?.PlatformName ?? "未知平台",
@@ -110,7 +110,7 @@ public class PricesController : ControllerBase
                 discount = p.DiscountRate,
                 discountRate = p.DiscountRate, // 兼容字段
                 isDiscount = p.IsDiscount,
-                LastUpdated = p.RecordDate
+            LastUpdated = p.RecordDate
             }).ToList();
 
             return Ok(ApiResponse<object>.SuccessResponse(new { prices = result, totalCount = result.Count }));
@@ -184,12 +184,38 @@ public class PricesController : ControllerBase
         {
             var userId = GetCurrentUserId();
 
-            var exists = await _context.PriceAlertSubscriptions
-                .AnyAsync(s => s.UserId == userId && s.GameId == request.GameId && s.PlatformId == request.PlatformId);
+            // 检查是否已存在订阅（包括非活跃的订阅）
+            var existingSubscription = await _context.PriceAlertSubscriptions
+                .FirstOrDefaultAsync(s => s.UserId == userId && s.GameId == request.GameId && s.PlatformId == request.PlatformId);
 
-            if (exists)
+            if (existingSubscription != null)
             {
-                return Conflict(ApiResponse<object>.ErrorResponse("ERR_DUPLICATE", "该游戏已在监控列表中"));
+                // 如果订阅已存在，更新它而不是创建新的
+                existingSubscription.TargetPrice = request.TargetPrice;
+                existingSubscription.TargetDiscount = request.TargetDiscount;
+                existingSubscription.IsActive = true; // 重新激活订阅
+                existingSubscription.UpdatedAt = DateTime.UtcNow;
+
+                _context.PriceAlertSubscriptions.Update(existingSubscription);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("用户 {UserId} 重新激活了价格监控: GameId={GameId}, PlatformId={PlatformId}, SubscriptionId={SubscriptionId}",
+                    userId, request.GameId, request.PlatformId, existingSubscription.SubscriptionId);
+
+                // 立即检查当前价格是否已经满足提醒条件
+                try
+                {
+                    await CheckAndNotifyImmediatelyAsync(existingSubscription, userId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "立即检查价格提醒条件时发生错误，但不影响订阅更新");
+                }
+
+                return Ok(ApiResponse<object>.SuccessResponse(new { 
+                    subscriptionId = existingSubscription.SubscriptionId,
+                    gameId = existingSubscription.GameId 
+                }, "价格跟踪已重新激活"));
             }
 
             var sub = new PriceAlertSubscription
@@ -319,11 +345,23 @@ public class PricesController : ControllerBase
             // 提醒后将订阅设为非active（仅针对目标价格和目标折扣提醒）
             if (alertType == "target_price" || alertType == "target_discount")
             {
-                subscription.IsActive = false;
-                _context.PriceAlertSubscriptions.Update(subscription);
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("已将订阅 {SubscriptionId} 设为非active: GameId={GameId}, UserId={UserId}",
-                    subscription.SubscriptionId, subscription.GameId, userId);
+                // 重新从数据库加载订阅以确保正确追踪和更新
+                var updatedSubscription = await _context.PriceAlertSubscriptions
+                    .FindAsync(new object[] { subscription.SubscriptionId });
+                
+                if (updatedSubscription != null)
+                {
+                    updatedSubscription.IsActive = false;
+                    updatedSubscription.UpdatedAt = DateTime.UtcNow;
+                    _context.PriceAlertSubscriptions.Update(updatedSubscription);
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("已将订阅 {SubscriptionId} 设为非active: GameId={GameId}, UserId={UserId}",
+                        updatedSubscription.SubscriptionId, updatedSubscription.GameId, userId);
+                }
+                else
+                {
+                    _logger.LogWarning("无法找到订阅 {SubscriptionId} 以更新状态", subscription.SubscriptionId);
+                }
             }
 
             // 发送邮件提醒
@@ -363,7 +401,7 @@ public class PricesController : ControllerBase
     }
 
     /// <summary>
-    /// 获取当前用户的价格监控订阅列表
+    /// 获取当前用户的价格监控订阅列表（包括非活跃的订阅）
     /// </summary>
     [HttpGet("subscriptions")]
     [Authorize]
@@ -373,8 +411,9 @@ public class PricesController : ControllerBase
         {
             var userId = GetCurrentUserId();
 
+            // 返回所有订阅（包括非活跃的），以便前端可以检测并更新已存在的订阅
             var subscriptions = await _context.PriceAlertSubscriptions
-                .Where(s => s.UserId == userId && s.IsActive == true)
+                .Where(s => s.UserId == userId)
                 .Include(s => s.Game)
                 .Include(s => s.Platform)
                 .OrderByDescending(s => s.CreatedAt)
@@ -402,11 +441,13 @@ public class PricesController : ControllerBase
                 platformName = s.Platform.PlatformName ?? "",
                 targetPrice = s.TargetPrice,
                 targetDiscount = s.TargetDiscount,
+                isActive = s.IsActive,
                 currentPrice = latestPrices.ContainsKey(s.GameId) ? latestPrices[s.GameId].CurrentPrice : (decimal?)null,
                 originalPrice = latestPrices.ContainsKey(s.GameId) ? latestPrices[s.GameId].OriginalPrice : (decimal?)null,
                 discountRate = latestPrices.ContainsKey(s.GameId) ? latestPrices[s.GameId].DiscountRate : (int?)null,
                 isDiscount = latestPrices.ContainsKey(s.GameId) ? latestPrices[s.GameId].IsDiscount : (bool?)null,
-                createdAt = s.CreatedAt
+                createdAt = s.CreatedAt,
+                updatedAt = s.UpdatedAt
             }).ToList();
 
             return Ok(ApiResponse<object>.SuccessResponse(new { subscriptions = result, totalCount = result.Count }));
@@ -441,10 +482,19 @@ public class PricesController : ControllerBase
                 return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "订阅不存在"));
             }
 
+            // 更新订阅信息
             if (request.TargetPrice.HasValue)
                 subscription.TargetPrice = request.TargetPrice;
+            else
+                subscription.TargetPrice = null;
+            
             if (request.TargetDiscount.HasValue)
                 subscription.TargetDiscount = request.TargetDiscount;
+            else
+                subscription.TargetDiscount = null;
+            
+            // 如果更新了目标价格或折扣，重新激活订阅
+            subscription.IsActive = true;
             subscription.UpdatedAt = DateTime.UtcNow;
 
             _context.PriceAlertSubscriptions.Update(subscription);
@@ -452,6 +502,16 @@ public class PricesController : ControllerBase
 
             _logger.LogInformation("用户 {UserId} 更新了价格监控订阅: SubscriptionId={SubscriptionId}",
                 userId, id);
+
+            // 立即检查当前价格是否已经满足提醒条件
+            try
+            {
+                await CheckAndNotifyImmediatelyAsync(subscription, userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "立即检查价格提醒条件时发生错误，但不影响订阅更新");
+            }
 
             return Ok(ApiResponse<object>.SuccessResponse(new { }, "订阅已更新"));
         }
