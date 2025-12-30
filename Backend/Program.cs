@@ -81,7 +81,10 @@ builder.Services.AddHttpClient<PriceMonitoringService>();
 builder.Services.AddHostedService<PriceMonitoringService>();
 
 // --- 家长监管监控后台服务 ---
-builder.Services.AddHostedService<ParentalMonitoringService>();
+// HostedService 只会以 IHostedService 注册，无法通过 GetRequiredService<ParentalMonitoringService>() 解析。
+// 因此需要额外注册为可注入服务。
+builder.Services.AddSingleton<ParentalMonitoringService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ParentalMonitoringService>());
 
 // 4. 添加控制器
 builder.Services.AddControllers();

@@ -176,11 +176,16 @@ public class ParentalMonitoringService : BackgroundService
             var now = DateTime.UtcNow;
             var today = now.Date;
 
+            _logger.LogDebug("检查规则 {RuleId} (类型: {RuleType}, 子账户: {ChildUserId}), 规则值: {RuleValue}", 
+                rule.RuleId, rule.RuleType, rule.ChildUserId, rule.RuleValue);
+
             // 检查今天是否已经发送过该规则的提醒（避免重复通知）
+            // 只查询需要的字段，避免查询不存在的 severity 列
             var todayAlert = await context.ParentalAlertLogs
                 .Where(l => l.RuleId == rule.RuleId
                     && l.AlertTime.HasValue
                     && l.AlertTime.Value.Date == today)
+                .Select(l => new { l.AlertId, l.RuleId, l.AlertTime })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (todayAlert != null)
@@ -297,8 +302,9 @@ public class ParentalMonitoringService : BackgroundService
                     ChildUserId = rule.ChildUserId,
                     ViolationDetails = JsonSerializer.Serialize(violationDetails),
                     AlertTime = DateTime.UtcNow,
-                    NotificationId = notification.NotificationId,
-                    Severity = "warning"
+                    NotificationId = notification.NotificationId
+                    // 注意：Severity 字段在数据库表中不存在，已标记为 NotMapped
+                    // Severity = "warning"
                 };
 
                 context.ParentalAlertLogs.Add(alertLog);
@@ -558,6 +564,8 @@ public class ParentalMonitoringService : BackgroundService
                         }
                     }
                 }
+                _logger.LogInformation("规则 {RuleId} 使用游戏名称限制，共 {Count} 个被限制的游戏: {Games}", 
+                    rule.RuleId, blockedGameNames.Count, string.Join(", ", blockedGameNames));
             }
             else if (ruleValue.TryGetProperty("blockedGameIds", out var blockedGameIdsProp))
             {
@@ -582,10 +590,12 @@ public class ParentalMonitoringService : BackgroundService
 
             if (useGameNames && blockedGameNames.Count == 0)
             {
+                _logger.LogDebug("规则 {RuleId} 没有限制的游戏名称", rule.RuleId);
                 return false; // 没有限制的游戏
             }
             if (!useGameNames && blockedGameIds.Count == 0)
             {
+                _logger.LogDebug("规则 {RuleId} 没有限制的游戏ID", rule.RuleId);
                 return false; // 没有限制的游戏
             }
 
@@ -594,6 +604,9 @@ public class ParentalMonitoringService : BackgroundService
                 .Where(upb => upb.UserId == rule.ChildUserId && upb.BindingStatus == true)
                 .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
                 .ToListAsync(cancellationToken);
+
+            _logger.LogDebug("规则 {RuleId} 检查子账户 {ChildUserId}，找到 {Count} 个平台绑定", 
+                rule.RuleId, rule.ChildUserId, platformBindings.Count);
 
             if (platformBindings.Count == 0)
             {
@@ -618,8 +631,12 @@ public class ParentalMonitoringService : BackgroundService
             // 去重
             childGameIds = childGameIds.Distinct().ToList();
 
+            _logger.LogDebug("规则 {RuleId} 子账户 {ChildUserId} 共有 {Count} 个游戏", 
+                rule.RuleId, rule.ChildUserId, childGameIds.Count);
+
             if (childGameIds.Count == 0)
             {
+                _logger.LogDebug("子账户 {ChildUserId} 没有游戏", rule.ChildUserId);
                 return false; // 孩子没有游戏
             }
 
@@ -631,6 +648,9 @@ public class ParentalMonitoringService : BackgroundService
 
             var childGameNames = childGames.Select(g => g.Name).ToList();
 
+            _logger.LogDebug("规则 {RuleId} 子账户游戏名称列表（前10个）: {Games}", 
+                rule.RuleId, string.Join(", ", childGameNames.Take(10)));
+
             if (useGameNames)
             {
                 // 使用游戏名称匹配（不区分大小写）
@@ -638,6 +658,9 @@ public class ParentalMonitoringService : BackgroundService
                     .Where(name => blockedGameNames.Any(blocked => 
                         string.Equals(name, blocked, StringComparison.OrdinalIgnoreCase)))
                     .ToList();
+
+                _logger.LogInformation("规则 {RuleId} 游戏名称匹配结果: 被限制游戏={BlockedCount}, 子账户游戏={ChildCount}, 违规游戏={ViolatingCount}", 
+                    rule.RuleId, blockedGameNames.Count, childGameNames.Count, violatingGameNames.Count);
 
                 if (violatingGameNames.Count > 0)
                 {
@@ -652,7 +675,15 @@ public class ParentalMonitoringService : BackgroundService
                     violationDetails["totalBlockedGames"] = blockedGameNames.Count;
                     violationDetails["violatingGamesCount"] = violatingGameNames.Count;
 
+                    _logger.LogInformation("规则 {RuleId} 检测到违规: 违规游戏={Games}", 
+                        rule.RuleId, string.Join(", ", violatingGameNames));
+
                     return true;
+                }
+                else
+                {
+                    _logger.LogDebug("规则 {RuleId} 未检测到违规: 被限制游戏={BlockedGames}, 子账户游戏={ChildGames}", 
+                        rule.RuleId, string.Join(", ", blockedGameNames), string.Join(", ", childGameNames.Take(5)));
                 }
             }
             else

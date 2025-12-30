@@ -35,7 +35,9 @@ public partial class ParentalAlertLog
     [Column("notification_id")]
     public long? NotificationId { get; set; }
 
-    [Column("severity", TypeName = "enum('info','warning','alert')")]
+    // 注意：数据库表中没有 severity 列，因此标记为 NotMapped
+    // 如果需要使用此字段，请先创建数据库迁移添加该列
+    [NotMapped]
     public string? Severity { get; set; }
 
     [ForeignKey("ChildUserId")]
