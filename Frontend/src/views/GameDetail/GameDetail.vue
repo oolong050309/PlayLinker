@@ -92,13 +92,19 @@
             </div>
           </section>
 
-          <!-- 基本信息：发行日期 / 开发商 / 发行商 / 分类 / 类型 / 语言 -->
+          <!-- 基本信息：发行日期 / 开发商 / 发行商 / 分类 / 类型 / 语言 / 年龄要求 -->
           <section class="section-card">
             <h2 class="section-title">基本信息</h2>
             <div class="basic-info-grid">
               <div class="basic-info-item" v-if="game.releaseDate">
                 <div class="basic-label">发行日期</div>
                 <div class="basic-value">{{ game.releaseDate }}</div>
+              </div>
+              <div class="basic-info-item" v-if="game.requireAge !== null && game.requireAge !== undefined">
+                <div class="basic-label">年龄要求</div>
+                <div class="basic-value">
+                  {{ game.requireAge === 0 ? '全年龄' : `${game.requireAge}+` }}
+                </div>
               </div>
               <div class="basic-info-item" v-if="game.developers && game.developers.length">
                 <div class="basic-label">开发商</div>
@@ -214,7 +220,7 @@
                     <span class="price-value" v-if="priceInfo.currentPrice !== null && priceInfo.currentPrice > 0">
                       ¥{{ priceInfo.currentPrice.toFixed(2) }}
                     </span>
-                    <span class="price-value" v-else-if="priceInfo.currentPrice === 0">免费</span>
+                    <span class="price-value" v-else-if="priceInfo.currentPrice === 0">未知</span>
                     <span class="price-value" v-else>暂无数据</span>
                     <span v-if="priceInfo.isDiscount && priceInfo.discountRate > 0" class="discount-badge">
                       -{{ priceInfo.discountRate }}%
@@ -497,6 +503,7 @@ const loadGameDetail = async () => {
             genre: '',
             isFree: null,
             releaseDate: null,
+            requireAge: null,
             shortDescription: '',
             detailedDescription: '',
             requirements: null,
@@ -551,6 +558,7 @@ const loadGameDetail = async () => {
           genre: genreNames.join(' / '),
           isFree: detail.isFree ?? detail.IsFree ?? null,
           releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? '',
+          requireAge: detail.requireAge ?? detail.RequireAge ?? null,
           shortDescription: detail.shortDescription ?? detail.ShortDescription,
           detailedDescription: detail.detailedDescription ?? detail.DetailedDescription,
           requirements: detail.requirements ?? detail.Requirements,
@@ -580,6 +588,7 @@ const loadGameDetail = async () => {
           genre: genreNames.join(' / ') || game.value.genre,
           isFree: detail.isFree ?? detail.IsFree ?? game.value.isFree,
           releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? game.value.releaseDate,
+          requireAge: detail.requireAge ?? detail.RequireAge ?? game.value.requireAge,
           shortDescription: detail.shortDescription ?? detail.ShortDescription ?? game.value.shortDescription,
           detailedDescription: detail.detailedDescription ?? detail.DetailedDescription ?? game.value.detailedDescription,
           requirements: detail.requirements ?? detail.Requirements ?? game.value.requirements,

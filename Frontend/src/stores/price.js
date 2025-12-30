@@ -55,7 +55,7 @@ export const usePriceStore = defineStore('price', () => {
               })
             } else {
               wishlist.value = items
-            }
+      }
           } catch (error) {
             console.error('获取价格信息失败:', error)
             wishlist.value = items
@@ -77,8 +77,8 @@ export const usePriceStore = defineStore('price', () => {
 
   const fetchAlerts = async () => {
     try {
-      const res = await priceApi.getSubscriptions()
-      if (res.success) {
+    const res = await priceApi.getSubscriptions()
+    if (res.success) {
         // 适配后端返回的数据结构
         alerts.value = res.data.subscriptions || res.data.items || []
       }

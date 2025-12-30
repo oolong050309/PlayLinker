@@ -127,8 +127,10 @@ public class PriceMonitoringService : BackgroundService
             int failCount = 0;
             int skipCount = 0;
 
-            // 批量处理，每次处理 10 个游戏（避免 API 限流）
-            const int batchSize = 10;
+            // 批量处理，每次处理 5 个游戏（减小批次大小，避免 API 限流）
+            const int batchSize = 5;
+            bool rateLimited = false;
+            
             for (int i = 0; i < steamGames.Count; i += batchSize)
             {
                 var batch = steamGames.Skip(i).Take(batchSize).ToList();
@@ -164,13 +166,23 @@ public class PriceMonitoringService : BackgroundService
                             continue;
                         }
 
-                        // 调用 Steam API 获取价格
-                        var priceData = await GetSteamPriceAsync(httpClient, appId, cancellationToken);
+                        // 如果遇到速率限制，等待更长时间
+                        if (rateLimited)
+                        {
+                            _logger.LogInformation("检测到速率限制，等待 60 秒后继续...");
+                            await Task.Delay(60000, cancellationToken);
+                            rateLimited = false;
+                        }
+
+                        // 调用 Steam API 获取价格（带重试机制）
+                        var priceData = await GetSteamPriceAsyncWithRetry(httpClient, appId, cancellationToken);
 
                         if (priceData == null)
                         {
-                            _logger.LogWarning("无法获取游戏 {GameId} (AppID={AppId}) 的价格信息", 
+                            _logger.LogWarning("无法获取游戏 {GameId} (AppID={AppId}) 的价格信息，可能遇到速率限制", 
                                 gamePlatform.GameId, appId);
+                            // 标记为速率限制，后续请求将等待更长时间
+                            rateLimited = true;
                             failCount++;
                             continue;
                         }
@@ -198,8 +210,8 @@ public class PriceMonitoringService : BackgroundService
                         // 检查价格变化并创建通知
                         await CheckPriceChangeAndNotifyAsync(context, gamePlatform.GameId, priceHistory, cancellationToken);
 
-                        // 避免请求过快，每个请求之间延迟 200ms
-                        await Task.Delay(200, cancellationToken);
+                        // 避免请求过快，每个请求之间延迟 1 秒（增加延迟以降低速率限制风险）
+                        await Task.Delay(1000, cancellationToken);
                     }
                     catch (Exception ex)
                     {
@@ -209,10 +221,10 @@ public class PriceMonitoringService : BackgroundService
                     }
                 }
 
-                // 批次之间延迟 1 秒
+                // 批次之间延迟 5 秒（增加延迟以避免速率限制）
                 if (i + batchSize < steamGames.Count)
                 {
-                    await Task.Delay(1000, cancellationToken);
+                    await Task.Delay(5000, cancellationToken);
                 }
             }
 
@@ -246,20 +258,92 @@ public class PriceMonitoringService : BackgroundService
     }
 
     /// <summary>
+    /// 从 Steam API 获取游戏价格（带重试机制）
+    /// </summary>
+    private async Task<SteamPriceInfo?> GetSteamPriceAsyncWithRetry(HttpClient httpClient, int appId, CancellationToken cancellationToken, int maxRetries = 2)
+    {
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            try
+            {
+                var (result, wasRateLimited) = await GetSteamPriceAsync(httpClient, appId, cancellationToken, attempt);
+                
+                // 如果成功获取数据，直接返回
+                if (result != null)
+                {
+                    return result;
+                }
+                
+                // 如果是速率限制且不是最后一次尝试，等待后重试
+                if (wasRateLimited && attempt < maxRetries - 1)
+                {
+                    var delay = (int)Math.Pow(2, attempt + 1) * 1000; // 指数退避：2s, 4s
+                    _logger.LogInformation("Steam API 速率限制，{Delay}ms 后重试 (尝试 {Attempt}/{MaxRetries})", delay, attempt + 1, maxRetries);
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+                
+                // 如果不是速率限制或已经是最后一次尝试，返回 null
+                if (attempt == maxRetries - 1)
+                {
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (attempt == maxRetries - 1)
+                {
+                    _logger.LogError(ex, "获取 Steam 价格失败，已重试 {MaxRetries} 次: AppID={AppId}", maxRetries, appId);
+                    return null;
+                }
+                var delay = (int)Math.Pow(2, attempt + 1) * 1000;
+                await Task.Delay(delay, cancellationToken);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
     /// 从 Steam API 获取游戏价格
     /// </summary>
-    private async Task<SteamPriceInfo?> GetSteamPriceAsync(HttpClient httpClient, int appId, CancellationToken cancellationToken)
+    private async Task<(SteamPriceInfo? result, bool wasRateLimited)> GetSteamPriceAsync(HttpClient httpClient, int appId, CancellationToken cancellationToken, int attempt = 0)
     {
         try
         {
             var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=schinese&cc=cn";
             var response = await httpClient.GetAsync(url, cancellationToken);
 
+            // 处理速率限制错误 (429)
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            {
+                _logger.LogWarning("Steam API 速率限制 (429): AppID={AppId}, 尝试={Attempt}", appId, attempt);
+                
+                // 检查响应头中是否有 Retry-After
+                int retryAfterSeconds = 60; // 默认等待 60 秒
+                if (response.Headers.TryGetValues("Retry-After", out var retryAfterValues))
+                {
+                    if (int.TryParse(retryAfterValues.FirstOrDefault(), out int parsedRetryAfter))
+                    {
+                        retryAfterSeconds = parsedRetryAfter;
+                        _logger.LogInformation("Steam API 建议等待 {RetryAfter} 秒", retryAfterSeconds);
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation("未找到 Retry-After 头，使用默认等待时间 60 秒");
+                }
+                
+                // 等待指定时间
+                await Task.Delay(retryAfterSeconds * 1000, cancellationToken);
+                
+                return (null, true); // 返回 null 和速率限制标志
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Steam API 请求失败: StatusCode={StatusCode}, AppID={AppId}",
                     response.StatusCode, appId);
-                return null;
+                return (null, false);
             }
 
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -274,12 +358,12 @@ public class PriceMonitoringService : BackgroundService
                         // 检查是否为免费游戏
                         if (data.TryGetProperty("is_free", out var isFree) && isFree.GetBoolean())
                         {
-                            return new SteamPriceInfo
+                            return (new SteamPriceInfo
                             {
                                 Initial = 0,
                                 Final = 0,
                                 DiscountPercent = 0
-                            };
+                            }, false);
                         }
 
                         // 解析价格信息
@@ -298,23 +382,23 @@ public class PriceMonitoringService : BackgroundService
                                    int.TryParse(disc.GetString(), out var d) ? d : 0) 
                                 : 0;
 
-                            return new SteamPriceInfo
+                            return (new SteamPriceInfo
                             {
                                 Initial = initial,
                                 Final = final,
                                 DiscountPercent = discount
-                            };
+                            }, false);
                         }
                     }
                 }
             }
 
-            return null;
+            return (null, false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "获取 Steam 价格时发生错误: AppID={AppId}", appId);
-            return null;
+            return (null, false);
         }
     }
 
