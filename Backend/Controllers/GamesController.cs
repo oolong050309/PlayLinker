@@ -120,6 +120,83 @@ public class GamesController : ControllerBase
     }
 
     /// <summary>
+    /// 搜索游戏
+    /// </summary>
+    [HttpGet("search")]
+    [ProducesResponseType(typeof(ApiResponse<GameListDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<GameListDto>>> SearchGames(
+        [FromQuery] string query,
+        [FromQuery] int page = 1,
+        [FromQuery] int page_size = 20)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return Ok(ApiResponse<GameListDto>.SuccessResponse(new GameListDto
+                {
+                    Items = new List<GameItemDto>(),
+                    Meta = new PaginationMeta { Page = page, PageSize = page_size, Total = 0 }
+                }));
+            }
+
+            page = Math.Max(1, page);
+            page_size = Math.Clamp(page_size, 1, 100);
+
+            _logger.LogInformation("搜索游戏: query={Query}, page={Page}, pageSize={PageSize}", query, page, page_size);
+
+            // 模糊搜索游戏名称
+            var searchQuery = _context.Games
+                .Where(g => EF.Functions.Like(g.Name, $"%{query}%"))
+                .OrderBy(g => g.Name);
+
+            var total = await searchQuery.CountAsync();
+            var games = await searchQuery
+                .Skip((page - 1) * page_size)
+                .Take(page_size)
+                .Include(g => g.GameGenres).ThenInclude(gg => gg.Genre)
+                .Include(g => g.GameDevelopers).ThenInclude(gd => gd.Developer)
+                .ToListAsync();
+
+            _logger.LogInformation("搜索到 {Count} 个游戏", total);
+
+            var items = games.Select(g => new GameItemDto
+            {
+                GameId = g.GameId,
+                Name = g.Name,
+                IsFree = g.IsFree,
+                ReleaseDate = g.ReleaseDate.ToString("yyyy-MM-dd"),
+                HeaderImage = g.HeaderImage,
+                Genres = g.GameGenres.Select(gg => gg.Genre?.Name ?? "").ToList(),
+                Platforms = new PlatformSupportDto
+                {
+                    Windows = g.Windows,
+                    Mac = g.Mac,
+                    Linux = g.Linux
+                }
+            }).ToList();
+
+            var result = new GameListDto
+            {
+                Items = items,
+                Meta = new PaginationMeta
+                {
+                    Page = page,
+                    PageSize = page_size,
+                    Total = total
+                }
+            };
+
+            return Ok(ApiResponse<GameListDto>.SuccessResponse(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "搜索游戏时发生错误: query={Query}", query);
+            return StatusCode(500, ApiResponse<GameListDto>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
     /// 获取游戏详情
     /// </summary>
     [HttpGet("{id}")]

@@ -39,6 +39,17 @@ public class LocalGameFoundDto
     public DateTime? LastPlayed { get; set; }
 }
 
+public class AddLocalGameRequest
+{
+    public long GameId { get; set; }
+    public int? PlatformId { get; set; }
+    public string InstallPath { get; set; } = string.Empty;
+    public string? Version { get; set; }
+    public decimal SizeGB { get; set; }
+    public string? ExecutablePath { get; set; }
+    public string? ConfigPath { get; set; }
+}
+
 public class LocalGameListDto
 {
     public long InstallId { get; set; }

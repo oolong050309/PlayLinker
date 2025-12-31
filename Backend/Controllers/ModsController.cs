@@ -61,19 +61,15 @@ public class ModsController : ControllerBase
             var modFolderName = request.ModName.ToLower().Replace(" ", "_").Replace(":", "");
             var targetPath = $"D:\\Games\\{gameName}\\mods\\{modFolderName}\\";
 
-            // 创建新Mod记录
+            // 创建新Mod记录（网页版只记录基本信息）
             var newMod = new LocalMod
             {
                 InstallId = request.InstallId,
                 ModName = request.ModName,
                 Version = request.Version,
-                Enabled = false, // 网页版默认禁用，等用户手动安装后启用
-                LastModified = DateTime.UtcNow,
-                InstallStatus = "pending_manual_install",
-                TargetPath = targetPath,
-                Description = request.Description,
-                Author = request.Author,
-                DownloadUrl = $"/api/v1/mods/{request.ModName}/download" // 模拟下载链接
+                FilePath = targetPath, // 使用目标路径作为文件路径
+                Enabled = false, // 网页版默认禁用
+                LastModified = DateTime.UtcNow
             };
 
             _context.LocalMods.Add(newMod);
@@ -94,13 +90,13 @@ public class ModsController : ControllerBase
                 ModId = newMod.ModId,
                 ModName = newMod.ModName,
                 InstallId = newMod.InstallId,
-                InstallStatus = newMod.InstallStatus,
+                InstallStatus = "pending_manual_install", // 固定返回此状态
                 TargetPath = targetPath,
                 Enabled = newMod.Enabled ?? false,
                 InstalledAt = newMod.LastModified,
                 SizeGB = sizeGB,
                 InstallInstructions = installInstructions,
-                DownloadUrl = newMod.DownloadUrl,
+                DownloadUrl = $"/api/v1/mods/{request.ModName}/download", // 模拟下载链接
                 WebLimitation = true
             };
 
@@ -175,14 +171,8 @@ public class ModsController : ControllerBase
                 return NotFound(ApiResponse<object>.ErrorResponse("ERR_MOD_NOT_FOUND", "Mod不存在"));
             }
 
-            if (mod.InstallStatus != "pending_manual_install")
-            {
-                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_INVALID_STATUS", "该Mod不在等待手动安装状态"));
-            }
-
-            // 更新安装状态
-            mod.InstallStatus = "installed";
-            mod.Enabled = true; // 确认安装后自动启用
+            // 网页版简化：直接启用Mod
+            mod.Enabled = true;
             mod.LastModified = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -191,7 +181,7 @@ public class ModsController : ControllerBase
             {
                 modId = mod.ModId,
                 modName = mod.ModName,
-                installStatus = mod.InstallStatus,
+                installStatus = "installed", // 固定返回已安装状态
                 enabled = mod.Enabled,
                 confirmedAt = mod.LastModified
             };

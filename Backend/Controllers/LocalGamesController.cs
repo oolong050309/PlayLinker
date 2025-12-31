@@ -64,6 +64,84 @@ public class LocalGamesController : ControllerBase
     }
 
     /// <summary>
+    /// 手动添加本地游戏记录
+    /// </summary>
+    /// <param name="request">添加游戏请求</param>
+    /// <returns>添加结果</returns>
+    [HttpPost("games")]
+    [ProducesResponseType(typeof(ApiResponse<LocalGameListDto>), 201)]
+    public async Task<ActionResult<ApiResponse<LocalGameListDto>>> AddLocalGame([FromBody] AddLocalGameRequest request)
+    {
+        try
+        {
+            int userId = 1001; // 假设当前用户ID
+
+            // 检查游戏是否存在
+            var game = await _context.Games.FindAsync(request.GameId);
+            if (game == null)
+            {
+                return NotFound(ApiResponse<LocalGameListDto>.ErrorResponse("ERR_GAME_NOT_FOUND", "游戏不存在"));
+            }
+
+            // 检查是否已存在相同路径的安装记录
+            var existingInstall = await _context.LocalGameInstalls
+                .FirstOrDefaultAsync(lgi => lgi.UserId == userId && lgi.GameId == request.GameId && lgi.InstallPath == request.InstallPath);
+
+            if (existingInstall != null)
+            {
+                return Conflict(ApiResponse<LocalGameListDto>.ErrorResponse("ERR_INSTALL_EXISTS", "该游戏安装记录已存在"));
+            }
+
+            // 创建安装记录（只使用数据库中存在的字段）
+            var install = new LocalGameInstall
+            {
+                GameId = request.GameId,
+                UserId = userId,
+                PlatformId = request.PlatformId,
+                InstallPath = request.InstallPath,
+                Version = request.Version ?? "Unknown",
+                DetectedTime = DateTime.UtcNow
+            };
+
+            _context.LocalGameInstalls.Add(install);
+            await _context.SaveChangesAsync();
+
+            // 重新加载以获取关联数据
+            await _context.Entry(install).Reference(i => i.Game).LoadAsync();
+            if (install.PlatformId.HasValue)
+            {
+                await _context.Entry(install).Reference(i => i.Platform).LoadAsync();
+            }
+
+            // 返回创建的游戏信息
+            var result = new LocalGameListDto
+            {
+                InstallId = install.InstallId,
+                GameId = install.GameId,
+                GameName = install.Game.Name,
+                PlatformId = install.PlatformId ?? 0,
+                PlatformName = install.Platform?.PlatformName ?? "PC",
+                InstallPath = install.InstallPath,
+                Version = install.Version,
+                SizeGB = request.SizeGB, // 从请求中获取，不存数据库
+                DetectedTime = install.DetectedTime,
+                LastPlayed = null,
+                SavesCount = 0,
+                ModsCount = 0
+            };
+
+            return CreatedAtAction(nameof(GetLocalGameById), new { id = install.InstallId },
+                ApiResponse<LocalGameListDto>.SuccessResponse(result, "游戏记录添加成功"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding local game");
+            return StatusCode(500, ApiResponse<LocalGameListDto>.ErrorResponse(
+                "ERR_ADD_GAME_FAILED", "添加游戏记录失败"));
+        }
+    }
+
+    /// <summary>
     /// 获取本地游戏列表
     /// </summary>
     /// <param name="page">页码</param>
@@ -110,12 +188,12 @@ public class LocalGamesController : ControllerBase
                     GameId = lgi.GameId,
                     GameName = lgi.Game.Name,
                     PlatformId = lgi.PlatformId ?? 0,
-                    PlatformName = lgi.Platform != null ? lgi.Platform.PlatformName : "Unknown",
+                    PlatformName = lgi.Platform != null ? lgi.Platform.PlatformName : "PC",
                     InstallPath = lgi.InstallPath,
                     Version = lgi.Version,
-                    SizeGB = lgi.SizeGb,
+                    SizeGB = 0, // 数据库中没有此字段，返回0
                     DetectedTime = lgi.DetectedTime,
-                    LastPlayed = lgi.LastPlayed,
+                    LastPlayed = null, // 数据库中没有此字段
                     SavesCount = lgi.LocalSaveFiles.Count,
                     ModsCount = lgi.LocalMods.Count
                 })
@@ -126,7 +204,7 @@ public class LocalGamesController : ControllerBase
             var summary = new LocalGamesSummary
             {
                 TotalGames = total,
-                TotalSizeGB = allGames.Sum(g => g.SizeGb),
+                TotalSizeGB = 0, // 数据库中没有size_gb字段
                 TotalSaves = allGames.Sum(g => g.LocalSaveFiles.Count),
                 TotalMods = allGames.Sum(g => g.LocalMods.Count)
             };
@@ -183,14 +261,14 @@ public class LocalGamesController : ControllerBase
                 GameId = install.GameId,
                 GameName = install.Game.Name,
                 PlatformId = install.PlatformId ?? 0,
-                PlatformName = install.Platform != null ? install.Platform.PlatformName : "Unknown",
+                PlatformName = install.Platform != null ? install.Platform.PlatformName : "PC",
                 InstallPath = install.InstallPath,
                 Version = install.Version,
-                SizeGB = install.SizeGb,
+                SizeGB = 0, // 数据库中没有此字段
                 DetectedTime = install.DetectedTime,
-                LastPlayed = install.LastPlayed,
-                ExecutablePath = install.ExecutablePath,
-                ConfigPath = install.ConfigPath,
+                LastPlayed = null, // 数据库中没有此字段
+                ExecutablePath = null, // 数据库中没有此字段
+                ConfigPath = null, // 数据库中没有此字段
                 Saves = install.LocalSaveFiles.Select(sf => new SaveFileDto
                 {
                     SaveId = sf.SaveId,

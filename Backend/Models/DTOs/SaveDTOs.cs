@@ -15,6 +15,14 @@ public class LocalSaveListDto
     public Dictionary<string, string>? Metadata { get; set; }
 }
 
+public class AddLocalSaveRequest
+{
+    public long InstallId { get; set; }
+    public string FilePath { get; set; } = string.Empty;
+    public long FileSize { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+}
+
 public class BackupSaveRequest
 {
     public long SaveId { get; set; }

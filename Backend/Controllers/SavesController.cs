@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlayLinker.Data;
+using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
+using PlayLinker.Models.Entities;
 
 namespace PlayLinker.Controllers;
 
@@ -98,6 +100,81 @@ public class SavesController : ControllerBase
             _logger.LogError(ex, "Error getting local saves");
             return StatusCode(500, ApiResponse<PaginatedResponse<LocalSaveListDto>>.ErrorResponse(
                 "ERR_INTERNAL_SERVER_ERROR", "获取存档列表失败"));
+        }
+    }
+
+    /// <summary>
+    /// 手动添加本地存档记录
+    /// </summary>
+    /// <param name="request">添加存档请求</param>
+    /// <returns>添加结果</returns>
+    /// <remarks>
+    /// 网页版功能：用户手动选择存档文件，系统记录文件信息到数据库
+    /// 不上传文件本身，只记录文件路径、大小等元数据
+    /// </remarks>
+    [HttpPost("local")]
+    [ProducesResponseType(typeof(ApiResponse<LocalSaveListDto>), 201)]
+    public async Task<ActionResult<ApiResponse<LocalSaveListDto>>> AddLocalSave([FromBody] AddLocalSaveRequest request)
+    {
+        try
+        {
+            int userId = 1001; // 假设当前用户ID
+
+            // 验证游戏安装记录是否存在
+            var install = await _context.LocalGameInstalls
+                .Include(lgi => lgi.Game)
+                .FirstOrDefaultAsync(lgi => lgi.InstallId == request.InstallId && lgi.UserId == userId);
+
+            if (install == null)
+            {
+                return NotFound(ApiResponse<LocalSaveListDto>.ErrorResponse("ERR_INSTALL_NOT_FOUND", "游戏安装记录不存在"));
+            }
+
+            // 检查是否已存在相同路径的存档记录
+            var existingSave = await _context.LocalSaveFiles
+                .FirstOrDefaultAsync(lsf => lsf.InstallId == request.InstallId && lsf.FilePath == request.FilePath);
+
+            if (existingSave != null)
+            {
+                return Conflict(ApiResponse<LocalSaveListDto>.ErrorResponse("ERR_SAVE_EXISTS", "该存档记录已存在"));
+            }
+
+            // 创建存档记录
+            var save = new LocalSaveFile
+            {
+                InstallId = request.InstallId,
+                FilePath = request.FilePath,
+                FileSize = (int)request.FileSize, // 转换为int，数据库字段类型为int
+                UpdatedAt = request.UpdatedAt ?? DateTime.UtcNow,
+                IsBackupLocal = false
+            };
+
+            _context.LocalSaveFiles.Add(save);
+            await _context.SaveChangesAsync();
+
+            // 返回创建的存档信息
+            var result = new LocalSaveListDto
+            {
+                SaveId = save.SaveId,
+                GameId = install.GameId,
+                GameName = install.Game.Name,
+                InstallId = save.InstallId,
+                FilePath = save.FilePath,
+                FileSize = save.FileSize,
+                FileSizeMB = Math.Round((decimal)save.FileSize / 1024 / 1024, 2),
+                UpdatedAt = save.UpdatedAt,
+                IsBackupLocal = save.IsBackupLocal,
+                Metadata = null
+            };
+
+            return CreatedAtAction(nameof(GetLocalSaves), new { }, 
+                ApiResponse<LocalSaveListDto>.SuccessResponse(result, "存档记录添加成功"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding local save");
+            return StatusCode(500, ApiResponse<LocalSaveListDto>.ErrorResponse(
+                "ERR_ADD_SAVE_FAILED", "添加存档记录失败"));
         }
     }
 

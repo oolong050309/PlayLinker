@@ -19,6 +19,26 @@ export const getLocalGames = (params) => {
 }
 
 /**
+ * 添加本地游戏记录
+ * @param {Object} data - 游戏信息
+ * @param {number} data.gameId - 游戏ID
+ * @param {number} data.platformId - 平台ID（可选）
+ * @param {string} data.installPath - 安装路径
+ * @param {string} data.version - 版本（可选）
+ * @param {number} data.sizeGB - 大小（GB）
+ * @param {string} data.executablePath - 可执行文件路径（可选）
+ * @param {string} data.configPath - 配置路径（可选）
+ * @returns {Promise}
+ */
+export const addLocalGame = (data) => {
+  return request({
+    url: '/local/games',
+    method: 'post',
+    data
+  })
+}
+
+/**
  * 获取本地游戏详情
  * @param {number} installId - 安装ID
  * @returns {Promise}
@@ -58,6 +78,23 @@ export const getLocalSaves = (params) => {
     url: '/saves/local',
     method: 'get',
     params
+  })
+}
+
+/**
+ * 添加本地存档记录
+ * @param {Object} data - 存档信息
+ * @param {number} data.installId - 游戏安装ID
+ * @param {string} data.filePath - 存档文件路径
+ * @param {number} data.fileSize - 文件大小（字节）
+ * @param {string} data.updatedAt - 更新时间（可选）
+ * @returns {Promise}
+ */
+export const addLocalSave = (data) => {
+  return request({
+    url: '/saves/local',
+    method: 'post',
+    data
   })
 }
 
@@ -236,13 +273,31 @@ export const checkModConflicts = (installId) => {
   })
 }
 
+/**
+ * 搜索游戏（全局游戏数据库）
+ * @param {Object} params - 查询参数
+ * @param {string} params.query - 搜索关键词
+ * @param {number} params.page - 页码
+ * @param {number} params.page_size - 每页数量
+ * @returns {Promise}
+ */
+export const searchGames = (params) => {
+  return request({
+    url: '/games/search',
+    method: 'get',
+    params
+  })
+}
+
 export default {
   // 本地游戏
   getLocalGames,
+  addLocalGame,
   getLocalGameDetail,
   removeLocalGame,
   // 存档
   getLocalSaves,
+  addLocalSave,
   deleteSave,
   // 云存档
   getCloudSaves,
@@ -256,5 +311,7 @@ export default {
   confirmModInstall,
   toggleMod,
   deleteMod,
-  checkModConflicts
+  checkModConflicts,
+  // 游戏搜索
+  searchGames
 }

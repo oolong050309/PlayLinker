@@ -3,12 +3,6 @@
     <!-- Header -->
     <div class="mods-header">
       <h1 class="page-title">Mod与存档管理</h1>
-      <div class="header-actions">
-        <div class="web-notice">
-          <Info class="icon" />
-          <span>网页版功能受限，部分操作需要客户端</span>
-        </div>
-      </div>
     </div>
 
     <!-- Loading State -->
@@ -85,10 +79,16 @@
       <section v-if="activeTab === 'games'" class="content-section">
         <div class="section-header">
           <h2 class="section-title">本地游戏列表</h2>
-          <button class="btn-refresh" @click="loadLocalGames">
-            <RefreshCw class="icon" />
-            刷新
-          </button>
+          <div class="header-actions">
+            <button class="btn-primary" @click="showAddGameDialog = true">
+              <Plus class="icon" />
+              添加游戏
+            </button>
+            <button class="btn-refresh" @click="loadLocalGames">
+              <RefreshCw class="icon" />
+              刷新
+            </button>
+          </div>
         </div>
 
         <div v-if="localGames.length > 0" class="games-list">
@@ -145,10 +145,16 @@
       <section v-if="activeTab === 'saves'" class="content-section">
         <div class="section-header">
           <h2 class="section-title">本地存档</h2>
-          <button class="btn-refresh" @click="loadLocalSaves">
-            <RefreshCw class="icon" />
-            刷新
-          </button>
+          <div class="header-actions">
+            <button class="btn-primary" @click="showAddSaveDialog = true">
+              <Plus class="icon" />
+              添加存档
+            </button>
+            <button class="btn-refresh" @click="loadLocalSaves">
+              <RefreshCw class="icon" />
+              刷新
+            </button>
+          </div>
         </div>
 
         <div v-if="localSaves.length > 0" class="saves-list">
@@ -305,19 +311,231 @@
         </div>
       </div>
     </div>
+
+    <!-- Add Game Dialog -->
+    <div v-if="showAddGameDialog" class="dialog-overlay" @click.self="showAddGameDialog = false">
+      <div class="dialog-content">
+        <h3 class="dialog-title">添加本地游戏记录</h3>
+        <p class="dialog-desc">从你的游戏库中选择已安装的游戏</p>
+        
+        <div class="dialog-form">
+          <div class="form-group">
+            <label>选择游戏（从游戏数据库）</label>
+            <input 
+              v-model="gameSearchQuery"
+              type="text"
+              class="form-input"
+              placeholder="输入游戏名称搜索..."
+              @input="searchUserGames"
+              @focus="searchUserGames"
+            />
+            <div v-if="searchingGames" class="search-loading">
+              <div class="loading-spinner-small"></div>
+              搜索中...
+            </div>
+            <div v-else-if="searchedGames.length > 0" class="search-results">
+              <div 
+                v-for="game in searchedGames" 
+                :key="game.gameId"
+                class="search-result-item"
+                @click="selectGame(game)"
+              >
+                <div class="game-result-name">{{ game.name }}</div>
+                <div class="game-result-meta">
+                  <span v-if="game.releaseDate">{{ game.releaseDate.substring(0, 4) }}</span>
+                  <span v-if="game.developer"> • {{ game.developer }}</span>
+                </div>
+              </div>
+            </div>
+            <p v-else-if="gameSearchQuery && searchedGames.length === 0 && !searchingGames && !selectedGameForAdd" class="form-hint">
+              未找到匹配的游戏 (已搜索: "{{ gameSearchQuery }}")
+            </p>
+            <p v-if="selectedGameForAdd" class="selected-game">
+              ✓ 已选择: {{ selectedGameForAdd.name }}
+            </p>
+          </div>
+          <div class="form-group">
+            <label>游戏安装路径</label>
+            <div class="path-input-group">
+              <input 
+                v-model="addGameForm.installPath"
+                type="text"
+                class="form-input"
+                placeholder="点击右侧按钮选择游戏文件夹"
+                readonly
+              />
+              <button class="btn-browse" @click="browseGameFolder" type="button">
+                <Folder class="icon" />
+                浏览
+              </button>
+            </div>
+            <input 
+              ref="folderInput"
+              type="file"
+              webkitdirectory
+              directory
+              style="display: none"
+              @change="handleGameFolderSelect"
+            />
+            <p v-if="addGameForm.sizeGB > 0" class="file-info">
+              游戏大小: {{ addGameForm.sizeGB.toFixed(2) }} GB
+            </p>
+          </div>
+
+          <!-- 存档选项 -->
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="addGameForm.includeSave" />
+              同时添加存档位置（可选）
+            </label>
+          </div>
+
+          <template v-if="addGameForm.includeSave">
+            <div class="form-group">
+              <label>存档类型</label>
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input type="radio" v-model="addGameForm.saveType" value="file" />
+                  单个文件
+                </label>
+                <label class="radio-label">
+                  <input type="radio" v-model="addGameForm.saveType" value="folder" />
+                  文件夹
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>存档位置</label>
+              <div class="path-input-group">
+                <input 
+                  v-model="addGameForm.savePath"
+                  type="text"
+                  class="form-input"
+                  placeholder="点击右侧按钮选择存档位置"
+                  readonly
+                />
+                <button class="btn-browse" @click="browseSaveFolder" type="button">
+                  <Folder class="icon" />
+                  浏览
+                </button>
+              </div>
+              <input 
+                ref="saveFileInput"
+                type="file"
+                :webkitdirectory="addGameForm.saveType === 'folder'"
+                :directory="addGameForm.saveType === 'folder'"
+                :multiple="addGameForm.saveType === 'folder'"
+                style="display: none"
+                @change="handleSaveFolderSelect"
+              />
+              <p v-if="addGameForm.saveSize > 0" class="file-info">
+                存档大小: {{ addGameForm.saveSize.toFixed(2) }} MB
+              </p>
+            </div>
+          </template>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="btn-cancel" @click="closeAddGameDialog">取消</button>
+          <button 
+            class="btn-confirm" 
+            @click="handleConfirmAddGame" 
+            :disabled="addingGame || !selectedGameForAdd || !addGameForm.installPath"
+          >
+            {{ addingGame ? '添加中...' : '添加' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Save Dialog -->
+    <div v-if="showAddSaveDialog" class="dialog-overlay" @click.self="showAddSaveDialog = false">
+      <div class="dialog-content">
+        <h3 class="dialog-title">添加本地存档记录</h3>
+        <p class="dialog-desc">选择存档文件，系统将记录文件信息到数据库</p>
+        
+        <div class="dialog-form">
+          <div class="form-group">
+            <label>选择游戏</label>
+            <select v-model="addSaveForm.installId" class="form-select">
+              <option value="">请选择游戏</option>
+              <option v-for="game in localGames" :key="game.installId" :value="game.installId">
+                {{ game.gameName }} ({{ game.platformName }})
+              </option>
+            </select>
+            <p v-if="localGames.length === 0" class="form-hint">
+              暂无本地游戏记录，请先在"本地游戏"标签页添加游戏
+            </p>
+          </div>
+          <div class="form-group">
+            <label>存档类型</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" v-model="addSaveForm.saveType" value="file" />
+                单个文件
+              </label>
+              <label class="radio-label">
+                <input type="radio" v-model="addSaveForm.saveType" value="folder" />
+                文件夹
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>选择存档{{ addSaveForm.saveType === 'folder' ? '文件夹' : '文件' }}</label>
+            <input 
+              v-if="addSaveForm.saveType === 'file'"
+              type="file" 
+              ref="addSaveFileInput"
+              @change="handleAddSaveFileSelect"
+              class="form-file"
+            />
+            <input 
+              v-else
+              type="file" 
+              ref="addSaveFileInput"
+              @change="handleAddSaveFileSelect"
+              webkitdirectory
+              directory
+              multiple
+              class="form-file"
+            />
+            <p v-if="addSaveFile" class="file-info">
+              {{ addSaveForm.saveType === 'folder' ? '文件夹' : '文件名' }}: {{ addSaveFileName }}<br>
+              大小: {{ addSaveFileSize }}<br>
+              {{ addSaveForm.saveType === 'folder' ? '文件数量: ' + addSaveFileCount + '<br>' : '' }}
+              修改时间: {{ addSaveFileTime }}
+            </p>
+          </div>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="btn-cancel" @click="closeAddSaveDialog">取消</button>
+          <button 
+            class="btn-confirm" 
+            @click="handleConfirmAddSave" 
+            :disabled="addingSave || !addSaveForm.installId || !addSaveFile"
+          >
+            {{ addingSave ? '添加中...' : '添加' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { 
   HardDrive, Package, Save, Cloud, RefreshCw, Check, X, 
-  Folder, CloudUpload, Download, Info, AlertCircle
+  Folder, CloudUpload, Download, AlertCircle, Plus
 } from 'lucide-vue-next'
 import {
   getLocalGames,
+  addLocalGame,
   removeLocalGame,
   getLocalSaves,
+  addLocalSave,
   getCloudSaves,
   uploadCloudSave,
   downloadCloudSave,
@@ -325,7 +543,8 @@ import {
   getCloudStorageUsage,
   getGameMods,
   toggleMod,
-  deleteMod
+  deleteMod,
+  searchGames
 } from '@/api/localGame'
 
 const activeTab = ref('games')
@@ -360,14 +579,74 @@ const cloudSummary = ref({
 // Dialogs
 const showModsDialog = ref(false)
 const showUploadDialog = ref(false)
+const showAddSaveDialog = ref(false)
+const showAddGameDialog = ref(false)
 const selectedGame = ref(null)
 const selectedSave = ref(null)
+
+// Add Game
+const folderInput = ref(null)
+const saveFileInput = ref(null) // 存档文件选择器
+const gameSearchQuery = ref('')
+const searchedGames = ref([])
+const searchingGames = ref(false)
+const selectedGameForAdd = ref(null)
+const addGameForm = ref({
+  installPath: '',
+  sizeGB: 0,
+  // 存档相关
+  includeSave: false,
+  savePath: '',
+  saveType: 'folder', // 'file' 或 'folder'
+  saveSize: 0
+})
+const addingGame = ref(false)
 
 // Upload
 const uploadFile = ref(null)
 const uploadForm = ref({ compress: false })
 const uploading = ref(false)
 const fileInput = ref(null)
+
+// Add Save
+const addSaveFile = ref(null)
+const addSaveFiles = ref([]) // 用于文件夹
+const addSaveForm = ref({ 
+  installId: '',
+  saveType: 'file' // 'file' 或 'folder'
+})
+const addingSave = ref(false)
+const addSaveFileInput = ref(null)
+
+// 计算属性
+const addSaveFileName = computed(() => {
+  if (!addSaveFile.value) return ''
+  if (addSaveForm.value.saveType === 'folder' && addSaveFiles.value.length > 0) {
+    // 获取文件夹名称（从第一个文件的路径中提取）
+    const firstFile = addSaveFiles.value[0]
+    const pathParts = firstFile.webkitRelativePath.split('/')
+    return pathParts[0] || firstFile.name
+  }
+  return addSaveFile.value.name
+})
+
+const addSaveFileSize = computed(() => {
+  if (!addSaveFile.value) return '0 MB'
+  if (addSaveForm.value.saveType === 'folder' && addSaveFiles.value.length > 0) {
+    const totalSize = addSaveFiles.value.reduce((sum, file) => sum + file.size, 0)
+    return (totalSize / 1024 / 1024).toFixed(2) + ' MB'
+  }
+  return (addSaveFile.value.size / 1024 / 1024).toFixed(2) + ' MB'
+})
+
+const addSaveFileCount = computed(() => {
+  return addSaveFiles.value.length
+})
+
+const addSaveFileTime = computed(() => {
+  if (!addSaveFile.value) return ''
+  return new Date(addSaveFile.value.lastModified).toLocaleString('zh-CN')
+})
 
 // Methods
 const formatDate = (dateStr) => {
@@ -577,6 +856,233 @@ const handleDeleteCloud = async (backup) => {
   }
 }
 
+// Add Game handlers
+let searchTimeout = null
+
+const searchUserGames = async () => {
+  // 清除之前的定时器
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
+  
+  // 如果输入为空，清空结果
+  if (gameSearchQuery.value.length === 0) {
+    searchedGames.value = []
+    return
+  }
+  
+  // 防抖：延迟300ms执行搜索
+  searchTimeout = setTimeout(async () => {
+    searchingGames.value = true
+    try {
+      const response = await searchGames({
+        query: gameSearchQuery.value,
+        page: 1,
+        page_size: 10
+      })
+      
+      if (response.data?.items) {
+        searchedGames.value = response.data.items
+      } else {
+        searchedGames.value = []
+      }
+    } catch (err) {
+      console.error('搜索游戏失败:', err)
+      searchedGames.value = []
+    } finally {
+      searchingGames.value = false
+    }
+  }, 300) // 300ms防抖
+}
+
+const selectGame = (game) => {
+  selectedGameForAdd.value = game
+  gameSearchQuery.value = game.name
+  searchedGames.value = [] // 选择后清空下拉列表
+}
+
+const browseGameFolder = () => {
+  if (folderInput.value) {
+    folderInput.value.click()
+  }
+}
+
+const browseSaveFolder = () => {
+  if (saveFileInput.value) {
+    saveFileInput.value.click()
+  }
+}
+
+const handleGameFolderSelect = (e) => {
+  const files = e.target.files
+  if (!files || files.length === 0) return
+  
+  // 获取文件夹路径（从第一个文件的路径中提取）
+  const firstFile = files[0]
+  if (firstFile.webkitRelativePath) {
+    const pathParts = firstFile.webkitRelativePath.split('/')
+    const folderName = pathParts[0]
+    addGameForm.value.installPath = folderName
+    
+    // 计算文件夹总大小
+    const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0)
+    addGameForm.value.sizeGB = parseFloat((totalSize / 1024 / 1024 / 1024).toFixed(2))
+  }
+}
+
+const handleSaveFolderSelect = (e) => {
+  const files = e.target.files
+  if (!files || files.length === 0) return
+  
+  if (addGameForm.value.saveType === 'folder') {
+    // 文件夹模式
+    const firstFile = files[0]
+    if (firstFile.webkitRelativePath) {
+      const pathParts = firstFile.webkitRelativePath.split('/')
+      addGameForm.value.savePath = pathParts[0]
+      
+      // 计算总大小
+      const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0)
+      addGameForm.value.saveSize = parseFloat((totalSize / 1024 / 1024).toFixed(2))
+    }
+  } else {
+    // 文件模式
+    const file = files[0]
+    addGameForm.value.savePath = file.name
+    addGameForm.value.saveSize = parseFloat((file.size / 1024 / 1024).toFixed(2))
+  }
+}
+
+const closeAddGameDialog = () => {
+  showAddGameDialog.value = false
+  gameSearchQuery.value = ''
+  searchedGames.value = []
+  selectedGameForAdd.value = null
+  addGameForm.value = {
+    installPath: '',
+    sizeGB: 0,
+    includeSave: false,
+    savePath: '',
+    saveType: 'folder',
+    saveSize: 0
+  }
+}
+
+const handleConfirmAddGame = async () => {
+  if (!selectedGameForAdd.value || !addGameForm.value.installPath) return
+  
+  addingGame.value = true
+  try {
+    // 1. 添加游戏
+    const gameData = {
+      gameId: selectedGameForAdd.value.gameId,
+      platformId: null,
+      installPath: addGameForm.value.installPath,
+      version: 'Unknown',
+      sizeGB: addGameForm.value.sizeGB || 0
+    }
+    
+    const gameResult = await addLocalGame(gameData)
+    
+    // 2. 如果勾选了添加存档，则添加存档
+    if (addGameForm.value.includeSave && addGameForm.value.savePath && gameResult.data) {
+      try {
+        const saveData = {
+          installId: gameResult.data.installId,
+          filePath: addGameForm.value.savePath,
+          fileSize: Math.round(addGameForm.value.saveSize * 1024), // 转换为KB
+          updatedAt: new Date().toISOString()
+        }
+        
+        await addLocalSave(saveData)
+        alert('游戏和存档记录添加成功！')
+      } catch (saveErr) {
+        console.error('添加存档失败:', saveErr)
+        alert('游戏添加成功，但存档添加失败: ' + (saveErr.response?.data?.message || saveErr.message))
+      }
+    } else {
+      alert('游戏记录添加成功！')
+    }
+    
+    closeAddGameDialog()
+    loadLocalGames()
+    if (addGameForm.value.includeSave) {
+      loadLocalSaves()
+    }
+  } catch (err) {
+    console.error('添加游戏失败:', err)
+    alert('添加失败: ' + (err.response?.data?.message || err.message || '未知错误'))
+  } finally {
+    addingGame.value = false
+  }
+}
+
+// Add Save handlers
+const handleAddSaveFileSelect = (e) => {
+  const files = e.target.files
+  if (!files || files.length === 0) return
+  
+  if (addSaveForm.value.saveType === 'folder') {
+    // 文件夹模式：保存所有文件
+    addSaveFiles.value = Array.from(files)
+    addSaveFile.value = files[0] // 用第一个文件作为代表
+  } else {
+    // 文件模式：只保存单个文件
+    addSaveFile.value = files[0]
+    addSaveFiles.value = []
+  }
+}
+
+const closeAddSaveDialog = () => {
+  showAddSaveDialog.value = false
+  addSaveFile.value = null
+  addSaveFiles.value = []
+  addSaveForm.value = { 
+    installId: '',
+    saveType: 'file'
+  }
+}
+
+const handleConfirmAddSave = async () => {
+  if (!addSaveFile.value || !addSaveForm.value.installId) return
+  
+  addingSave.value = true
+  try {
+    let filePath = ''
+    let fileSize = 0
+    
+    if (addSaveForm.value.saveType === 'folder') {
+      // 文件夹模式：使用文件夹名称和总大小
+      const firstFile = addSaveFiles.value[0]
+      const pathParts = firstFile.webkitRelativePath.split('/')
+      filePath = pathParts[0] || firstFile.name
+      fileSize = addSaveFiles.value.reduce((sum, file) => sum + file.size, 0)
+    } else {
+      // 文件模式：使用文件名和大小
+      filePath = addSaveFile.value.name
+      fileSize = addSaveFile.value.size
+    }
+    
+    const saveData = {
+      installId: parseInt(addSaveForm.value.installId),
+      filePath: filePath,
+      fileSize: fileSize,
+      updatedAt: new Date(addSaveFile.value.lastModified).toISOString()
+    }
+    
+    await addLocalSave(saveData)
+    
+    closeAddSaveDialog()
+    alert('存档记录添加成功！')
+    loadLocalSaves()
+  } catch (err) {
+    console.error('添加存档失败:', err)
+    alert('添加失败: ' + (err.response?.data?.message || err.message || '未知错误'))
+  } finally {
+    addingSave.value = false
+  }
+}
+
 onMounted(() => {
   loadData()
 })
@@ -601,23 +1107,6 @@ onMounted(() => {
   font-size: 24px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.web-notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 8px;
-  color: #fbbf24;
-  font-size: 13px;
-}
-
-.web-notice .icon {
-  width: 16px;
-  height: 16px;
 }
 
 /* Loading & Error States */
@@ -1295,6 +1784,263 @@ onMounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   color: white;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.form-file:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.form-file::file-selector-button {
+  padding: 6px 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-right: 12px;
+  transition: background 0.2s;
+}
+
+.form-file::file-selector-button:hover {
+  background: var(--primary-hover);
+}
+
+.form-select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.form-select:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.form-select option {
+  background: #2a2a2e;
+  color: white;
+  padding: 8px;
+}
+
+.form-select option:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.form-select option:checked {
+  background: rgba(99, 102, 241, 0.3);
+  color: white;
+}
+
+.radio-group {
+  display: flex;
+  gap: 20px;
+  padding: 8px 0;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.radio-label:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+}
+
+.radio-label input[type="radio"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: 500;
+  padding: 8px 0;
+  user-select: none;
+}
+
+.checkbox-label:hover {
+  color: white;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-color);
+}
+
+.file-info {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(99, 102, 241, 0.1);
+  border-left: 3px solid var(--primary-color);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #a5b4fc;
+  line-height: 1.6;
+}
+
+.form-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #fbbf24;
+  padding: 8px 12px;
+  background: rgba(251, 191, 36, 0.1);
+  border-radius: 6px;
+  border-left: 3px solid #fbbf24;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.search-results {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.search-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.loading-spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.search-result-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.search-result-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.selected-game {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #818cf8;
+}
+
+.path-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.path-input-group .form-input {
+  flex: 1;
+  cursor: not-allowed;
+}
+
+.btn-browse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-browse:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--primary-color);
+}
+
+.btn-browse .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.game-result-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.game-result-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .dialog-actions {
