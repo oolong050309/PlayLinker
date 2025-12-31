@@ -25,7 +25,10 @@ public interface IEpicService
     /// <summary>
     /// 获取Epic Games用户信息
     /// </summary>
-    Task<EpicUserDto?> GetEpicUser(string epicAccountId, int userId);
+    /// <param name="epicAccountId">Epic账户ID</param>
+    /// <param name="userId">用户ID</param>
+    /// <param name="includeGamesCount">是否获取游戏数量（可能较慢，默认false）</param>
+    Task<EpicUserDto?> GetEpicUser(string epicAccountId, int userId, bool includeGamesCount = false);
 
     /// <summary>
     /// 获取Epic Games游戏信息
@@ -36,6 +39,16 @@ public interface IEpicService
     /// 获取Epic Games用户的游戏列表
     /// </summary>
     Task<List<EpicGameDto>> GetEpicUserGames(string epicAccountId, int userId);
+
+    /// <summary>
+    /// 获取游戏详细信息（包括开发商、发行商、描述等）
+    /// </summary>
+    Task<EpicGameDto?> GetGameDetails(string namespaceId, string? offerId);
+
+    /// <summary>
+    /// 获取游戏成就列表
+    /// </summary>
+    Task<EpicAchievementsInfoDto?> GetGameAchievements(string namespaceId);
 }
 
 /// <summary>

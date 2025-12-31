@@ -73,12 +73,6 @@ builder.Services.AddMemoryCache();
 builder.Services.Configure<AliyunOssOptions>(builder.Configuration.GetSection("AliyunOss"));
 builder.Services.AddScoped<IAliyunOssService, AliyunOssService>();
 
-// --- Mod 浏览服务 ---
-builder.Services.AddHttpClient<IModExploreService, ModExploreService>();
-
-// --- 用户报表服务 ---
-builder.Services.AddScoped<IUserReportService, UserReportService>();
-
 // --- AI 服务 (来自 Incoming) ---
 builder.Services.AddHttpClient(); // 通用 HttpClient
 builder.Services.AddScoped<IAiService, AiService>();
