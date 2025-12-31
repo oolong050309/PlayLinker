@@ -102,7 +102,7 @@ public class PriceMonitoringService : BackgroundService
         }
     }
 
-    /// <summary>
+/// <summary>
     /// 更新 Steam 游戏价格
     /// </summary>
     private async Task UpdateSteamPricesAsync(CancellationToken cancellationToken)
@@ -123,11 +123,27 @@ public class PriceMonitoringService : BackgroundService
 
             _logger.LogInformation("找到 {Count} 个 Steam 游戏需要更新价格", steamGames.Count);
 
+            // 【优化】：一次性查询今天已经记录过价格的游戏ID，避免循环中重复查询数据库
+            // 使用 UTC 时间范围查询，避免 .Date 转换带来的时区问题和索引失效
+            var todayUtc = DateTime.UtcNow.Date;
+            var tomorrowUtc = todayUtc.AddDays(1);
+            
+            var processedGameIds = await context.PriceHistories
+                .Where(ph => ph.PlatformId == STEAM_PLATFORM_ID 
+                    && ph.RecordDate >= todayUtc 
+                    && ph.RecordDate < tomorrowUtc)
+                .Select(ph => ph.GameId)
+                .ToListAsync(cancellationToken);
+
+            // 转为 HashSet 提高查找性能
+            var processedGameIdSet = new HashSet<long>(processedGameIds);
+            _logger.LogInformation("今天已处理过 {Count} 个游戏，将跳过这些游戏", processedGameIdSet.Count);
+
             int successCount = 0;
             int failCount = 0;
             int skipCount = 0;
 
-            // 批量处理，每次处理 5 个游戏（减小批次大小，避免 API 限流）
+            // 批量处理，每次处理 5 个游戏
             const int batchSize = 5;
             bool rateLimited = false;
             
@@ -150,18 +166,12 @@ public class PriceMonitoringService : BackgroundService
                             continue;
                         }
 
-                        // 检查今天是否已经记录过价格（使用UTC日期确保一致性）
-                        var todayUtc = DateTime.UtcNow.Date;
-                        var existingRecord = await context.PriceHistories
-                            .Where(ph => ph.GameId == gamePlatform.GameId 
-                                && ph.PlatformId == STEAM_PLATFORM_ID 
-                                && ph.RecordDate.Date == todayUtc)
-                            .FirstOrDefaultAsync(cancellationToken);
-
-                        if (existingRecord != null)
+                        // 【修改】：直接在内存中检查是否已处理，替代原来的数据库查询
+                        if (processedGameIdSet.Contains(gamePlatform.GameId))
                         {
-                            _logger.LogDebug("游戏 {GameId} (AppID={AppId}) 今天已记录价格（记录时间: {RecordTime}），跳过", 
-                                gamePlatform.GameId, appId, existingRecord.RecordDate);
+                            // 仅在调试模式下记录跳过日志，避免刷屏
+                            _logger.LogDebug("游戏 {GameId} (AppID={AppId}) 今天已记录价格，跳过", 
+                                gamePlatform.GameId, appId);
                             skipCount++;
                             continue;
                         }
@@ -181,7 +191,6 @@ public class PriceMonitoringService : BackgroundService
                         {
                             _logger.LogWarning("无法获取游戏 {GameId} (AppID={AppId}) 的价格信息，可能遇到速率限制", 
                                 gamePlatform.GameId, appId);
-                            // 标记为速率限制，后续请求将等待更长时间
                             rateLimited = true;
                             failCount++;
                             continue;
@@ -192,7 +201,7 @@ public class PriceMonitoringService : BackgroundService
                         {
                             GameId = gamePlatform.GameId,
                             PlatformId = STEAM_PLATFORM_ID,
-                            CurrentPrice = priceData.Final / 100.0m, // Steam API 返回的是分为单位
+                            CurrentPrice = priceData.Final / 100.0m, 
                             OriginalPrice = priceData.Initial / 100.0m,
                             DiscountRate = priceData.DiscountPercent,
                             IsDiscount = priceData.DiscountPercent > 0,
@@ -201,16 +210,17 @@ public class PriceMonitoringService : BackgroundService
 
                         context.PriceHistories.Add(priceHistory);
                         await context.SaveChangesAsync(cancellationToken);
+                        
+                        // 将当前处理成功的ID加入集合，防止同一次运行中重复处理（虽然逻辑上不会）
+                        processedGameIdSet.Add(gamePlatform.GameId);
 
                         _logger.LogDebug("已记录游戏 {GameId} (AppID={AppId}) 的价格: {CurrentPrice} CNY (折扣: {Discount}%)",
                             gamePlatform.GameId, appId, priceHistory.CurrentPrice, priceData.DiscountPercent);
 
                         successCount++;
 
-                        // 检查价格变化并创建通知
                         await CheckPriceChangeAndNotifyAsync(context, gamePlatform.GameId, priceHistory, cancellationToken);
 
-                        // 避免请求过快，每个请求之间延迟 1 秒（增加延迟以降低速率限制风险）
                         await Task.Delay(1000, cancellationToken);
                     }
                     catch (Exception ex)
@@ -221,7 +231,6 @@ public class PriceMonitoringService : BackgroundService
                     }
                 }
 
-                // 批次之间延迟 5 秒（增加延迟以避免速率限制）
                 if (i + batchSize < steamGames.Count)
                 {
                     await Task.Delay(5000, cancellationToken);
