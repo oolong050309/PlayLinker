@@ -485,4 +485,571 @@ public class ReportGenerationService
         var pdfBytes = document.GeneratePdf();
         return pdfBytes;
     }
+
+    /// <summary>
+    /// 生成年度总结报告 HTML
+    /// </summary>
+    public async Task<string> GenerateYearlyReportHtml(int userId, int year)
+    {
+        var startDate = new DateTime(year, 1, 1);
+        var endDate = new DateTime(year, 12, 31);
+
+        // 查询数据
+        var gameRecords = await _context.UserPlatformLibraries
+            .Include(r => r.Game)
+            .ThenInclude(g => g.GameGenres)
+            .ThenInclude(gg => gg.Genre)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.UserPlatformBindings)
+            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+            .ToListAsync();
+
+        var achievements = await _context.UserAchievements
+            .Include(a => a.Achievement)
+            .ThenInclude(a => a.Game)
+            .Where(a => a.UserId == userId && a.Unlocked)
+            .ToListAsync();
+
+        // 计算统计数据
+        var totalMinutes = gameRecords.Sum(r => r.PlaytimeMinutes);
+        var totalHours = Math.Round(totalMinutes / 60.0, 1);
+        var totalGames = gameRecords.Count;
+        var playedGames = gameRecords.Count(r => r.PlaytimeMinutes > 0);
+        var totalAchievements = achievements.Count;
+
+        // 最常玩的游戏
+        var topGame = gameRecords.OrderByDescending(r => r.PlaytimeMinutes).FirstOrDefault();
+
+        // 按类型统计
+        var genreStats = gameRecords
+            .SelectMany(r => r.Game.GameGenres.Select(gg => new { Genre = gg.Genre.Name, r.PlaytimeMinutes }))
+            .GroupBy(x => x.Genre)
+            .Select(g => new { Genre = g.Key, Minutes = g.Sum(x => x.PlaytimeMinutes) })
+            .OrderByDescending(x => x.Minutes)
+            .Take(5)
+            .ToList();
+
+        // 游戏排行
+        var topGames = gameRecords
+            .OrderByDescending(r => r.PlaytimeMinutes)
+            .Take(10)
+            .ToList();
+
+        var html = $@"
+<!DOCTYPE html>
+<html lang='zh-CN'>
+<head>
+    <meta charset='UTF-8'>
+    <title>{year}年度游戏总结</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Microsoft YaHei', Arial, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; min-height: 100vh; padding: 40px; }}
+        .container {{ max-width: 1000px; margin: 0 auto; }}
+        .hero {{ text-align: center; padding: 60px 0; }}
+        .hero h1 {{ font-size: 3em; background: linear-gradient(90deg, #00d4ff, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }}
+        .hero .year {{ font-size: 6em; font-weight: bold; color: #7c3aed; opacity: 0.3; }}
+        .stats-row {{ display: flex; justify-content: center; gap: 30px; margin: 40px 0; flex-wrap: wrap; }}
+        .stat-box {{ background: rgba(255,255,255,0.1); border-radius: 20px; padding: 30px 40px; text-align: center; min-width: 180px; }}
+        .stat-box .value {{ font-size: 3em; font-weight: bold; color: #00d4ff; }}
+        .stat-box .label {{ color: #aaa; margin-top: 10px; }}
+        .section {{ background: rgba(255,255,255,0.05); border-radius: 20px; padding: 30px; margin: 30px 0; }}
+        .section h2 {{ color: #00d4ff; margin-bottom: 20px; font-size: 1.5em; }}
+        .highlight-card {{ background: linear-gradient(135deg, #7c3aed, #00d4ff); border-radius: 15px; padding: 30px; margin: 20px 0; }}
+        .highlight-card h3 {{ font-size: 1.2em; opacity: 0.8; }}
+        .highlight-card .game-name {{ font-size: 2em; font-weight: bold; margin: 10px 0; }}
+        .highlight-card .hours {{ font-size: 1.5em; }}
+        .genre-bar {{ display: flex; align-items: center; margin: 15px 0; }}
+        .genre-bar .name {{ width: 100px; }}
+        .genre-bar .bar {{ flex: 1; height: 20px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin: 0 15px; }}
+        .genre-bar .fill {{ height: 100%; background: linear-gradient(90deg, #00d4ff, #7c3aed); border-radius: 10px; }}
+        .genre-bar .percent {{ width: 50px; text-align: right; }}
+        table {{ width: 100%; border-collapse: collapse; }}
+        th {{ text-align: left; padding: 15px; color: #00d4ff; border-bottom: 1px solid rgba(255,255,255,0.1); }}
+        td {{ padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); }}
+        .rank {{ color: #7c3aed; font-weight: bold; }}
+        .footer {{ text-align: center; margin-top: 50px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='hero'>
+            <div class='year'>{year}</div>
+            <h1>🎮 年度游戏总结</h1>
+        </div>
+
+        <div class='stats-row'>
+            <div class='stat-box'>
+                <div class='value'>{totalHours}</div>
+                <div class='label'>总游戏时长（小时）</div>
+            </div>
+            <div class='stat-box'>
+                <div class='value'>{playedGames}</div>
+                <div class='label'>游玩游戏数</div>
+            </div>
+            <div class='stat-box'>
+                <div class='value'>{totalAchievements}</div>
+                <div class='label'>解锁成就</div>
+            </div>
+        </div>
+
+        {(topGame != null ? $@"
+        <div class='highlight-card'>
+            <h3>🏆 年度最爱游戏</h3>
+            <div class='game-name'>{topGame.Game?.Name ?? "Unknown"}</div>
+            <div class='hours'>游玩 {Math.Round(topGame.PlaytimeMinutes / 60.0, 1)} 小时</div>
+        </div>" : "")}
+
+        <div class='section'>
+            <h2>📊 游戏类型偏好</h2>
+            {string.Join("", genreStats.Select(g => {
+                var maxMinutes = genreStats.Max(x => x.Minutes);
+                var percent = maxMinutes > 0 ? Math.Round((double)g.Minutes / maxMinutes * 100) : 0;
+                return $@"
+            <div class='genre-bar'>
+                <span class='name'>{g.Genre}</span>
+                <div class='bar'><div class='fill' style='width: {percent}%'></div></div>
+                <span class='percent'>{Math.Round(g.Minutes / 60.0)}h</span>
+            </div>";
+            }))}
+        </div>
+
+        <div class='section'>
+            <h2>🎯 游戏排行榜</h2>
+            <table>
+                <thead>
+                    <tr><th>排名</th><th>游戏</th><th>时长</th></tr>
+                </thead>
+                <tbody>
+                    {string.Join("", topGames.Select((r, i) => $@"
+                    <tr>
+                        <td class='rank'>#{i + 1}</td>
+                        <td>{r.Game?.Name ?? "Unknown"}</td>
+                        <td>{Math.Round(r.PlaytimeMinutes / 60.0, 1)} 小时</td>
+                    </tr>"))}
+                </tbody>
+            </table>
+        </div>
+
+        <div class='footer'>
+            <p>PlayLinker · {DateTime.Now:yyyy-MM-dd HH:mm:ss}</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+        return html;
+    }
+
+    /// <summary>
+    /// 生成年度总结报告 PDF
+    /// </summary>
+    public async Task<byte[]> GenerateYearlyReportPdf(int userId, int year)
+    {
+        QuestPDF.Settings.License = LicenseType.Community;
+
+        var gameRecords = await _context.UserPlatformLibraries
+            .Include(r => r.Game)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.UserPlatformBindings)
+            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+            .ToListAsync();
+
+        var achievements = await _context.UserAchievements
+            .Where(a => a.UserId == userId && a.Unlocked)
+            .ToListAsync();
+
+        var totalMinutes = gameRecords.Sum(r => r.PlaytimeMinutes);
+        var totalHours = Math.Round(totalMinutes / 60.0, 1);
+        var totalGames = gameRecords.Count;
+        var playedGames = gameRecords.Count(r => r.PlaytimeMinutes > 0);
+        var totalAchievements = achievements.Count;
+        var topGames = gameRecords.OrderByDescending(r => r.PlaytimeMinutes).Take(10).ToList();
+
+        var document = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(2, Unit.Centimetre);
+                page.DefaultTextStyle(x => x.FontSize(11));
+
+                page.Header().Column(col =>
+                {
+                    col.Item().Text($"{year} Annual Game Report")
+                        .FontSize(28).SemiBold().FontColor(Colors.Purple.Medium);
+                    col.Item().Text("PlayLinker Year in Review")
+                        .FontSize(12).FontColor(Colors.Grey.Darken1);
+                });
+
+                page.Content().PaddingVertical(1, Unit.Centimetre).Column(column =>
+                {
+                    column.Spacing(15);
+
+                    column.Item().Row(row =>
+                    {
+                        row.Spacing(10);
+                        row.RelativeItem().Background(Colors.Purple.Lighten4).Padding(20).Column(c =>
+                        {
+                            c.Item().Text(totalHours.ToString()).FontSize(36).SemiBold().FontColor(Colors.Purple.Darken2);
+                            c.Item().Text("Total Hours").FontSize(10);
+                        });
+                        row.RelativeItem().Background(Colors.Blue.Lighten4).Padding(20).Column(c =>
+                        {
+                            c.Item().Text(playedGames.ToString()).FontSize(36).SemiBold().FontColor(Colors.Blue.Darken2);
+                            c.Item().Text("Games Played").FontSize(10);
+                        });
+                        row.RelativeItem().Background(Colors.Orange.Lighten4).Padding(20).Column(c =>
+                        {
+                            c.Item().Text(totalAchievements.ToString()).FontSize(36).SemiBold().FontColor(Colors.Orange.Darken2);
+                            c.Item().Text("Achievements").FontSize(10);
+                        });
+                    });
+
+                    column.Item().PaddingTop(20).Text("Top 10 Games").FontSize(18).SemiBold();
+
+                    column.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(40);
+                            columns.RelativeColumn(4);
+                            columns.ConstantColumn(80);
+                        });
+
+                        table.Header(header =>
+                        {
+                            header.Cell().Background(Colors.Purple.Medium).Padding(8).Text("Rank").FontColor(Colors.White).SemiBold();
+                            header.Cell().Background(Colors.Purple.Medium).Padding(8).Text("Game").FontColor(Colors.White).SemiBold();
+                            header.Cell().Background(Colors.Purple.Medium).Padding(8).Text("Hours").FontColor(Colors.White).SemiBold();
+                        });
+
+                        int rank = 1;
+                        foreach (var game in topGames)
+                        {
+                            var bgColor = rank % 2 == 0 ? Colors.Grey.Lighten4 : Colors.White;
+                            table.Cell().Background(bgColor).Padding(8).Text($"#{rank}").FontColor(Colors.Purple.Medium).SemiBold();
+                            table.Cell().Background(bgColor).Padding(8).Text(game.Game?.Name ?? "Unknown");
+                            table.Cell().Background(bgColor).Padding(8).Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}h");
+                            rank++;
+                        }
+                    });
+                });
+
+                page.Footer().Text($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(9).FontColor(Colors.Grey.Darken1);
+            });
+        });
+
+        return document.GeneratePdf();
+    }
+
+    /// <summary>
+    /// 生成游戏库存报告 HTML
+    /// </summary>
+    public async Task<string> GenerateInventoryReportHtml(int userId)
+    {
+        var gameRecords = await _context.UserPlatformLibraries
+            .Include(r => r.Game)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.Platform)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.UserPlatformBindings)
+            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+            .ToListAsync();
+
+        var localGames = await _context.LocalGameInstalls
+            .Include(l => l.Game)
+            .Where(l => l.UserId == userId)
+            .ToListAsync();
+
+        var saves = await _context.LocalSaveFiles
+            .Include(s => s.Install)
+            .ThenInclude(i => i.Game)
+            .Where(s => s.Install.UserId == userId)
+            .ToListAsync();
+
+        var totalGames = gameRecords.Count;
+        var installedGames = localGames.Count;
+        var totalSaves = saves.Count;
+        var totalSizeGB = localGames.Sum(l => l.SizeBytes) / 1024.0 / 1024.0 / 1024.0;
+
+        var html = $@"
+<!DOCTYPE html>
+<html lang='zh-CN'>
+<head>
+    <meta charset='UTF-8'>
+    <title>游戏库存报告</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f0f2f5; padding: 30px; }}
+        .container {{ max-width: 1200px; margin: 0 auto; }}
+        .header {{ background: linear-gradient(135deg, #2196F3, #1976D2); color: white; padding: 40px; border-radius: 15px; margin-bottom: 30px; }}
+        .header h1 {{ font-size: 2em; margin-bottom: 10px; }}
+        .stats-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }}
+        .stat-card {{ background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }}
+        .stat-card .value {{ font-size: 2.5em; font-weight: bold; color: #2196F3; }}
+        .stat-card .label {{ color: #666; margin-top: 5px; }}
+        .section {{ background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+        .section h2 {{ color: #333; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #2196F3; }}
+        table {{ width: 100%; border-collapse: collapse; }}
+        th {{ background: #f5f5f5; padding: 12px; text-align: left; font-weight: 600; }}
+        td {{ padding: 12px; border-bottom: 1px solid #eee; }}
+        .badge {{ display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.85em; }}
+        .badge-installed {{ background: #e8f5e9; color: #2e7d32; }}
+        .badge-cloud {{ background: #e3f2fd; color: #1565c0; }}
+        .footer {{ text-align: center; color: #999; margin-top: 30px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>📦 游戏库存报告</h1>
+            <p>生成时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}</p>
+        </div>
+
+        <div class='stats-grid'>
+            <div class='stat-card'>
+                <div class='value'>{totalGames}</div>
+                <div class='label'>游戏总数</div>
+            </div>
+            <div class='stat-card'>
+                <div class='value'>{installedGames}</div>
+                <div class='label'>已安装</div>
+            </div>
+            <div class='stat-card'>
+                <div class='value'>{totalSaves}</div>
+                <div class='label'>存档数量</div>
+            </div>
+            <div class='stat-card'>
+                <div class='value'>{totalSizeGB:F1} GB</div>
+                <div class='label'>占用空间</div>
+            </div>
+        </div>
+
+        <div class='section'>
+            <h2>🎮 游戏收藏 ({totalGames})</h2>
+            <table>
+                <thead>
+                    <tr><th>游戏名称</th><th>平台</th><th>游玩时长</th><th>状态</th></tr>
+                </thead>
+                <tbody>
+                    {string.Join("", gameRecords.Take(20).Select(r => {
+                        var isInstalled = localGames.Any(l => l.GameId == r.GameId);
+                        return $@"
+                    <tr>
+                        <td>{r.Game?.Name ?? "Unknown"}</td>
+                        <td>{r.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"}</td>
+                        <td>{Math.Round(r.PlaytimeMinutes / 60.0, 1)} 小时</td>
+                        <td>{(isInstalled ? "<span class='badge badge-installed'>已安装</span>" : "")}</td>
+                    </tr>";
+                    }))}
+                </tbody>
+            </table>
+        </div>
+
+        <div class='section'>
+            <h2>💾 本地安装 ({installedGames})</h2>
+            <table>
+                <thead>
+                    <tr><th>游戏名称</th><th>安装路径</th><th>大小</th><th>版本</th></tr>
+                </thead>
+                <tbody>
+                    {string.Join("", localGames.Select(l => $@"
+                    <tr>
+                        <td>{l.Game?.Name ?? "Unknown"}</td>
+                        <td>{l.InstallPath}</td>
+                        <td>{(l.SizeBytes / 1024.0 / 1024.0 / 1024.0):F1} GB</td>
+                        <td>{l.Version ?? "-"}</td>
+                    </tr>"))}
+                </tbody>
+            </table>
+        </div>
+
+        <div class='section'>
+            <h2>📁 存档统计 ({totalSaves})</h2>
+            <table>
+                <thead>
+                    <tr><th>游戏名称</th><th>存档路径</th><th>大小</th><th>更新时间</th></tr>
+                </thead>
+                <tbody>
+                    {string.Join("", saves.Take(20).Select(s => $@"
+                    <tr>
+                        <td>{s.Install?.Game?.Name ?? "Unknown"}</td>
+                        <td>{s.FilePath}</td>
+                        <td>{(s.FileSize / 1024.0):F2} MB</td>
+                        <td>{s.UpdatedAt:yyyy-MM-dd HH:mm}</td>
+                    </tr>"))}
+                </tbody>
+            </table>
+        </div>
+
+        <div class='footer'>
+            <p>PlayLinker 游戏管理平台</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+        return html;
+    }
+
+    /// <summary>
+    /// 生成游戏库存报告 CSV
+    /// </summary>
+    public async Task<byte[]> GenerateInventoryReportCsv(int userId)
+    {
+        var gameRecords = await _context.UserPlatformLibraries
+            .Include(r => r.Game)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.Platform)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.UserPlatformBindings)
+            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+            .OrderBy(r => r.Game.Name)
+            .ToListAsync();
+
+        var localGames = await _context.LocalGameInstalls
+            .Include(l => l.Game)
+            .Where(l => l.UserId == userId)
+            .ToListAsync();
+
+        var csv = new StringBuilder();
+        csv.Append("\uFEFF");
+        
+        csv.AppendLine("游戏库存报告");
+        csv.AppendLine($"生成时间,{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        csv.AppendLine();
+        
+        csv.AppendLine("游戏收藏");
+        csv.AppendLine("游戏名称,平台,游玩时长（小时）,是否安装");
+        
+        foreach (var record in gameRecords)
+        {
+            var isInstalled = localGames.Any(l => l.GameId == record.GameId) ? "是" : "否";
+            csv.AppendLine($"{record.Game?.Name ?? "Unknown"},{record.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"},{Math.Round(record.PlaytimeMinutes / 60.0, 1)},{isInstalled}");
+        }
+        
+        csv.AppendLine();
+        csv.AppendLine("本地安装");
+        csv.AppendLine("游戏名称,安装路径,大小（GB）,版本");
+        
+        foreach (var local in localGames)
+        {
+            csv.AppendLine($"{local.Game?.Name ?? "Unknown"},{local.InstallPath},{(local.SizeBytes / 1024.0 / 1024.0 / 1024.0):F1},{local.Version ?? "-"}");
+        }
+
+        return Encoding.UTF8.GetBytes(csv.ToString());
+    }
+
+    /// <summary>
+    /// 生成游戏库存报告 PDF
+    /// </summary>
+    public async Task<byte[]> GenerateInventoryReportPdf(int userId)
+    {
+        QuestPDF.Settings.License = LicenseType.Community;
+
+        var gameRecords = await _context.UserPlatformLibraries
+            .Include(r => r.Game)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.Platform)
+            .Include(r => r.PlayerPlatform)
+            .ThenInclude(pp => pp.UserPlatformBindings)
+            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+            .ToListAsync();
+
+        var localGames = await _context.LocalGameInstalls
+            .Include(l => l.Game)
+            .Where(l => l.UserId == userId)
+            .ToListAsync();
+
+        var saves = await _context.LocalSaveFiles
+            .Include(s => s.Install)
+            .Where(s => s.Install.UserId == userId)
+            .ToListAsync();
+
+        var document = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(2, Unit.Centimetre);
+                page.DefaultTextStyle(x => x.FontSize(10));
+
+                page.Header().Column(col =>
+                {
+                    col.Item().Text("Game Inventory Report").FontSize(24).SemiBold().FontColor(Colors.Blue.Medium);
+                    col.Item().Text($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(10).FontColor(Colors.Grey.Darken1);
+                });
+
+                page.Content().PaddingVertical(1, Unit.Centimetre).Column(column =>
+                {
+                    column.Spacing(15);
+
+                    column.Item().Row(row =>
+                    {
+                        row.Spacing(10);
+                        row.RelativeItem().Background(Colors.Blue.Lighten4).Padding(15).Column(c =>
+                        {
+                            c.Item().Text(gameRecords.Count.ToString()).FontSize(28).SemiBold().FontColor(Colors.Blue.Darken2);
+                            c.Item().Text("Total Games").FontSize(9);
+                        });
+                        row.RelativeItem().Background(Colors.Green.Lighten4).Padding(15).Column(c =>
+                        {
+                            c.Item().Text(localGames.Count.ToString()).FontSize(28).SemiBold().FontColor(Colors.Green.Darken2);
+                            c.Item().Text("Installed").FontSize(9);
+                        });
+                        row.RelativeItem().Background(Colors.Orange.Lighten4).Padding(15).Column(c =>
+                        {
+                            c.Item().Text(saves.Count.ToString()).FontSize(28).SemiBold().FontColor(Colors.Orange.Darken2);
+                            c.Item().Text("Saves").FontSize(9);
+                        });
+                        row.RelativeItem().Background(Colors.Purple.Lighten4).Padding(15).Column(c =>
+                        {
+                            c.Item().Text($"{localGames.Sum(l => l.SizeBytes) / 1024.0 / 1024.0 / 1024.0:F1}").FontSize(28).SemiBold().FontColor(Colors.Purple.Darken2);
+                            c.Item().Text("GB Used").FontSize(9);
+                        });
+                    });
+
+                    column.Item().PaddingTop(15).Text("Game Collection").FontSize(16).SemiBold();
+
+                    column.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.RelativeColumn(3);
+                            columns.RelativeColumn(2);
+                            columns.ConstantColumn(60);
+                            columns.ConstantColumn(60);
+                        });
+
+                        table.Header(header =>
+                        {
+                            header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("Game").FontColor(Colors.White).FontSize(9);
+                            header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("Platform").FontColor(Colors.White).FontSize(9);
+                            header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("Hours").FontColor(Colors.White).FontSize(9);
+                            header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("Status").FontColor(Colors.White).FontSize(9);
+                        });
+
+                        foreach (var game in gameRecords.Take(30))
+                        {
+                            var isInstalled = localGames.Any(l => l.GameId == game.GameId);
+                            table.Cell().Padding(5).Text(game.Game?.Name ?? "Unknown").FontSize(9);
+                            table.Cell().Padding(5).Text(game.PlayerPlatform?.Platform?.PlatformName ?? "-").FontSize(9);
+                            table.Cell().Padding(5).Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}h").FontSize(9);
+                            table.Cell().Padding(5).Text(isInstalled ? "Installed" : "-").FontSize(9).FontColor(isInstalled ? Colors.Green.Medium : Colors.Grey.Medium);
+                        }
+                    });
+                });
+
+                page.Footer().Text(text =>
+                {
+                    text.Span("Page ").FontSize(9);
+                    text.CurrentPageNumber().FontSize(9);
+                    text.Span(" / ").FontSize(9);
+                    text.TotalPages().FontSize(9);
+                });
+            });
+        });
+
+        return document.GeneratePdf();
+    }
 }

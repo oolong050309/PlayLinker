@@ -103,7 +103,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Gamepad2, Compass, List, Library, BarChart2, Newspaper,
   ChevronLeft, ChevronRight, Settings, Bell, Link, LogOut, Shield, Heart,
-  Package, PieChart, Store
+  Package, Store, FileText
 } from 'lucide-vue-next'
 import { authApi } from '@/api/auth'
 import { usersApi } from '@/api/users'
@@ -219,7 +219,7 @@ const mainMenuItems = [
   { path: '/app/library', label: '我的游戏库', icon: Library },
   { path: '/app/price-monitor', label: '愿望单', icon: Heart },
   { path: '/app/news', label: '资讯', icon: Newspaper },
-  { path: '/app/analytics', label: '数据分析', icon: PieChart },
+  { path: '/app/user-report', label: '我的报表', icon: FileText },
   { path: '/app/mods', label: 'Mod与存档', icon: Package },
   { path: '/app/mod-explore', label: 'Mod商店', icon: Store }
 ]
