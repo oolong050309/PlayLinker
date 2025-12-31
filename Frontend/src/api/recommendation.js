@@ -5,14 +5,18 @@ export const recommendationApi = {
   getRecommendations(params) {
     return request.get('/recommendations', { params })
   },
+  
   // 探索新游戏
+  // params 可以是 { refresh: true, limit: 3 }
   exploreGames(params) {
     return request.get('/recommendations/explore', { params })
   },
+  
   // 获取相似游戏
   getSimilarGames(gameId, params) {
     return request.get(`/recommendations/similar/${gameId}`, { params })
   },
+  
   // 提交推荐反馈 (喜欢/不喜欢)
   submitFeedback(id, data) {
     return request.post(`/recommendations/${id}/feedback`, data)

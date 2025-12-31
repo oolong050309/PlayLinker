@@ -5,7 +5,8 @@ using PlayLinker.Data;
 using PlayLinker.Models;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
-using Microsoft.Extensions.Logging; // [新增] 引用日志命名空间
+using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace PlayLinker.Controllers;
 
@@ -15,9 +16,8 @@ namespace PlayLinker.Controllers;
 public class RecommendationsController : ControllerBase
 {
     private readonly PlayLinkerDbContext _context;
-    private readonly ILogger<RecommendationsController> _logger; // [新增] 日志对象
+    private readonly ILogger<RecommendationsController> _logger;
 
-    // [修改] 构造函数注入 logger
     public RecommendationsController(PlayLinkerDbContext context, ILogger<RecommendationsController> logger)
     {
         _context = context;
@@ -27,7 +27,6 @@ public class RecommendationsController : ControllerBase
     private int GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
-        // [新增] 记录解析的用户ID
         if (!int.TryParse(userIdClaim, out var userId))
         {
             _logger.LogWarning("[Auth] Failed to parse user_id from token claims.");
@@ -36,25 +35,34 @@ public class RecommendationsController : ControllerBase
         return userId;
     }
 
+    /// <summary>
+    /// 获取推荐列表
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<object>>> GetRecommendations([FromQuery] string? type, [FromQuery] int limit = 10)
     {
         var userId = GetCurrentUserId();
-        // [新增] 日志
-        _logger.LogInformation($"[GetRecommendations] Fetching for User {userId}, Type: {type}, Limit: {limit}");
-
+        
+        // 构造基础查询
         var query = _context.Recommendations
             .Include(r => r.Game)
             .Where(r => r.UserId == userId && r.ExpireTime > DateTime.UtcNow);
 
+        // 过滤类型
         if (!string.IsNullOrEmpty(type))
         {
             query = query.Where(r => r.RecommendationType == type);
         }
+        else
+        {
+            // 如果不需要特别过滤 Explore 的记录，此处可以移除之前的 RecommendationType != "Explore" 判断
+            // 因为现在统一使用符合数据库定义的类型（如 'game'）
+        }
 
-        var list = await query.OrderByDescending(r => r.CreatedAt).Take(limit).ToListAsync();
-        
-        _logger.LogInformation($"[GetRecommendations] Found {list.Count} items.");
+        var list = await query
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(limit)
+            .ToListAsync();
 
         var result = list.Select(r => new
         {
@@ -64,27 +72,78 @@ public class RecommendationsController : ControllerBase
             HeaderImage = r.Game.HeaderImage,
             r.RecommendationType,
             r.RecommendationStrategy,
-            Score = 0.95,
+            Score = 0.95, 
             r.Reason,
             r.CreatedAt,
             r.ExpireTime,
-            tags = new[] { r.RecommendationType }, 
-            reviewScore = 90 
+            Tags = new[] { r.RecommendationType }, 
+            r.Game.ReviewScore 
         });
 
         return Ok(ApiResponse<object>.SuccessResponse(new { items = result }));
     }
 
-    // [修改] 探索逻辑 + 详细日志
+    /// <summary>
+    /// 探索新游戏 (带缓存机制)
+    /// </summary>
     [HttpGet("explore")]
-    public async Task<ActionResult<ApiResponse<object>>> ExploreGames()
+    public async Task<ActionResult<ApiResponse<object>>> ExploreGames([FromQuery] bool refresh = false)
     {
         var userId = GetCurrentUserId();
-        _logger.LogInformation($"[ExploreGames] Start exploring for User {userId}...");
+        var now = DateTime.UtcNow;
+
+        // [修复]：数据库 Enum 定义不支持 "Explore"，必须使用 'game', 'discount', 'similar', 'trending' 之一
+        // 这里使用 'game' 作为探索功能的类型
+        const string EXPLORE_TYPE_DB_VALUE = "game"; 
 
         try 
         {
-            // 1. 获取用户玩过的游戏类型偏好
+            // 1. 尝试从数据库获取缓存的推荐 (如果不是强制刷新)
+            if (!refresh)
+            {
+                var cachedRecs = await _context.Recommendations
+                    .Include(r => r.Game)
+                    .ThenInclude(g => g.GameGenres)
+                    .ThenInclude(gg => gg.Genre)
+                    .Where(r => r.UserId == userId 
+                             && r.RecommendationType == EXPLORE_TYPE_DB_VALUE
+                             && r.ExpireTime > now)
+                    .OrderByDescending(r => r.CreatedAt) // 获取最新的
+                    .Take(3) // 限制数量，防止取到历史旧数据
+                    .ToListAsync();
+
+                if (cachedRecs.Count > 0)
+                {
+                    _logger.LogInformation($"[ExploreGames] Returning {cachedRecs.Count} cached items for User {userId}.");
+                    
+                    // [修复]：策略值必须匹配数据库 Enum ('content_based', 'popular', etc.)
+                    var cachedStrategy = cachedRecs.FirstOrDefault()?.RecommendationStrategy;
+                    var cachedTitle = cachedStrategy == "content_based" ? "AI 智能探索" : "热门推荐";
+
+                    var cachedItems = cachedRecs.Select(r => new
+                    {
+                        r.Game.GameId,
+                        GameName = r.Game.Name,
+                        r.Game.HeaderImage,
+                        Genres = r.Game.GameGenres.Select(gg => gg.Genre.Name).ToList(),
+                        r.Game.ReleaseDate,
+                        r.Game.ReviewScore,
+                        CurrentPrice = 0, 
+                        WhyExplore = r.Reason,
+                        UniqueFeatures = r.Game.GameGenres.Select(gg => gg.Genre.Name).Take(3).ToList()
+                    });
+
+                    return Ok(ApiResponse<object>.SuccessResponse(new { 
+                        exploreCategory = cachedTitle, 
+                        items = cachedItems 
+                    }));
+                }
+            }
+
+            // 2. 如果没有缓存或强制刷新，执行生成逻辑
+            _logger.LogInformation($"[ExploreGames] Generating NEW recommendations for User {userId} (Refresh: {refresh})...");
+
+            // 2.1 获取用户偏好 (Top 3 Genres)
             var recentGenreIds = await _context.UserPlatformLibraries
                 .Include(upl => upl.Game).ThenInclude(g => g.GameGenres)
                 .Where(upl => upl.PlayerPlatform.UserPlatformBindings.Any(upb => upb.UserId == userId))
@@ -93,9 +152,6 @@ public class RecommendationsController : ControllerBase
                 .SelectMany(upl => upl.Game.GameGenres.Select(gg => gg.GenreId))
                 .ToListAsync();
 
-            _logger.LogInformation($"[ExploreGames] Found {recentGenreIds.Count} genre records from recent games.");
-
-            // 统计最常玩的 Top 3 类型
             var topGenreIds = recentGenreIds
                 .GroupBy(id => id)
                 .OrderByDescending(g => g.Count())
@@ -103,66 +159,86 @@ public class RecommendationsController : ControllerBase
                 .Select(g => g.Key)
                 .ToList();
 
-            _logger.LogInformation($"[ExploreGames] Top Genre IDs: {string.Join(",", topGenreIds)}");
-            
-            // 2. 获取用户已拥有的游戏ID
+            // 2.2 获取已拥有游戏ID (排除用)
             var ownedGameIds = await _context.UserPlatformLibraries
                  .Where(upl => upl.PlayerPlatform.UserPlatformBindings.Any(upb => upb.UserId == userId))
                  .Select(upl => upl.GameId)
                  .ToListAsync();
 
-            _logger.LogInformation($"[ExploreGames] User owns {ownedGameIds.Count} games. These will be excluded.");
-
-            // 3. 构建推荐查询
+            // 2.3 构建查询
             var query = _context.Games
                 .Include(g => g.GameGenres).ThenInclude(gg => gg.Genre)
                 .AsQueryable();
 
+            // [修复]：策略字符串必须匹配数据库 Enum 定义 (全小写下划线)
+            string strategyName = "popular"; // 对应 'popular'
+            string title = "热门推荐";
+            string defaultReason = "近期热门高分游戏";
+
             if (topGenreIds.Any())
             {
                 query = query.Where(g => g.GameGenres.Any(gg => topGenreIds.Contains(gg.GenreId)));
-                _logger.LogInformation("[ExploreGames] Strategy: Content-Based (Matching Top Genres)");
+                strategyName = "content_based"; // 对应 'content_based'
+                title = "AI 智能探索";
+                defaultReason = "根据您的游戏库风格推荐";
             }
             else 
             {
                 query = query.Where(g => g.ReviewScore > 85);
-                _logger.LogInformation("[ExploreGames] Strategy: Popularity (No preference data found)");
             }
 
-            // 4. 执行查询
-            var rawList = await query
+            // 2.4 随机获取 3 个候选
+            var candidates = await query
                 .Where(g => !ownedGameIds.Contains(g.GameId))
-                .Take(50) // 先取一部分再随机，避免全表扫
-                .ToListAsync();
-            
-            _logger.LogInformation($"[ExploreGames] Query returned {rawList.Count} candidates before random selection.");
-
-            var recommendations = rawList
-                .OrderBy(r => Guid.NewGuid()) // 内存中随机排序
+                .OrderBy(x => EF.Functions.Random())
                 .Take(3)
-                .Select(g => new
-                {
-                    g.GameId,
-                    GameName = g.Name,
-                    g.HeaderImage,
-                    g.ReviewScore,
-                    g.ReleaseDate,
-                    WhyExplore = topGenreIds.Any() ? "根据您的游戏库风格推荐" : "近期热门高分游戏",
-                    UniqueFeatures = g.GameGenres.Select(gg => gg.Genre.Name).Take(3).ToList()
-                })
-                .ToList();
+                .ToListAsync();
 
-            _logger.LogInformation($"[ExploreGames] Returning {recommendations.Count} final recommendations.");
+            // 2.5 写入数据库
+            // 注意：由于我们将类型改为了 "game"，不能简单地删除所有 "game" 类型的记录，因为可能误删其他推荐
+            // 这里的策略改为：只添加新记录，利用 ExpireTime 来控制有效性
+            
+            var newRecEntities = candidates.Select(g => new Recommendation
+            {
+                UserId = userId,
+                GameId = g.GameId,
+                RecommendationType = EXPLORE_TYPE_DB_VALUE, // 使用 'game'
+                RecommendationStrategy = strategyName,      // 使用 'popular' 或 'content_based'
+                Reason = defaultReason,
+                CreatedAt = DateTime.UtcNow,
+                ExpireTime = DateTime.UtcNow.AddHours(24) // 24小时有效期
+            }).ToList();
+
+            if (newRecEntities.Any())
+            {
+                _context.Recommendations.AddRange(newRecEntities);
+                await _context.SaveChangesAsync();
+            }
+
+            // 2.6 返回结果
+            var items = candidates.Select(g => new
+            {
+                g.GameId,
+                GameName = g.Name,
+                g.HeaderImage,
+                Genres = g.GameGenres.Select(gg => gg.Genre.Name).ToList(),
+                g.ReleaseDate,
+                g.ReviewScore,
+                CurrentPrice = 0, 
+                WhyExplore = defaultReason,
+                UniqueFeatures = g.GameGenres.Select(gg => gg.Genre.Name).Take(3).ToList()
+            });
 
             return Ok(ApiResponse<object>.SuccessResponse(new { 
-                exploreCategory = topGenreIds.Any() ? "AI 智能探索" : "热门推荐", 
-                items = recommendations 
+                exploreCategory = title, 
+                items = items 
             }));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[ExploreGames] Error occurred during exploration.");
-            return StatusCode(500, ApiResponse<object>.ErrorResponse("INTERNAL_ERROR", ex.Message));
+            _logger.LogError(ex, "[ExploreGames] Error occurred.");
+            // 返回具体的错误信息以便调试，生产环境可隐藏
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("INTERNAL_ERROR", ex.InnerException?.Message ?? ex.Message));
         }
     }
 
@@ -170,7 +246,6 @@ public class RecommendationsController : ControllerBase
     public async Task<ActionResult<ApiResponse<object>>> SubmitFeedback(int id, [FromBody] FeedbackRequestDto request)
     {
         var userId = GetCurrentUserId();
-        _logger.LogInformation($"[SubmitFeedback] User {userId} feedback for Rec {id}: Result={request.FeedbackResult}");
         
         var feedback = new RecommendationFeedback
         {
@@ -184,13 +259,49 @@ public class RecommendationsController : ControllerBase
         _context.RecommendationFeedbacks.Add(feedback);
         await _context.SaveChangesAsync();
 
-        return Ok(ApiResponse<object>.SuccessResponse(new { feedback.FeedbackId }, "感谢您的反馈"));
+        return Ok(ApiResponse<object>.SuccessResponse(new { 
+            feedbackId = feedback.FeedbackId,
+            recommendationId = id,
+            feedbackTime = feedback.FeedbackTime,
+            impact = "您的反馈将帮助我们改进推荐算法"
+        }, "感谢您的反馈"));
     }
 
     [HttpGet("similar/{gameId}")]
     [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<object>>> GetSimilarGames(long gameId)
     {
-        return Ok(ApiResponse<object>.SuccessResponse(new { sourceGameId = gameId, similarGames = new List<object>() }));
+        var sourceGame = await _context.Games
+            .Include(g => g.GameGenres)
+            .FirstOrDefaultAsync(g => g.GameId == gameId);
+
+        if (sourceGame == null) 
+            return NotFound(ApiResponse<object>.ErrorResponse("NOT_FOUND", "游戏不存在"));
+
+        var genreIds = sourceGame.GameGenres.Select(gg => gg.GenreId).ToList();
+
+        var similarGames = await _context.Games
+            .Include(g => g.GameGenres).ThenInclude(gg => gg.Genre)
+            .Where(g => g.GameId != gameId && g.GameGenres.Any(gg => genreIds.Contains(gg.GenreId)))
+            .OrderByDescending(g => g.ReviewScore)
+            .Take(5)
+            .Select(g => new 
+            {
+                g.GameId,
+                GameName = g.Name,
+                HeaderImage = g.HeaderImage,
+                SimilarityScore = 0.85, 
+                CommonTags = g.GameGenres.Select(gg => gg.Genre.Name).Take(3).ToList(),
+                CurrentPrice = 0,
+                g.ReviewScore
+            })
+            .ToListAsync();
+
+        return Ok(ApiResponse<object>.SuccessResponse(new { 
+            sourceGameId = gameId, 
+            sourceGameName = sourceGame.Name,
+            similarGames = similarGames,
+            totalCount = similarGames.Count
+        }));
     }
 }

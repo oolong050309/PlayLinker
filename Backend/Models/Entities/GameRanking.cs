@@ -39,6 +39,12 @@ public partial class GameRanking
     [Column("current_rank")]
     public int? CurrentRank { get; set; }
 
+    /// <summary>
+    /// [新增] 数据最后更新时间
+    /// </summary>
+    [Column("updated_at", TypeName = "datetime")]
+    public DateTime UpdatedAt { get; set; }
+
     [ForeignKey("GameId")]
     [InverseProperty("GameRanking")]
     public virtual Game Game { get; set; } = null!;

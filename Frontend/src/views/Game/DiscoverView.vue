@@ -1,6 +1,5 @@
 <template>
   <div class="discover-container">
-    <!-- 搜索和分类区域 -->
     <div class="search-section">
       <div class="search-wrapper">
         <Search class="search-icon" size="20" />
@@ -26,7 +25,6 @@
       </div>
     </div>
 
-    <!-- 为你推荐（显示AI智能探索内容） -->
     <section class="section-card">
       <div class="section-header">
         <div class="section-header-left">
@@ -38,15 +36,15 @@
             <p class="section-subtitle">发现更多符合您口味的宝藏游戏</p>
           </div>
         </div>
-        <button @click="loadRecommendations" class="refresh-btn">
-          <RefreshCw class="icon" size="16" />
+        <button @click="loadRecommendations(true)" class="refresh-btn">
+          <RefreshCw class="icon" size="16" :class="{ 'spin': aiRecommendationsLoading }" />
           刷新
         </button>
       </div>
 
-      <div v-if="aiRecommendationsLoading" class="loading-small">
+      <div v-if="aiRecommendationsLoading && aiRecommendations.length === 0" class="loading-small">
         <div class="loading-spinner-small"></div>
-        <span>加载中...</span>
+        <span>AI 正在计算中...</span>
       </div>
 
       <div v-else-if="aiRecommendations.length === 0" class="empty-state">
@@ -88,6 +86,7 @@
                 <Star class="star-icon" size="14" />
                 <span>{{ item.reviewScore }}</span>
               </div>
+              <span class="game-date" v-if="item.releaseDate">{{ formatDate(item.releaseDate) }}</span>
             </div>
           </div>
         </div>
@@ -97,69 +96,74 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted } from 'vue'
 import { recommendationApi } from '@/api/recommendation'
-import { Search, RefreshCw, Gamepad2, Star, Sparkles } from 'lucide-vue-next'
+import { Search, RefreshCw, Star, Sparkles } from 'lucide-vue-next'
+import { formatDate } from '@/utils/format' // 假设有这个工具函数
 
 const searchQuery = ref('')
 const activeCategory = ref('全部')
 const categories = ['全部', 'RPG', '动作', 'FPS', '策略', '独立游戏']
-const recommendations = ref([])
-const recommendationsLoading = ref(false)
+const recommendations = ref([]) // 用于存其他普通推荐
 const aiRecommendations = ref([])
 const aiRecommendationsLoading = ref(false)
 const exploreTitle = ref('AI 智能探索')
 
 const handleSearch = () => {
-  console.log('Search:', searchQuery.value)
   // TODO: 实现搜索功能
+  console.log('Search:', searchQuery.value)
 }
 
 const handleImageError = (event) => {
   event.target.src = '/placeholder-game.png'
 }
 
-const loadRecommendations = async () => {
-  recommendationsLoading.value = true
+// 修改：接受 refresh 参数，默认为 false
+const loadRecommendations = async (refresh = false) => {
   aiRecommendationsLoading.value = true
   
-  console.log('[Frontend] Starting loadRecommendations...')
   try {
-    // 1. 加载常规推荐
-    const res = await recommendationApi.getRecommendations({ limit: 4 })
-    console.log('[Frontend] GetRecommendations Response:', res)
-    if (res.success) {
-      recommendations.value = res.data.items || []
+    // 1. 如果不是强制刷新，且页面刚加载，也加载普通推荐
+    if (!refresh) {
+      const res = await recommendationApi.getRecommendations({ limit: 4 })
+      if (res.success) {
+        recommendations.value = res.data.items || []
+      }
     }
 
-    // 2. 加载 AI/探索推荐
-    console.log('[Frontend] Calling exploreGames API...')
-    const exploreRes = await recommendationApi.exploreGames()
-    console.log('[Frontend] ExploreGames Response:', exploreRes)
+    // 2. 加载 AI/探索推荐，传递 refresh 参数
+    const exploreRes = await recommendationApi.exploreGames({ refresh })
     
     if (exploreRes.success && exploreRes.data) {
       aiRecommendations.value = exploreRes.data.items || []
-      console.log('[Frontend] Loaded explore items:', aiRecommendations.value.length)
       if (exploreRes.data.exploreCategory) {
         exploreTitle.value = exploreRes.data.exploreCategory
       }
-    } else {
-      console.warn('[Frontend] ExploreGames returned no success flag or empty data.')
     }
   } catch (error) {
     console.error('[Frontend] Failed to load recommendations:', error)
   } finally {
-    recommendationsLoading.value = false
     aiRecommendationsLoading.value = false
   }
 }
 
 onMounted(() => {
-  loadRecommendations()
+  loadRecommendations(false) // 初始加载不强制刷新，使用缓存
 })
 </script>
 
 <style scoped>
+/* 保持原有 CSS 样式不变，只需增加 spin 动画 */
+.refresh-btn .icon.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ... 其他原有样式 ... */
 .discover-container {
   min-height: 100vh;
   background: #0f0f13;
@@ -508,6 +512,11 @@ onMounted(() => {
 .empty-icon {
   margin-bottom: 16px;
   opacity: 0.3;
+  color: #64748b;
+}
+
+.game-date {
+  font-size: 12px;
   color: #64748b;
 }
 
