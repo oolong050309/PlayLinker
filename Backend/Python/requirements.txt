@@ -5,3 +5,4 @@ httpx>=0.24.0
 ms_cv>=0.1.0
 pydantic>=2.0.0
 requests>=2.28.0
+curl-cffi>=0.5.10

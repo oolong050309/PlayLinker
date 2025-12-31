@@ -66,12 +66,13 @@ api.interceptors.response.use(
     const res = response.data
     
     // 统一处理响应格式
+    // 注意：部分“认证流程”接口会返回 res.success=true，但 res.data.success=false（表示需要用户继续操作）
+    // 这里仅在HTTP层面的 success=false 时才当作全局错误处理
     if (res.success === false) {
       console.error('API错误:', res.message)
-      // 可以在这里添加全局错误提示
       return Promise.reject(new Error(res.message || '请求失败'))
     }
-    
+
     return res
   },
   error => {
@@ -304,6 +305,30 @@ export const gogApi = {
   // GOG认证（增加超时时间，因为可能需要浏览器认证）
   authenticate(data) {
     return api.post('/gog/authenticate', data, { timeout: 300000 }) // 5分钟超时
+  }
+}
+
+// Epic Games API
+export const epicApi = {
+  // 导入Epic Games数据
+  importData(data) {
+    return api.post('/epic/import', data, { timeout: 60000 })
+  },
+  // 获取Epic Games用户信息
+  getUser(epicAccountId) {
+    return api.get(`/epic/user/${epicAccountId}`)
+  },
+  // 获取Epic Games游戏信息
+  getGame(gameId) {
+    return api.get(`/epic/games/${gameId}`)
+  },
+  // 检查Epic Games令牌状态
+  checkTokenStatus() {
+    return api.get('/epic/token-status', { timeout: 30000 }) // 30秒超时
+  },
+  // Epic Games认证（增加超时时间）
+  authenticate(data) {
+    return api.post('/epic/authenticate', data, { timeout: 300000 }) // 5分钟超时
   }
 }
 

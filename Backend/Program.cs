@@ -59,6 +59,7 @@ builder.Services.AddHttpClient<ISteamService, SteamService>();
 builder.Services.AddScoped<IXboxService, XboxService>();
 builder.Services.AddScoped<IPsnService, PsnService>();
 builder.Services.AddScoped<IGogService, GogService>();
+builder.Services.AddScoped<IEpicService, EpicService>();
 builder.Services.AddScoped<ReportGenerationService>();
 
 // --- 认证和用户管理服务 (来自 HEAD) ---
