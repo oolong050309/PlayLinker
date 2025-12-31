@@ -57,28 +57,69 @@ public class XboxService : IXboxService
     {
         try
         {
+            // 先尝试查找 BindingStatus 为 true 的绑定
             var binding = await _context.UserPlatformBindings
                 .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == platformId && b.BindingStatus == true);
             
-            if (binding == null || string.IsNullOrEmpty(binding.AccessToken))
+            // 如果没找到，尝试查找任何有令牌的绑定（可能是 BindingStatus 为 null 或 false）
+            if (binding == null)
             {
-                _logger.LogWarning("用户{UserId}未绑定平台{PlatformId}或令牌为空", userId, platformId);
+                binding = await _context.UserPlatformBindings
+                    .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == platformId && !string.IsNullOrEmpty(b.AccessToken));
+                
+                if (binding != null)
+                {
+                    _logger.LogWarning("找到绑定记录但BindingStatus不为true，将更新为true: UserId={UserId}, PlatformId={PlatformId}, BindingStatus={BindingStatus}", 
+                        userId, platformId, binding.BindingStatus);
+                    // 自动修复 BindingStatus
+                    binding.BindingStatus = true;
+                    await _context.SaveChangesAsync();
+                }
+            }
+            
+            if (binding == null)
+            {
+                // 检查是否存在绑定记录（即使没有令牌）
+                var anyBinding = await _context.UserPlatformBindings
+                    .AnyAsync(b => b.UserId == userId && b.PlatformId == platformId);
+                
+                if (anyBinding)
+                {
+                    _logger.LogWarning("用户{UserId}存在平台{PlatformId}的绑定记录，但令牌为空", userId, platformId);
+                }
+                else
+                {
+                    _logger.LogWarning("用户{UserId}未绑定平台{PlatformId}", userId, platformId);
+                }
+                return null;
+            }
+            
+            if (string.IsNullOrEmpty(binding.AccessToken))
+            {
+                _logger.LogWarning("用户{UserId}的平台{PlatformId}绑定记录存在，但AccessToken为空", userId, platformId);
                 return null;
             }
             
             // 解密令牌
             var decryptedToken = _encryptionService.DecryptToken(binding.AccessToken);
             
+            if (string.IsNullOrEmpty(decryptedToken))
+            {
+                _logger.LogError("解密后的令牌为空: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+                return null;
+            }
+            
             // 写入临时文件（按用户ID区分）
             var tempFilePath = Path.Combine(_tokensPath, $"xbox_tokens_{userId}_{Guid.NewGuid():N}.json");
             await File.WriteAllTextAsync(tempFilePath, decryptedToken);
             
-            _logger.LogInformation("令牌已从数据库加载到临时文件: {TempFile}", tempFilePath);
+            _logger.LogInformation("令牌已从数据库加载到临时文件: UserId={UserId}, PlatformId={PlatformId}, TempFile={TempFile}", 
+                userId, platformId, tempFilePath);
             return tempFilePath;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "从数据库加载令牌失败");
+            _logger.LogError(ex, "从数据库加载令牌失败: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
             return null;
         }
     }
@@ -98,6 +139,7 @@ public class XboxService : IXboxService
                 // 更新现有绑定
                 var encryptedToken = _encryptionService.EncryptToken(tokenJson);
                 binding.AccessToken = encryptedToken;
+                binding.BindingStatus = true; // 确保绑定状态为true
                 binding.LastSyncTime = DateTime.UtcNow;
                 binding.ExpireTime = DateTime.UtcNow.AddYears(1); // Xbox令牌有效期1年
                 
@@ -109,53 +151,51 @@ public class XboxService : IXboxService
                 
                 await _context.SaveChangesAsync();
                 
-                _logger.LogInformation("令牌已更新到数据库: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+                _logger.LogInformation("令牌已更新到数据库: UserId={UserId}, PlatformId={PlatformId}, BindingStatus={BindingStatus}", 
+                    userId, platformId, binding.BindingStatus);
                 return true;
             }
             
             // 绑定不存在，需要创建
-            if (string.IsNullOrEmpty(xuid))
-            {
-                _logger.LogWarning("未找到绑定记录且未提供XUID，无法创建绑定: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
-                return false;
-            }
+            // 如果xuid为空，使用临时标识符，后续可以通过同步更新
+            var platformUserId = xuid ?? $"temp_{userId}_{platformId}_{DateTime.UtcNow:yyyyMMddHHmmss}";
             
             // 先确保PlayerPlatform记录存在（外键约束要求）
             var playerPlatform = await _context.PlayerPlatforms
-                .FirstOrDefaultAsync(pp => pp.PlatformUserId == xuid && pp.PlatformId == platformId);
+                .FirstOrDefaultAsync(pp => pp.PlatformUserId == platformUserId && pp.PlatformId == platformId);
             
             if (playerPlatform == null)
             {
                 // 注意：此时令牌还未保存，无法调用GetXboxUser（需要令牌）
                 // 先使用基本信息创建PlayerPlatform记录，后续可以通过同步更新
-                _logger.LogInformation("创建PlayerPlatform记录: Xuid={Xuid}", xuid);
+                _logger.LogInformation("创建PlayerPlatform记录: PlatformUserId={PlatformUserId}", platformUserId);
                 playerPlatform = new PlayerPlatform
                 {
-                    PlatformUserId = xuid,
+                    PlatformUserId = platformUserId,
                     PlatformId = platformId,
-                    ProfileName = xuid  // 暂时使用XUID作为ProfileName，后续可以更新
+                    ProfileName = xuid ?? $"临时用户_{userId}"  // 暂时使用临时名称，后续可以更新
                 };
                 _context.PlayerPlatforms.Add(playerPlatform);
                 
                 try
                 {
                     await _context.SaveChangesAsync();
-                    _logger.LogInformation("已创建PlayerPlatform记录: Xuid={Xuid}", xuid);
+                    _logger.LogInformation("已创建PlayerPlatform记录: PlatformUserId={PlatformUserId}", platformUserId);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "创建PlayerPlatform记录失败: Xuid={Xuid}", xuid);
+                    _logger.LogError(ex, "创建PlayerPlatform记录失败: PlatformUserId={PlatformUserId}", platformUserId);
                     throw; // 重新抛出异常，因为这是必需的
                 }
             }
             
             // 确保playerPlatform已保存（重新查询以确保数据一致性）
             playerPlatform = await _context.PlayerPlatforms
-                .FirstOrDefaultAsync(pp => pp.PlatformUserId == xuid && pp.PlatformId == platformId);
+                .FirstOrDefaultAsync(pp => pp.PlatformUserId == platformUserId && pp.PlatformId == platformId);
             
             if (playerPlatform == null)
             {
-                _logger.LogError("PlayerPlatform记录不存在，无法创建绑定: Xuid={Xuid}, PlatformId={PlatformId}", xuid, platformId);
+                _logger.LogError("PlayerPlatform记录不存在，无法创建绑定: PlatformUserId={PlatformUserId}, PlatformId={PlatformId}", platformUserId, platformId);
                 return false;
             }
             
@@ -165,7 +205,7 @@ public class XboxService : IXboxService
             {
                 UserId = userId,
                 PlatformId = platformId,
-                PlatformUserId = xuid,  // 必须与playerPlatform.PlatformUserId完全一致
+                PlatformUserId = platformUserId,  // 必须与playerPlatform.PlatformUserId完全一致
                 AccessToken = encryptedTokenForNewBinding,
                 BindingStatus = true,
                 BindingTime = DateTime.UtcNow,
@@ -181,12 +221,42 @@ public class XboxService : IXboxService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "保存UserPlatformBinding失败: Xuid={Xuid}, PlatformId={PlatformId}, PlayerPlatform存在={PlayerPlatformExists}", 
-                    xuid, platformId, playerPlatform != null);
+                _logger.LogError(ex, "保存UserPlatformBinding失败: PlatformUserId={PlatformUserId}, PlatformId={PlatformId}, PlayerPlatform存在={PlayerPlatformExists}", 
+                    platformUserId, platformId, playerPlatform != null);
                 throw;
             }
             
-            _logger.LogInformation("已创建绑定记录并保存令牌: UserId={UserId}, PlatformId={PlatformId}, Xuid={Xuid}", userId, platformId, xuid);
+            _logger.LogInformation("已创建绑定记录并保存令牌: UserId={UserId}, PlatformId={PlatformId}, PlatformUserId={PlatformUserId}, Xuid={Xuid}", 
+                userId, platformId, platformUserId, xuid ?? "未提供");
+            
+            // 如果xuid为空，尝试从令牌中获取xuid并更新
+            if (string.IsNullOrEmpty(xuid))
+            {
+                try
+                {
+                    // 尝试从令牌JSON中解析xuid
+                    var tokenData = JsonSerializer.Deserialize<JsonElement>(tokenJson);
+                    if (tokenData.TryGetProperty("xsts_token", out var xstsToken) && 
+                        xstsToken.TryGetProperty("xuid", out var xuidElement))
+                    {
+                        var extractedXuid = xuidElement.GetString();
+                        if (!string.IsNullOrEmpty(extractedXuid) && extractedXuid != platformUserId)
+                        {
+                            _logger.LogInformation("从令牌中提取到XUID，更新绑定: {Xuid}", extractedXuid);
+                            // 更新绑定和PlayerPlatform的PlatformUserId
+                            binding.PlatformUserId = extractedXuid;
+                            playerPlatform.PlatformUserId = extractedXuid;
+                            await _context.SaveChangesAsync();
+                            _logger.LogInformation("已更新PlatformUserId为XUID: {Xuid}", extractedXuid);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "尝试从令牌中提取XUID失败，将使用临时标识符");
+                }
+            }
+            
             return true;
         }
         catch (Exception ex)
@@ -708,16 +778,66 @@ public class XboxService : IXboxService
                 {
                     xuid = result.ContainsKey("xuid") ? result["xuid"].GetString() : null;
                     
-                    // 认证成功，读取令牌文件并保存到数据库（需要xuid来创建绑定记录）
+                    // 认证成功，读取令牌文件并保存到数据库
                     if (File.Exists(tempTokenPath))
                     {
                         try
                         {
                             var tokenJson = await File.ReadAllTextAsync(tempTokenPath);
+                            
+                            // 如果xuid为空，尝试从令牌JSON中解析
+                            if (string.IsNullOrEmpty(xuid))
+                            {
+                                try
+                                {
+                                    var tokenData = JsonSerializer.Deserialize<JsonElement>(tokenJson);
+                                    if (tokenData.TryGetProperty("xsts_token", out var xstsToken) && 
+                                        xstsToken.TryGetProperty("xuid", out var xuidElement))
+                                    {
+                                        xuid = xuidElement.GetString();
+                                        _logger.LogInformation("从令牌中提取到XUID: {Xuid}", xuid);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogWarning(ex, "从令牌中提取XUID失败，将使用临时标识符");
+                                }
+                            }
+                            
+                            // 保存令牌到数据库（即使xuid为空也会保存，使用临时标识符）
                             var saveSuccess = await SaveTokenToDatabase(userId, 7, tokenJson, xuid);
                             if (saveSuccess)
                             {
-                                _logger.LogInformation("令牌已保存到数据库: Xuid={Xuid}", xuid);
+                                _logger.LogInformation("令牌已保存到数据库: UserId={UserId}, Xuid={Xuid}", userId, xuid ?? "临时标识符");
+                                
+                                // 如果xuid仍然为空，尝试通过API获取
+                                if (string.IsNullOrEmpty(xuid))
+                                {
+                                    try
+                                    {
+                                        // 使用刚保存的令牌获取用户信息
+                                        var xboxUser = await GetXboxUser("me", userId);
+                                        if (xboxUser != null && !string.IsNullOrEmpty(xboxUser.Xuid))
+                                        {
+                                            xuid = xboxUser.Xuid;
+                                            _logger.LogInformation("通过API获取到XUID: {Xuid}", xuid);
+                                            
+                                            // 更新绑定记录中的PlatformUserId
+                                            var binding = await _context.UserPlatformBindings
+                                                .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 7);
+                                            if (binding != null && binding.PlatformUserId != xuid)
+                                            {
+                                                binding.PlatformUserId = xuid;
+                                                await _context.SaveChangesAsync();
+                                                _logger.LogInformation("已更新绑定记录中的PlatformUserId: {Xuid}", xuid);
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogWarning(ex, "通过API获取XUID失败，将使用临时标识符");
+                                    }
+                                }
                             }
                             else
                             {
@@ -818,7 +938,7 @@ public class XboxService : IXboxService
             if (!string.IsNullOrEmpty(output))
             {
                 _logger.LogInformation("Python输出长度: {Length} 字符", output.Length);
-                _logger.LogDebug("Python完整输出: {Output}", output);
+                _logger.LogInformation("Python完整输出: {Output}", output);
             }
             else
             {
@@ -874,7 +994,7 @@ public class XboxService : IXboxService
                 if (jsonLines.Count == 0)
                 {
                     _logger.LogError("未找到有效的JSON输出，ExitCode={ExitCode}", exitCode);
-                    _logger.LogDebug("完整输出: {Output}", output);
+                    _logger.LogInformation("完整输出: {Output}", output);
                     if (!string.IsNullOrEmpty(error))
                     {
                         _logger.LogError("错误信息: {Error}", error);
@@ -885,7 +1005,7 @@ public class XboxService : IXboxService
                 // 重新组合JSON字符串
                 var jsonString = string.Join("\n", jsonLines);
                 
-                _logger.LogDebug("准备解析JSON，长度: {Length} 字符", jsonString.Length);
+                _logger.LogInformation("准备解析JSON，长度: {Length} 字符，内容: {JsonString}", jsonString.Length, jsonString);
                 
                 var doc = JsonDocument.Parse(jsonString);
                 
@@ -1255,15 +1375,48 @@ public class XboxService : IXboxService
             // 从title_history中提取游戏信息
             if (xboxData.RootElement.TryGetProperty("title_history", out var titleHistory))
             {
+                _logger.LogInformation("找到title_history节点");
+                
+                // 检查是否有错误
+                if (titleHistory.TryGetProperty("error", out var error))
+                {
+                    var errorMsg = error.GetString();
+                    _logger.LogWarning("title_history包含错误信息: {Error}", errorMsg);
+                }
+                
                 if (titleHistory.TryGetProperty("titles", out var titles))
                 {
+                    var titlesCount = titles.GetArrayLength();
+                    _logger.LogInformation("找到 {Count} 个title记录", titlesCount);
+                    
+                    if (titlesCount == 0)
+                    {
+                        _logger.LogWarning("title_history.titles数组为空，可能用户没有游戏或API返回为空");
+                    }
+                    
+                    int processedCount = 0;
+                    int skippedCount = 0;
+                    
                     foreach (var title in titles.EnumerateArray())
                     {
                         var titleId = title.TryGetProperty("title_id", out var tid) ? tid.GetString() ?? "" : "";
                         var name = title.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "";
+                        var type = title.TryGetProperty("type", out var typeEl) ? typeEl.GetString() ?? "game" : "game";
+                        
+                        _logger.LogDebug("处理title: TitleId={TitleId}, Name={Name}, Type={Type}", titleId, name, type);
+                        
+                        // 跳过非游戏类型（可选：如果需要只同步游戏）
+                        // if (!string.IsNullOrEmpty(type) && type.ToLower() != "game")
+                        // {
+                        //     _logger.LogDebug("跳过非游戏类型: Type={Type}", type);
+                        //     skippedCount++;
+                        //     continue;
+                        // }
                         
                         if (string.IsNullOrEmpty(titleId) || string.IsNullOrEmpty(name))
                         {
+                            _logger.LogDebug("跳过无效title: TitleId={TitleId}, Name={Name}", titleId, name);
+                            skippedCount++;
                             continue;
                         }
 
@@ -1271,7 +1424,7 @@ public class XboxService : IXboxService
                         {
                             TitleId = titleId,
                             Name = name,
-                            Type = title.TryGetProperty("type", out var typeEl) ? typeEl.GetString() ?? "game" : "game",
+                            Type = type, // 使用上面已经定义的type变量
                             IsFree = false, // Xbox API 不直接提供此信息
                             HeaderImage = title.TryGetProperty("display_image", out var img) ? img.GetString() ?? "" : ""
                         };
@@ -1358,7 +1511,26 @@ public class XboxService : IXboxService
                         }
 
                         games.Add(game);
+                        processedCount++;
+                        _logger.LogDebug("已添加游戏: {Name} (TitleId: {TitleId})", game.Name, game.TitleId);
                     }
+                    
+                    _logger.LogInformation("处理完成: 总计={Total}, 已处理={Processed}, 已跳过={Skipped}", 
+                        titlesCount, processedCount, skippedCount);
+                }
+                else
+                {
+                    _logger.LogWarning("title_history中没有titles数组");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Xbox数据中没有title_history节点");
+                // 输出所有可用的根节点，帮助调试
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    var propertyNames = xboxData.RootElement.EnumerateObject().Select(p => p.Name).ToList();
+                    _logger.LogDebug("可用的根节点: {Properties}", string.Join(", ", propertyNames));
                 }
             }
 

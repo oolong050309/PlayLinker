@@ -70,9 +70,9 @@ class XboxDataCollector:
                 "message": f"令牌刷新失败: {str(e)}"
             }
 
-        # 保存刷新后的令牌
+        # 保存刷新后的令牌（使用Pydantic V2的新方法）
         with open(self.tokens_file, mode="w", encoding="utf-8") as f:
-            f.write(self.auth_mgr.oauth.json())
+            f.write(self.auth_mgr.oauth.model_dump_json())
 
         # 创建 Xbox API 客户端
         self.xbl_client = XboxLiveClient(self.auth_mgr)
@@ -176,7 +176,7 @@ class XboxDataCollector:
         except Exception as e:
             return {"error": str(e)}
 
-    async def get_title_history(self, xuid=None, max_items=50):
+    async def get_title_history(self, xuid=None, max_items=1000):
         """获取游戏活动历史"""
         try:
             from xbox.webapi.api.provider.titlehub.models import TitleFields
@@ -192,9 +192,20 @@ class XboxDataCollector:
                 TitleFields.GAME_PASS,
             ]
 
+            print(f"INFO: 开始获取游戏历史，XUID={target_xuid}, max_items={max_items}", flush=True)
             title_history = await self.xbl_client.titlehub.get_title_history(
                 target_xuid, max_items=max_items, fields=fields
             )
+            
+            if not title_history:
+                print("WARNING: title_history为空", flush=True)
+                return {"xuid": target_xuid, "titles": []}
+            
+            if not title_history.titles:
+                print("WARNING: title_history.titles为空", flush=True)
+                return {"xuid": target_xuid, "titles": []}
+            
+            print(f"INFO: 获取到 {len(title_history.titles)} 个游戏", flush=True)
 
             titles_data = {
                 "xuid": target_xuid,
@@ -300,9 +311,13 @@ class XboxDataCollector:
 
                     titles_data["titles"].append(title_info)
 
+            print(f"INFO: 成功处理 {len(titles_data['titles'])} 个游戏", flush=True)
             return titles_data
         except Exception as e:
-            return {"error": str(e)}
+            import traceback
+            error_msg = f"获取游戏历史失败: {str(e)}\n{traceback.format_exc()}"
+            print(f"ERROR: {error_msg}", flush=True)
+            return {"error": str(e), "xuid": target_xuid if 'target_xuid' in locals() else None, "titles": []}
 
     async def collect_all_data(self):
         """收集所有数据"""
@@ -311,8 +326,19 @@ class XboxDataCollector:
             "xuid": self.xbl_client.xuid,
             "profile": await self.get_own_profile(),
             "presence": await self.get_own_presence(),
-            "title_history": await self.get_title_history(),
+            "title_history": None,
         }
+        
+        # 获取游戏历史，即使失败也继续
+        try:
+            title_history = await self.get_title_history()
+            all_data["title_history"] = title_history
+            if isinstance(title_history, dict) and "error" in title_history:
+                print(f"WARNING: 获取游戏历史时出现错误: {title_history.get('error')}", flush=True)
+        except Exception as e:
+            print(f"ERROR: 获取游戏历史时发生异常: {str(e)}", flush=True)
+            all_data["title_history"] = {"error": str(e), "xuid": self.xbl_client.xuid, "titles": []}
+        
         return all_data
 
 
