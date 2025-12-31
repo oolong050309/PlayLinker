@@ -93,6 +93,123 @@ public class AliyunOssService : IAliyunOssService
             throw;
         }
     }
+
+    /// <summary>
+    /// 上传云存档文件到 OSS
+    /// </summary>
+    public async Task<string> UploadCloudSaveAsync(int userId, long gameId, Stream fileStream, string fileName)
+    {
+        if (fileStream == null || fileStream.Length == 0)
+        {
+            throw new ArgumentException("文件流为空");
+        }
+
+        ValidateOssConfiguration();
+
+        // 生成对象键：saves/{userId}/{gameId}/{yyyyMMddHHmmss}_{guid}.dat
+        var objectKey = $"saves/{userId}/{gameId}/{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}.dat";
+
+        try
+        {
+            var client = new OssClient(_options.Endpoint, _options.AccessKeyId, _options.AccessKeySecret);
+
+            var metadata = new ObjectMetadata
+            {
+                ContentType = "application/octet-stream"
+            };
+
+            // 上传
+            await Task.Run(() => client.PutObject(_options.BucketName, objectKey, fileStream, metadata));
+
+            _logger.LogInformation("用户 {UserId} 游戏 {GameId} 云存档上传成功，对象键：{ObjectKey}", userId, gameId, objectKey);
+            return objectKey; // 返回对象键，用于后续下载和删除
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "上传云存档到阿里云 OSS 失败");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 从 OSS 下载云存档文件
+    /// </summary>
+    public async Task<Stream> DownloadCloudSaveAsync(string objectKey)
+    {
+        if (string.IsNullOrWhiteSpace(objectKey))
+        {
+            throw new ArgumentException("对象键为空");
+        }
+
+        ValidateOssConfiguration();
+
+        try
+        {
+            var client = new OssClient(_options.Endpoint, _options.AccessKeyId, _options.AccessKeySecret);
+
+            var ossObject = await Task.Run(() => client.GetObject(_options.BucketName, objectKey));
+
+            // 将 OSS 流复制到内存流
+            var memoryStream = new MemoryStream();
+            await ossObject.Content.CopyToAsync(memoryStream);
+            memoryStream.Position = 0;
+
+            _logger.LogInformation("云存档下载成功，对象键：{ObjectKey}，大小：{Size} bytes", objectKey, memoryStream.Length);
+            return memoryStream;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "从阿里云 OSS 下载云存档失败，对象键：{ObjectKey}", objectKey);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 从 OSS 删除云存档文件
+    /// </summary>
+    public async Task<bool> DeleteCloudSaveAsync(string objectKey)
+    {
+        if (string.IsNullOrWhiteSpace(objectKey))
+        {
+            throw new ArgumentException("对象键为空");
+        }
+
+        ValidateOssConfiguration();
+
+        try
+        {
+            var client = new OssClient(_options.Endpoint, _options.AccessKeyId, _options.AccessKeySecret);
+
+            await Task.Run(() => client.DeleteObject(_options.BucketName, objectKey));
+
+            _logger.LogInformation("云存档删除成功，对象键：{ObjectKey}", objectKey);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "从阿里云 OSS 删除云存档失败，对象键：{ObjectKey}", objectKey);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 获取文件访问 URL
+    /// </summary>
+    public string GetFileUrl(string objectKey)
+    {
+        var baseUrl = _options.BaseUrl.TrimEnd('/');
+        return $"{baseUrl}/{objectKey}";
+    }
+
+    private void ValidateOssConfiguration()
+    {
+        if (string.IsNullOrWhiteSpace(_options.Endpoint) ||
+            string.IsNullOrWhiteSpace(_options.AccessKeyId) ||
+            string.IsNullOrWhiteSpace(_options.AccessKeySecret) ||
+            string.IsNullOrWhiteSpace(_options.BucketName) ||
+            string.IsNullOrWhiteSpace(_options.BaseUrl))
+        {
+            throw new InvalidOperationException("AliyunOss 配置不完整，请检查 appsettings 或环境变量。");
+        }
+    }
 }
-
-

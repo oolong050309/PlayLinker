@@ -40,6 +40,12 @@ public partial class LocalGameInstall
     [StringLength(100)]
     public string Version { get; set; } = null!;
 
+    /// <summary>
+    /// 游戏大小（字节）
+    /// </summary>
+    [Column("size_bytes")]
+    public long SizeBytes { get; set; } = 0;
+
     [ForeignKey("GameId")]
     [InverseProperty("LocalGameInstalls")]
     public virtual Game Game { get; set; } = null!;

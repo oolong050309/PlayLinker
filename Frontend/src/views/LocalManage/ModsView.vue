@@ -120,6 +120,12 @@
                   {{ game.installPath }}
                 </div>
                 <div class="game-actions">
+                  <button class="btn-secondary" @click="handleEditGamePath(game)">
+                    修改目录
+                  </button>
+                  <button class="btn-secondary" @click="handleAddMod(game)">
+                    添加Mod
+                  </button>
                   <button class="btn-secondary" @click="viewGameMods(game)">
                     查看Mod
                   </button>
@@ -163,7 +169,7 @@
             <div class="save-info">
               <h4 class="save-name">{{ save.gameName }}</h4>
               <div class="save-meta">
-                <span>{{ save.fileSizeMB?.toFixed(1) || 0 }} MB</span>
+                <span>{{ formatFileSize(save.fileSize) }}</span>
                 <span>•</span>
                 <span>{{ formatDate(save.updatedAt) }}</span>
               </div>
@@ -178,6 +184,10 @@
                 <CloudUpload class="icon" />
                 上传云端
               </button>
+              <button class="btn-small btn-danger-small" @click="handleDeleteSave(save)">
+                <X class="icon" />
+                删除
+              </button>
             </div>
           </div>
         </div>
@@ -191,8 +201,17 @@
       <section v-if="activeTab === 'cloud'" class="content-section">
         <div class="section-header">
           <h2 class="section-title">云端备份</h2>
-          <div class="cloud-usage">
-            {{ (cloudSummary.storageUsedMB || 0).toFixed(1) }} MB / {{ cloudSummary.storageLimitMB || 1024 }} MB 已用
+          <div class="cloud-usage-info">
+            <div class="usage-text">
+              {{ (cloudSummary.storageUsedMB || 0).toFixed(1) }} MB / {{ cloudSummary.storageLimitMB || 1024 }} MB
+            </div>
+            <div class="usage-bar">
+              <div 
+                class="usage-fill" 
+                :style="{ width: ((cloudSummary.storageUsedMB / cloudSummary.storageLimitMB) * 100) + '%' }"
+                :class="{ warning: (cloudSummary.storageUsedMB / cloudSummary.storageLimitMB) > 0.8 }"
+              ></div>
+            </div>
           </div>
         </div>
 
@@ -206,7 +225,7 @@
                 <div>
                   <h3 class="backup-name">{{ backup.gameName }}</h3>
                   <div class="backup-meta">
-                    <span>{{ backup.fileSizeMB?.toFixed(1) || 0 }} MB</span>
+                    <span>{{ formatFileSize(backup.fileSize) }}</span>
                     <span>•</span>
                     <span>上传于 {{ formatDate(backup.uploadTime) }}</span>
                   </div>
@@ -282,30 +301,80 @@
     <!-- Upload Dialog -->
     <div v-if="showUploadDialog" class="dialog-overlay" @click.self="showUploadDialog = false">
       <div class="dialog-content">
-        <h3 class="dialog-title">上传存档到云端</h3>
-        <p class="dialog-desc">{{ selectedSave?.gameName }}</p>
+        <div class="dialog-header">
+          <div>
+            <h3 class="dialog-title">上传存档到云端</h3>
+            <p class="dialog-desc">{{ selectedSave?.gameName }}</p>
+          </div>
+          <button class="btn-close" @click="showUploadDialog = false">
+            <X class="icon" />
+          </button>
+        </div>
         
         <div class="dialog-form">
           <div class="form-group">
-            <label>选择存档文件</label>
+            <label>上传类型</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" v-model="uploadType" value="file" />
+                单个文件
+              </label>
+              <label class="radio-label">
+                <input type="radio" v-model="uploadType" value="folder" />
+                文件夹
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>选择{{ uploadType === 'folder' ? '文件夹' : '文件' }}</label>
             <input 
+              v-if="uploadType === 'file'"
               type="file" 
               ref="fileInput"
               @change="handleFileSelect"
               class="form-file"
             />
+            <input 
+              v-else
+              type="file" 
+              ref="uploadFolderInput"
+              webkitdirectory
+              directory
+              multiple
+              @change="handleFolderSelect"
+              class="form-file"
+            />
+            <p v-if="uploadFile || uploadFiles.length > 0" class="file-info-box">
+              <span class="file-name">
+                {{ uploadType === 'folder' ? uploadFolderName : uploadFile?.name }}
+              </span>
+              <span class="file-size">{{ uploadFileSize }}</span>
+            </p>
           </div>
+          
           <div class="form-group">
-            <label>
+            <label class="checkbox-label">
               <input type="checkbox" v-model="uploadForm.compress" />
-              压缩上传
+              <span>压缩上传（可减小文件大小）</span>
             </label>
+          </div>
+
+          <div v-if="uploading" class="upload-progress">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+            <p class="progress-text">{{ uploadStatusText }}</p>
           </div>
         </div>
 
         <div class="dialog-actions">
-          <button class="btn-cancel" @click="showUploadDialog = false">取消</button>
-          <button class="btn-confirm" @click="handleConfirmUpload" :disabled="uploading || !uploadFile">
+          <button class="btn-cancel" @click="showUploadDialog = false" :disabled="uploading">取消</button>
+          <button 
+            class="btn-confirm" 
+            @click="handleConfirmUpload" 
+            :disabled="uploading || (!uploadFile && uploadFiles.length === 0)">
+            <CloudUpload class="icon" />
             {{ uploading ? '上传中...' : '上传' }}
           </button>
         </div>
@@ -449,6 +518,107 @@
       </div>
     </div>
 
+    <!-- Edit Game Path Dialog -->
+    <div v-if="showEditPathDialog" class="dialog-overlay" @click.self="showEditPathDialog = false">
+      <div class="dialog-content">
+        <div class="dialog-header">
+          <div>
+            <h3 class="dialog-title">修改游戏目录</h3>
+            <p class="dialog-desc">{{ editingGame?.gameName }}</p>
+          </div>
+          <button class="btn-close" @click="showEditPathDialog = false">
+            <X class="icon" />
+          </button>
+        </div>
+        
+        <div class="dialog-form">
+          <div class="form-group">
+            <label>当前目录</label>
+            <div class="path-display">{{ editingGame?.installPath }}</div>
+          </div>
+          
+          <div class="form-group">
+            <label>选择新目录</label>
+            <input 
+              type="file" 
+              ref="editPathInput"
+              webkitdirectory
+              directory
+              @change="handleEditPathSelect"
+              class="form-file"
+            />
+            <p v-if="newGamePath" class="file-info-box">
+              <span class="file-name">{{ newGamePath }}</span>
+              <span class="file-size">{{ (newGameSize / 1024 / 1024 / 1024).toFixed(2) }} GB</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="btn-cancel" @click="showEditPathDialog = false">取消</button>
+          <button 
+            class="btn-confirm" 
+            @click="handleConfirmEditPath" 
+            :disabled="!newGamePath || savingPath">
+            {{ savingPath ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Mod Dialog -->
+    <div v-if="showAddModDialog" class="dialog-overlay" @click.self="showAddModDialog = false">
+      <div class="dialog-content">
+        <div class="dialog-header">
+          <div>
+            <h3 class="dialog-title">添加 Mod 记录</h3>
+            <p class="dialog-desc">{{ modTargetGame?.gameName }}</p>
+          </div>
+          <button class="btn-close" @click="showAddModDialog = false">
+            <X class="icon" />
+          </button>
+        </div>
+        
+        <div class="dialog-form">
+          <div class="form-group">
+            <label>Mod 名称</label>
+            <input type="text" v-model="addModForm.modName" class="form-input" placeholder="输入 Mod 名称" />
+          </div>
+          
+          <div class="form-group">
+            <label>版本</label>
+            <input type="text" v-model="addModForm.version" class="form-input" placeholder="如: 1.0.0" />
+          </div>
+          
+          <div class="form-group">
+            <label>选择 Mod 文件/文件夹</label>
+            <input 
+              type="file" 
+              ref="modFileInput"
+              webkitdirectory
+              directory
+              multiple
+              @change="handleModFileSelect"
+              class="form-file"
+            />
+            <p v-if="addModForm.filePath" class="file-info-box">
+              <span class="file-name">{{ addModForm.filePath }}</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="btn-cancel" @click="showAddModDialog = false">取消</button>
+          <button 
+            class="btn-confirm" 
+            @click="handleConfirmAddMod" 
+            :disabled="!addModForm.modName || !addModForm.filePath || addingMod">
+            {{ addingMod ? '添加中...' : '添加' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Add Save Dialog -->
     <div v-if="showAddSaveDialog" class="dialog-overlay" @click.self="showAddSaveDialog = false">
       <div class="dialog-content">
@@ -530,18 +700,22 @@ import {
   HardDrive, Package, Save, Cloud, RefreshCw, Check, X, 
   Folder, CloudUpload, Download, AlertCircle, Plus
 } from 'lucide-vue-next'
+import JSZip from 'jszip'
 import {
   getLocalGames,
   addLocalGame,
   removeLocalGame,
+  updateLocalGamePath,
   getLocalSaves,
   addLocalSave,
+  deleteLocalSave,
   getCloudSaves,
   uploadCloudSave,
   downloadCloudSave,
   deleteCloudSave,
   getCloudStorageUsage,
   getGameMods,
+  addMod,
   toggleMod,
   deleteMod,
   searchGames
@@ -581,6 +755,8 @@ const showModsDialog = ref(false)
 const showUploadDialog = ref(false)
 const showAddSaveDialog = ref(false)
 const showAddGameDialog = ref(false)
+const showEditPathDialog = ref(false)
+const showAddModDialog = ref(false)
 const selectedGame = ref(null)
 const selectedSave = ref(null)
 
@@ -603,10 +779,32 @@ const addGameForm = ref({
 const addingGame = ref(false)
 
 // Upload
+const uploadType = ref('file')
 const uploadFile = ref(null)
+const uploadFiles = ref([])
 const uploadForm = ref({ compress: false })
 const uploading = ref(false)
+const uploadProgress = ref(0)
+const uploadStatusText = ref('')
 const fileInput = ref(null)
+const uploadFolderInput = ref(null)
+
+const uploadFolderName = computed(() => {
+  if (uploadFiles.value.length === 0) return ''
+  const firstFile = uploadFiles.value[0]
+  const pathParts = firstFile.webkitRelativePath.split('/')
+  return pathParts[0] || '未知文件夹'
+})
+
+const uploadFileSize = computed(() => {
+  if (uploadType.value === 'folder' && uploadFiles.value.length > 0) {
+    const totalSize = uploadFiles.value.reduce((sum, file) => sum + file.size, 0)
+    return `${(totalSize / 1024 / 1024).toFixed(2)} MB (${uploadFiles.value.length} 个文件)`
+  } else if (uploadFile.value) {
+    return `${(uploadFile.value.size / 1024 / 1024).toFixed(2)} MB`
+  }
+  return '0 MB'
+})
 
 // Add Save
 const addSaveFile = ref(null)
@@ -653,6 +851,19 @@ const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
   return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+// 格式化文件大小（字节转换为合适的单位）
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let unitIndex = 0
+  let size = bytes
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex++
+  }
+  return size.toFixed(unitIndex === 0 ? 0 : 2) + ' ' + units[unitIndex]
 }
 
 // Load all data
@@ -768,6 +979,125 @@ const handleRemoveGame = async (game) => {
   }
 }
 
+// 编辑游戏目录
+const editingGame = ref(null)
+const newGamePath = ref('')
+const newGameSize = ref(0)
+const savingPath = ref(false)
+const editPathInput = ref(null)
+
+const handleEditGamePath = (game) => {
+  editingGame.value = game
+  newGamePath.value = ''
+  newGameSize.value = 0
+  showEditPathDialog.value = true
+}
+
+const handleEditPathSelect = (e) => {
+  const files = e.target.files
+  if (files && files.length > 0) {
+    const firstFile = files[0]
+    const pathParts = firstFile.webkitRelativePath.split('/')
+    newGamePath.value = pathParts[0] || ''
+    
+    // 计算文件夹总大小
+    let totalSize = 0
+    for (let i = 0; i < files.length; i++) {
+      totalSize += files[i].size
+    }
+    newGameSize.value = totalSize
+  }
+}
+
+const handleConfirmEditPath = async () => {
+  if (!newGamePath.value || !editingGame.value) return
+  
+  savingPath.value = true
+  try {
+    // 计算 GB 大小
+    const sizeGB = newGameSize.value / 1024 / 1024 / 1024
+    
+    await updateLocalGamePath(editingGame.value.installId, newGamePath.value, sizeGB)
+    
+    // 更新本地数据
+    const game = localGames.value.find(g => g.installId === editingGame.value.installId)
+    if (game) {
+      game.installPath = newGamePath.value
+      game.sizeGB = sizeGB
+    }
+    
+    showEditPathDialog.value = false
+    alert('目录已更新')
+  } catch (err) {
+    console.error('更新目录失败:', err)
+    alert('更新失败: ' + (err.response?.data?.message || err.message || '未知错误'))
+  } finally {
+    savingPath.value = false
+  }
+}
+
+// 删除本地存档
+const handleDeleteSave = async (save) => {
+  if (!confirm(`确定要删除 ${save.gameName} 的存档记录吗？\n注意：这只会删除数据库记录，不会删除本地文件。`)) return
+  
+  try {
+    await deleteLocalSave(save.saveId)
+    localSaves.value = localSaves.value.filter(s => s.saveId !== save.saveId)
+    alert('存档记录已删除')
+  } catch (err) {
+    console.error('删除存档失败:', err)
+    alert('删除失败: ' + (err.response?.data?.message || err.message || '未知错误'))
+  }
+}
+
+// 添加 Mod
+const modTargetGame = ref(null)
+const modFileInput = ref(null)
+const addModForm = ref({
+  modName: '',
+  version: '',
+  filePath: ''
+})
+const addingMod = ref(false)
+
+const handleAddMod = (game) => {
+  modTargetGame.value = game
+  addModForm.value = { modName: '', version: '', filePath: '' }
+  showAddModDialog.value = true
+}
+
+const handleModFileSelect = (e) => {
+  const files = e.target.files
+  if (files && files.length > 0) {
+    const firstFile = files[0]
+    const pathParts = firstFile.webkitRelativePath.split('/')
+    addModForm.value.filePath = pathParts[0] || firstFile.name
+  }
+}
+
+const handleConfirmAddMod = async () => {
+  if (!addModForm.value.modName || !addModForm.value.filePath || !modTargetGame.value) return
+  
+  addingMod.value = true
+  try {
+    await addMod({
+      installId: modTargetGame.value.installId,
+      modName: addModForm.value.modName,
+      version: addModForm.value.version || '1.0',
+      filePath: addModForm.value.filePath
+    })
+    
+    showAddModDialog.value = false
+    alert('Mod 记录添加成功！')
+    loadData()
+  } catch (err) {
+    console.error('添加 Mod 失败:', err)
+    alert('添加失败: ' + (err.response?.data?.message || err.message || '未知错误'))
+  } finally {
+    addingMod.value = false
+  }
+}
+
 const handleToggleMod = async (mod) => {
   try {
     await toggleMod(mod.modId, !mod.enabled)
@@ -792,7 +1122,9 @@ const handleDeleteMod = async (mod) => {
 
 const handleUploadSave = (save) => {
   selectedSave.value = save
+  uploadType.value = 'file'
   uploadFile.value = null
+  uploadFiles.value = []
   uploadForm.value = { compress: false }
   showUploadDialog.value = true
 }
@@ -804,25 +1136,98 @@ const handleFileSelect = (e) => {
   }
 }
 
+const handleFolderSelect = (e) => {
+  const files = e.target.files
+  if (files && files.length > 0) {
+    uploadFiles.value = Array.from(files)
+  }
+}
+
 const handleConfirmUpload = async () => {
-  if (!uploadFile.value || !selectedSave.value) return
+  if (!selectedSave.value) return
+  if (uploadType.value === 'file' && !uploadFile.value) {
+    alert('请选择文件')
+    return
+  }
+  if (uploadType.value === 'folder' && uploadFiles.value.length === 0) {
+    alert('请选择文件夹')
+    return
+  }
   
   uploading.value = true
+  uploadProgress.value = 0
+  uploadStatusText.value = '准备上传...'
+  
   try {
+    let fileToUpload = uploadFile.value
+    
+    // 如果是文件夹，打包成 zip
+    if (uploadType.value === 'folder' && uploadFiles.value.length > 0) {
+      uploadStatusText.value = '正在打包文件夹...'
+      uploadProgress.value = 10
+      
+      const zip = new JSZip()
+      
+      // 添加所有文件到 zip
+      for (let i = 0; i < uploadFiles.value.length; i++) {
+        const file = uploadFiles.value[i]
+        const relativePath = file.webkitRelativePath
+        zip.file(relativePath, file)
+        uploadProgress.value = 10 + Math.floor((i / uploadFiles.value.length) * 30)
+      }
+      
+      uploadStatusText.value = '正在生成压缩包...'
+      uploadProgress.value = 40
+      
+      // 生成 zip blob
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      }, (metadata) => {
+        uploadProgress.value = 40 + Math.floor(metadata.percent / 100 * 10)
+      })
+      
+      const folderName = uploadFolderName.value
+      fileToUpload = new File([zipBlob], `${folderName}.zip`, { type: 'application/zip' })
+      uploadProgress.value = 50
+    }
+    
+    uploadStatusText.value = '正在上传...'
+    
     const formData = new FormData()
-    formData.append('file', uploadFile.value)
+    formData.append('file', fileToUpload)
     formData.append('saveId', selectedSave.value.saveId)
     formData.append('compress', uploadForm.value.compress)
     
+    // 模拟上传进度
+    const progressInterval = setInterval(() => {
+      if (uploadProgress.value < 90) {
+        uploadProgress.value += 5
+      }
+    }, 200)
+    
     await uploadCloudSave(formData)
     
-    showUploadDialog.value = false
-    alert('上传成功！')
-    loadCloudSaves()
-    loadCloudUsage()
+    clearInterval(progressInterval)
+    uploadProgress.value = 100
+    uploadStatusText.value = '上传完成！'
+    
+    setTimeout(() => {
+      showUploadDialog.value = false
+      uploadFile.value = null
+      uploadFiles.value = []
+      uploadProgress.value = 0
+      uploadStatusText.value = ''
+      alert('上传成功！')
+      loadCloudSaves()
+      loadCloudUsage()
+    }, 500)
   } catch (err) {
     console.error('上传失败:', err)
-    alert('上传失败: ' + (err.message || '未知错误'))
+    alert('上传失败: ' + (err.response?.data?.message || err.message || '未知错误'))
+    uploadProgress.value = 0
+    uploadStatusText.value = ''
   } finally {
     uploading.value = false
   }
@@ -1380,6 +1785,29 @@ onMounted(() => {
   color: #f87171;
 }
 
+.btn-danger-small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-danger-small:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger-small .icon {
+  width: 14px;
+  height: 14px;
+}
+
 .btn-small .icon {
   width: 14px;
   height: 14px;
@@ -1557,9 +1985,36 @@ onMounted(() => {
 }
 
 /* Cloud Backups */
-.cloud-usage {
-  font-size: 14px;
+.cloud-usage-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+}
+
+.usage-text {
+  font-size: 13px;
   color: var(--text-secondary);
+  text-align: right;
+}
+
+.usage-bar {
+  width: 200px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #34d399, #10b981);
+  border-radius: 3px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.usage-fill.warning {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
 }
 
 .backups-list {
@@ -2070,6 +2525,116 @@ onMounted(() => {
 .btn-confirm:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Warning Box */
+.warning-box {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.warning-box .icon {
+  width: 20px;
+  height: 20px;
+  color: #fbbf24;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.warning-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fbbf24;
+  margin: 0 0 4px 0;
+}
+
+.warning-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Path Display */
+.path-display {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.hint-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  opacity: 0.7;
+}
+
+/* File Info Box */
+.file-info-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.file-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.file-size {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* Upload Progress */
+.upload-progress {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), #818cf8);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin: 0;
 }
 
 /* Responsive */

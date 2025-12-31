@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PlayLinker.Data;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
+using PlayLinker.Services;
 using System.IO.Compression;
 
 namespace PlayLinker.Controllers;
@@ -14,12 +15,18 @@ public class CloudController : ControllerBase
     private readonly PlayLinkerDbContext _context;
     private readonly ILogger<CloudController> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IAliyunOssService _ossService;
 
-    public CloudController(PlayLinkerDbContext context, ILogger<CloudController> logger, IConfiguration configuration)
+    public CloudController(
+        PlayLinkerDbContext context, 
+        ILogger<CloudController> logger, 
+        IConfiguration configuration,
+        IAliyunOssService ossService)
     {
         _context = context;
         _logger = logger;
         _configuration = configuration;
+        _ossService = ossService;
     }
 
     /// <summary>
@@ -66,7 +73,7 @@ public class CloudController : ControllerBase
                     UserId = csb.UserId,
                     UploadTime = csb.UploadTime,
                     FileSize = csb.FileSize,
-                    FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2),
+                    FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2), // FileSize 是字节，转换为 MB
                     StorageUrl = csb.StorageUrl,
                     Metadata = null, // 网页版不支持存档元数据解析
                     ExpiresAt = DateTime.UtcNow.AddYears(1) // 默认1年后过期
@@ -76,7 +83,7 @@ public class CloudController : ControllerBase
             // 计算汇总信息（基于所有云存档，不只是当前页）
             var allCloudSaves = await query.ToListAsync();
             var storageLimitMB = 1024m; // 1GB 存储限制
-            var totalSizeMB = Math.Round(allCloudSaves.Sum(s => s.FileSize) / 1024.0m / 1024, 2);
+            var totalSizeMB = Math.Round(allCloudSaves.Sum(s => s.FileSize) / 1024.0m / 1024, 2); // FileSize 是字节
             
             var summary = new CloudSavesSummary
             {
@@ -114,21 +121,14 @@ public class CloudController : ControllerBase
     /// <param name="file">存档文件</param>
     /// <param name="saveId">本地存档ID</param>
     /// <param name="compress">是否压缩</param>
-    /// <param name="encrypt">是否加密</param>
-    /// <param name="description">描述</param>
     /// <returns>上传结果</returns>
-    /// <remarks>
-    /// 网页版实现：用户手动选择存档文件上传到云服务器磁盘
-    /// </remarks>
     [HttpPost("upload")]
-    [RequestSizeLimit(100_000_000)] // 限制100MB
+    [RequestSizeLimit(500_000_000)] // 限制500MB
     [ProducesResponseType(typeof(ApiResponse<UploadToCloudResponse>), 201)]
     public async Task<ActionResult<ApiResponse<UploadToCloudResponse>>> UploadToCloud(
         [FromForm] IFormFile file,
         [FromForm] long saveId,
-        [FromForm] bool compress = false,
-        [FromForm] bool encrypt = false,
-        [FromForm] string? description = null)
+        [FromForm] bool compress = false)
     {
         try
         {
@@ -139,7 +139,7 @@ public class CloudController : ControllerBase
                     "ERR_NO_FILE", "请选择要上传的文件"));
             }
 
-            var maxSizeMB = _configuration.GetValue<int>("CloudStorage:MaxFileSizeMB");
+            var maxSizeMB = 500;
             if (file.Length > maxSizeMB * 1024 * 1024)
             {
                 return BadRequest(ApiResponse<UploadToCloudResponse>.ErrorResponse(
@@ -157,52 +157,57 @@ public class CloudController : ControllerBase
                     "ERR_SAVE_NOT_FOUND", "存档不存在"));
             }
 
-            // 3. 生成云备份ID和存储路径
+            // 3. 生成云备份ID（限制在20字符以内）
             int userId = save.Install.UserId;
-            var cloudBackupId = $"cloud_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}";
-            var relativePath = $"user_{userId}\\game_{save.Install.GameId}\\{cloudBackupId}.dat";
+            var cloudBackupId = $"c{DateTime.UtcNow:yyMMddHHmmss}{new Random().Next(1000, 9999)}";
+
+            // 4. 准备文件流（可选压缩）
+            Stream uploadStream;
+            long uploadedSize;
             
-            var localPath = _configuration["CloudStorage:LocalPath"] ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(localPath))
+            if (compress)
             {
-                _logger.LogError("CloudStorage:LocalPath is not configured");
-                return StatusCode(500, ApiResponse<UploadToCloudResponse>.ErrorResponse("ERR_STORAGE_PATH", "存储路径未配置"));
+                // 压缩文件
+                var compressedStream = new MemoryStream();
+                using (var gzipStream = new GZipStream(compressedStream, CompressionMode.Compress, true))
+                {
+                    await file.CopyToAsync(gzipStream);
+                }
+                compressedStream.Position = 0;
+                uploadStream = compressedStream;
+                uploadedSize = compressedStream.Length;
+                _logger.LogInformation("File compressed: {OriginalSize} -> {CompressedSize} bytes", 
+                    file.Length, uploadedSize);
             }
-            var fullPath = Path.Combine(localPath, relativePath);
-            
-            // 4. 创建目录
-            var directory = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            else
             {
-                Directory.CreateDirectory(directory);
-                _logger.LogInformation("Created directory: {Directory}", directory);
+                uploadStream = file.OpenReadStream();
+                uploadedSize = file.Length;
             }
 
-            // 5. 保存文件
-            long uploadedSize = 0;
-            using (var stream = new FileStream(fullPath, FileMode.Create))
+            // 5. 上传到 OSS
+            string objectKey;
+            try
             {
-                if (compress)
+                objectKey = await _ossService.UploadCloudSaveAsync(
+                    userId, 
+                    save.Install.GameId, 
+                    uploadStream, 
+                    file.FileName);
+                    
+                _logger.LogInformation("File uploaded to OSS: {ObjectKey}, Size: {Size} bytes", 
+                    objectKey, uploadedSize);
+            }
+            finally
+            {
+                if (uploadStream != null)
                 {
-                    // 压缩后保存
-                    using (var gzipStream = new GZipStream(stream, CompressionMode.Compress))
-                    {
-                        await file.CopyToAsync(gzipStream);
-                    }
-                    uploadedSize = new FileInfo(fullPath).Length;
-                    _logger.LogInformation("File compressed and saved: {Size} bytes", uploadedSize);
-                }
-                else
-                {
-                    await file.CopyToAsync(stream);
-                    uploadedSize = stream.Length;
-                    _logger.LogInformation("File saved: {Size} bytes", uploadedSize);
+                    await uploadStream.DisposeAsync();
                 }
             }
 
             // 6. 记录到数据库
-            var baseUrl = _configuration["CloudStorage:BaseUrl"];
-            var storageUrl = $"{baseUrl}/{relativePath.Replace("\\", "/")}";
+            var storageUrl = _ossService.GetFileUrl(objectKey);
             
             var cloudBackup = new CloudSaveBackup
             {
@@ -210,8 +215,8 @@ public class CloudController : ControllerBase
                 GameId = save.Install.GameId,
                 UserId = userId,
                 UploadTime = DateTime.UtcNow,
-                FileSize = (int)(uploadedSize / 1024 / 1024), // 转换为MB
-                StorageUrl = storageUrl
+                FileSize = (int)uploadedSize, // 存储为字节
+                StorageUrl = objectKey // 存储对象键，用于后续下载和删除
             };
 
             _context.CloudSaveBackups.Add(cloudBackup);
@@ -226,7 +231,7 @@ public class CloudController : ControllerBase
                 OriginalSize = file.Length,
                 UploadedSize = uploadedSize,
                 Compressed = compress,
-                Encrypted = encrypt,
+                Encrypted = false,
                 UploadTime = DateTime.UtcNow
             };
 
@@ -262,27 +267,11 @@ public class CloudController : ControllerBase
                     "ERR_BACKUP_NOT_FOUND", "云备份不存在"));
             }
 
-            // 从 storage_url 提取相对路径
-            var baseUrl = _configuration["CloudStorage:BaseUrl"];
-            var relativePath = cloudBackup.StorageUrl.Replace(baseUrl + "/", "").Replace("/", "\\");
-            
-            var localPath = _configuration["CloudStorage:LocalPath"];
-            var fullPath = Path.Combine(localPath, relativePath);
+            // StorageUrl 现在存储的是 OSS 对象键
+            var objectKey = cloudBackup.StorageUrl;
 
-            if (!System.IO.File.Exists(fullPath))
-            {
-                _logger.LogError("File not found: {Path}", fullPath);
-                return NotFound(ApiResponse<object>.ErrorResponse(
-                    "ERR_FILE_NOT_FOUND", "存档文件不存在"));
-            }
-
-            // 读取文件
-            var memory = new MemoryStream();
-            using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read))
-            {
-                await stream.CopyToAsync(memory);
-            }
-            memory.Position = 0;
+            // 从 OSS 下载文件
+            var memory = await _ossService.DownloadCloudSaveAsync(objectKey);
 
             var fileName = $"{id}.dat";
             _logger.LogInformation("Downloading file: {FileName}, Size: {Size} bytes", fileName, memory.Length);
@@ -315,7 +304,16 @@ public class CloudController : ControllerBase
             }
 
             var freedSpaceMB = Math.Round((decimal)cloudBackup.FileSize / 1024 / 1024, 2);
+            var objectKey = cloudBackup.StorageUrl; // StorageUrl 现在存储的是 OSS 对象键
 
+            // 从 OSS 删除文件
+            var deleted = await _ossService.DeleteCloudSaveAsync(objectKey);
+            if (!deleted)
+            {
+                _logger.LogWarning("Failed to delete file from OSS: {ObjectKey}", objectKey);
+            }
+
+            // 从数据库删除记录
             _context.CloudSaveBackups.Remove(cloudBackup);
             await _context.SaveChangesAsync();
 
@@ -355,7 +353,7 @@ public class CloudController : ControllerBase
 
             var totalSize = cloudSaves.Sum(csb => csb.FileSize);
             var storageLimitMB = 1024m; // 1GB限制
-            var storageUsedMB = Math.Round((decimal)totalSize / 1024 / 1024, 2);
+            var storageUsedMB = Math.Round((decimal)totalSize / 1024 / 1024, 2); // FileSize 是字节
 
             var usage = new CloudStorageUsageDto
             {
@@ -369,21 +367,21 @@ public class CloudController : ControllerBase
                     CloudBackupId = csb.CloudBackupId,
                     GameName = csb.Game.Name,
                     UploadTime = csb.UploadTime,
-                    FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2)
+                    FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2) // FileSize 是字节
                 }).FirstOrDefault(),
                 OldestFile = cloudSaves.OrderBy(csb => csb.UploadTime).Select(csb => new CloudFileInfo
                 {
                     CloudBackupId = csb.CloudBackupId,
                     GameName = csb.Game.Name,
                     UploadTime = csb.UploadTime,
-                    FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2)
+                    FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2) // FileSize 是字节
                 }).FirstOrDefault(),
                 RecentUploads = cloudSaves.OrderByDescending(csb => csb.UploadTime).Take(5).Select(csb => new CloudFileInfo
                 {
                     CloudBackupId = csb.CloudBackupId,
                     GameName = csb.Game.Name,
                     UploadTime = csb.UploadTime,
-                    FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2)
+                    FileSizeMB = Math.Round((decimal)csb.FileSize / 1024 / 1024, 2) // FileSize 是字节
                 }).ToList()
             };
 

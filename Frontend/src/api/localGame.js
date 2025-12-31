@@ -63,6 +63,21 @@ export const removeLocalGame = (installId) => {
   })
 }
 
+/**
+ * 更新本地游戏安装路径
+ * @param {number} installId - 安装ID
+ * @param {string} installPath - 新的安装路径
+ * @param {number} sizeGB - 游戏大小（GB）
+ * @returns {Promise}
+ */
+export const updateLocalGamePath = (installId, installPath, sizeGB = 0) => {
+  return request({
+    url: `/local/games/${installId}/path`,
+    method: 'patch',
+    data: { newPath: installPath, sizeGB }
+  })
+}
+
 // ==================== 存档管理 ====================
 
 /**
@@ -104,6 +119,19 @@ export const addLocalSave = (data) => {
  * @returns {Promise}
  */
 export const deleteSave = (saveId) => {
+  return request({
+    url: `/saves/${saveId}`,
+    method: 'delete',
+    data: { deleteFile: false, deleteBackups: false }
+  })
+}
+
+/**
+ * 删除本地存档记录
+ * @param {number} saveId - 存档ID
+ * @returns {Promise}
+ */
+export const deleteLocalSave = (saveId) => {
   return request({
     url: `/saves/${saveId}`,
     method: 'delete',
@@ -295,10 +323,12 @@ export default {
   addLocalGame,
   getLocalGameDetail,
   removeLocalGame,
+  updateLocalGamePath,
   // 存档
   getLocalSaves,
   addLocalSave,
   deleteSave,
+  deleteLocalSave,
   // 云存档
   getCloudSaves,
   uploadCloudSave,

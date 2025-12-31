@@ -100,7 +100,8 @@ public class LocalGamesController : ControllerBase
                 PlatformId = request.PlatformId,
                 InstallPath = request.InstallPath,
                 Version = request.Version ?? "Unknown",
-                DetectedTime = DateTime.UtcNow
+                DetectedTime = DateTime.UtcNow,
+                SizeBytes = (long)(request.SizeGB * 1024 * 1024 * 1024) // GB 转字节
             };
 
             _context.LocalGameInstalls.Add(install);
@@ -191,7 +192,7 @@ public class LocalGamesController : ControllerBase
                     PlatformName = lgi.Platform != null ? lgi.Platform.PlatformName : "PC",
                     InstallPath = lgi.InstallPath,
                     Version = lgi.Version,
-                    SizeGB = 0, // 数据库中没有此字段，返回0
+                    SizeGB = Math.Round((decimal)lgi.SizeBytes / 1024 / 1024 / 1024, 2),
                     DetectedTime = lgi.DetectedTime,
                     LastPlayed = null, // 数据库中没有此字段
                     SavesCount = lgi.LocalSaveFiles.Count,
@@ -204,7 +205,7 @@ public class LocalGamesController : ControllerBase
             var summary = new LocalGamesSummary
             {
                 TotalGames = total,
-                TotalSizeGB = 0, // 数据库中没有size_gb字段
+                TotalSizeGB = Math.Round(allGames.Sum(g => g.SizeBytes) / 1024.0m / 1024 / 1024, 2),
                 TotalSaves = allGames.Sum(g => g.LocalSaveFiles.Count),
                 TotalMods = allGames.Sum(g => g.LocalMods.Count)
             };
@@ -264,7 +265,7 @@ public class LocalGamesController : ControllerBase
                 PlatformName = install.Platform != null ? install.Platform.PlatformName : "PC",
                 InstallPath = install.InstallPath,
                 Version = install.Version,
-                SizeGB = 0, // 数据库中没有此字段
+                SizeGB = Math.Round((decimal)install.SizeBytes / 1024 / 1024 / 1024, 2),
                 DetectedTime = install.DetectedTime,
                 LastPlayed = null, // 数据库中没有此字段
                 ExecutablePath = null, // 数据库中没有此字段
@@ -354,6 +355,7 @@ public class LocalGamesController : ControllerBase
 
             var oldPath = install.InstallPath;
             install.InstallPath = request.NewPath;
+            install.SizeBytes = (long)(request.SizeGB * 1024 * 1024 * 1024); // GB 转字节
             await _context.SaveChangesAsync();
 
             var result = new
@@ -361,6 +363,7 @@ public class LocalGamesController : ControllerBase
                 installId = id,
                 oldPath = oldPath,
                 newPath = request.NewPath,
+                sizeGB = request.SizeGB,
                 updatedAt = DateTime.UtcNow
             };
 
@@ -458,4 +461,5 @@ public class DeleteGameRequest
 public class UpdatePathRequest
 {
     public string NewPath { get; set; } = string.Empty;
+    public decimal SizeGB { get; set; } = 0;
 }
