@@ -1,12 +1,19 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlayLinker.Data;
 using PlayLinker.Models.DTOs;
+using PlayLinker.Models; 
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace PlayLinker.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize] // 确保只有登录用户能访问
 public class AnalyticsController : ControllerBase
 {
     private readonly PlayLinkerDbContext _context;
@@ -18,8 +25,19 @@ public class AnalyticsController : ControllerBase
         _logger = logger;
     }
 
+    // 获取当前登录用户 ID 的辅助方法
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        if (int.TryParse(userIdClaim, out var userId))
+        {
+            return userId;
+        }
+        return 0; 
+    }
+
     /// <summary>
-    /// 游玩时间分析
+    /// 游玩时间分析 (基于真实历史快照)
     /// </summary>
     [HttpGet("playtime")]
     [ProducesResponseType(typeof(ApiResponse<PlaytimeAnalyticsResponse>), 200)]
@@ -30,58 +48,132 @@ public class AnalyticsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001（实际项目中应从JWT Token获取）
-            int userId = 1001;
+            int userId = GetCurrentUserId();
+            if (userId == 0) return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未登录"));
 
-            // 确定分析周期
-            var analyzePeriod = period ?? $"{year ?? DateTime.UtcNow.Year}-{month ?? DateTime.UtcNow.Month:D2}";
+            // 1. 确定时间范围
+            DateTime now = DateTime.UtcNow.Date;
+            DateTime startDate;
+            DateTime endDate = now;
 
-            // 从数据库查询用户的游戏记录
-            var gameRecords = await _context.UserPlatformLibraries
+            // 处理 period 参数
+            if (period == "week" || period == "7days")
+            {
+                startDate = now.AddDays(-6); // 最近7天（含今天）
+            }
+            else if (period == "month" || (year.HasValue && month.HasValue))
+            {
+                int y = year ?? now.Year;
+                int m = month ?? now.Month;
+                startDate = new DateTime(y, m, 1);
+                endDate = startDate.AddMonths(1).AddDays(-1);
+                if (endDate > now) endDate = now; // 不展示未来的日期
+            }
+            else // 默认或 "year"
+            {
+                int y = year ?? now.Year;
+                startDate = new DateTime(y, 1, 1);
+                endDate = new DateTime(y, 12, 31);
+                if (endDate > now) endDate = now;
+            }
+
+            // 为了计算 startDate 当天的增量，我们需要查询前一天的数据作为基准
+            DateTime queryStart = startDate.AddDays(-1);
+
+            // 2. 从数据库获取历史快照
+            // 我们只需要每天的总时长之和 (Sum(PlaytimeForever))
+            var historySnapshots = await _context.UserPlaytimeHistories
+                .Where(h => h.UserId == userId && h.RecordDate >= queryStart && h.RecordDate <= endDate)
+                .GroupBy(h => h.RecordDate)
+                .Select(g => new 
+                { 
+                    Date = g.Key, 
+                    TotalForeverMinutes = g.Sum(x => x.PlaytimeForever) 
+                })
+                .ToListAsync();
+
+            // 转为字典方便查询： Date -> TotalMinutes
+            var snapshotMap = historySnapshots.ToDictionary(x => x.Date, x => x.TotalForeverMinutes);
+
+            // 3. 构建每日分布数据 (Daily Distribution)
+            var distribution = new List<DailyPlaytime>();
+            
+            for (DateTime date = startDate; date <= endDate; date = date.AddDays(1))
+            {
+                int dailyMinutes = 0;
+                
+                // 如果今天有快照记录
+                if (snapshotMap.TryGetValue(date, out var todayTotal))
+                {
+                    // 尝试找昨天的记录来计算差值
+                    if (snapshotMap.TryGetValue(date.AddDays(-1), out var yesterdayTotal))
+                    {
+                        dailyMinutes = todayTotal - yesterdayTotal;
+                    }
+                    else
+                    {
+                        // 如果没有昨天的记录（可能是刚开始统计的第一天），
+                        // 这里我们保守处理为0，表示"相对于昨天的增量未知"。
+                        // 这样图表第一天会是0，第二天开始有数据，符合逻辑。
+                        dailyMinutes = 0; 
+                    }
+                }
+
+                // 防止出现负数（例如用户退款游戏导致总时长减少，或数据同步异常）
+                if (dailyMinutes < 0) dailyMinutes = 0;
+
+                distribution.Add(new DailyPlaytime 
+                { 
+                    Date = date.ToString("yyyy-MM-dd"),
+                    Minutes = dailyMinutes
+                });
+            }
+
+            // 4. 获取当前总览数据 (Total & Breakdown)
+            // 这部分依然查 UserPlatformLibrary，代表“当前最新状态”
+            var libraryGames = await _context.UserPlatformLibraries
                 .Include(r => r.Game)
-                .Include(r => r.PlayerPlatform)
-                .ThenInclude(pp => pp.UserPlatformBindings)
                 .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
                 .ToListAsync();
 
-            // 计算总游玩时间
-            var totalMinutes = gameRecords.Sum(r => r.PlaytimeMinutes);
-            var totalGames = gameRecords.Count;
-            var dailyAverage = totalGames > 0 ? totalMinutes / 30 : 0; // 假设30天
-
-            // 游戏分解统计（按游玩时间排序）
-            var gameBreakdown = gameRecords
+            var totalMinutes = libraryGames.Sum(r => r.PlaytimeMinutes);
+            
+            // 游戏分解 (Top 10)
+            var gameBreakdown = libraryGames
                 .OrderByDescending(r => r.PlaytimeMinutes)
                 .Take(10)
                 .Select(r => new GamePlaytimeBreakdown
                 {
                     GameId = r.GameId,
-                    Name = r.Game?.Name ?? string.Empty,
+                    Name = r.Game?.Name ?? "未知游戏",
                     Minutes = r.PlaytimeMinutes,
                     Percentage = totalMinutes > 0 ? Math.Round((decimal)r.PlaytimeMinutes / totalMinutes * 100, 1) : 0,
-                    Sessions = new Random().Next(10, 50) // 模拟会话数（无法从现有数据获取）
+                    Sessions = 0 // 暂无会话数据，留空或可由前端估算
                 })
                 .ToList();
 
+            // 计算日均 (简单算法：总时长 / 活跃天数)
+            // 这里为了简单，分母使用“当前统计周期内的天数”或固定值
+            var daysCount = Math.Max(1, (int)(now - startDate).TotalDays); 
+            var dailyAverage = totalMinutes > 0 ? totalMinutes / 365 : 0; // 或者按注册时间算，这里暂且按年均估算
+
             var response = new PlaytimeAnalyticsResponse
             {
-                Period = analyzePeriod,
+                Period = period ?? "custom",
                 TotalMinutes = totalMinutes,
                 DailyAverage = dailyAverage,
-                PeakDay = string.Empty, // 无法从累计数据获取
-                PeakMinutes = 0,
-                Distribution = new List<DailyPlaytime>(), // 无详细会话记录
+                Distribution = distribution,
                 GameBreakdown = gameBreakdown,
-                TimeSlotDistribution = new List<TimeSlotDistribution>(), // 无详细会话记录
-                WeekdayDistribution = new List<WeekdayDistribution>() // 无详细会话记录
+                TimeSlotDistribution = new List<TimeSlotDistribution>(), // 暂不支持
+                WeekdayDistribution = new List<WeekdayDistribution>()    // 暂不支持
             };
 
             return Ok(ApiResponse<PlaytimeAnalyticsResponse>.SuccessResponse(response));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting playtime analytics");
-            return StatusCode(500, ApiResponse<PlaytimeAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取游玩时间分析失败"));
+            _logger.LogError(ex, "获取游玩时间分析失败");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
 
@@ -94,55 +186,38 @@ public class AnalyticsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001
-            int userId = 1001;
+            int userId = GetCurrentUserId();
+            if (userId == 0) return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未登录"));
 
-            // 从数据库查询用户的游戏记录，关联题材信息
             var gameRecords = await _context.UserPlatformLibraries
-                .Include(r => r.Game)
-                .ThenInclude(g => g.GameGenres)
-                .ThenInclude(gg => gg.Genre)
-                .Include(r => r.PlayerPlatform)
-                .ThenInclude(pp => pp.UserPlatformBindings)
+                .Include(r => r.Game).ThenInclude(g => g.GameGenres).ThenInclude(gg => gg.Genre)
+                .Include(r => r.PlayerPlatform).ThenInclude(pp => pp.UserPlatformBindings)
                 .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
                 .ToListAsync();
 
-            // 按题材分组统计
             var genreStats = gameRecords
                 .SelectMany(r => r.Game.GameGenres.Select(gg => new { Genre = gg.Genre, Record = r }))
-                .GroupBy(x => new { x.Genre.GenreId, GenreName = x.Genre.Name })
+                .Where(x => x.Genre != null)
+                .GroupBy(x => new { x.Genre!.GenreId, GenreName = x.Genre.Name })
                 .Select(g => new GenrePreference
                 {
                     GenreId = g.Key.GenreId,
                     GenreName = g.Key.GenreName,
-                    GamesOwned = g.Count(),
-                    GamesPlayed = g.Count(x => x.Record.PlaytimeMinutes > 0),
+                    GamesOwned = g.Select(x => x.Record.GameId).Distinct().Count(),
+                    GamesPlayed = g.Where(x => x.Record.PlaytimeMinutes > 0).Select(x => x.Record.GameId).Distinct().Count(),
                     TotalPlaytimeMinutes = g.Sum(x => x.Record.PlaytimeMinutes),
                     AveragePlaytime = g.Count() > 0 ? g.Sum(x => x.Record.PlaytimeMinutes) / g.Count() : 0,
-                    PreferenceScore = g.Sum(x => x.Record.PlaytimeMinutes) > 0 
+                    PreferenceScore = gameRecords.Sum(r => r.PlaytimeMinutes) > 0 
                         ? Math.Round((decimal)g.Sum(x => x.Record.PlaytimeMinutes) / gameRecords.Sum(r => r.PlaytimeMinutes), 2) 
                         : 0
                 })
                 .OrderByDescending(g => g.TotalPlaytimeMinutes)
                 .ToList();
 
-            // 如果没有题材数据，使用模拟数据
             var response = new GenreAnalyticsResponse
             {
-                GenrePreferences = genreStats.Any() ? genreStats : new List<GenrePreference>
-                {
-                    new GenrePreference
-                    {
-                        GenreId = 1,
-                        GenreName = "暂无数据",
-                        GamesOwned = 0,
-                        GamesPlayed = 0,
-                        TotalPlaytimeMinutes = 0,
-                        AveragePlaytime = 0,
-                        PreferenceScore = 0
-                    }
-                },
-                TopGenre = genreStats.Any() ? genreStats.First().GenreName : "暂无数据",
+                GenrePreferences = genreStats,
+                TopGenre = genreStats.FirstOrDefault()?.GenreName ?? "暂无数据",
                 TotalGenres = genreStats.Count
             };
 
@@ -150,8 +225,8 @@ public class AnalyticsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting genre analytics");
-            return StatusCode(500, ApiResponse<GenreAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取题材偏好分析失败"));
+            _logger.LogError(ex, "获取题材偏好分析失败");
+            return StatusCode(500, ApiResponse<GenreAnalyticsResponse>.ErrorResponse("ERR_INTERNAL", "Error"));
         }
     }
 
@@ -164,21 +239,18 @@ public class AnalyticsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001
-            int userId = 1001;
+            int userId = GetCurrentUserId();
+            if (userId == 0) return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未登录"));
 
-            // 从数据库查询用户的游戏记录，按平台分组
             var platformStats = await _context.UserPlatformLibraries
-                .Include(r => r.PlayerPlatform)
-                .ThenInclude(pp => pp.Platform)
-                .Include(r => r.PlayerPlatform)
-                .ThenInclude(pp => pp.UserPlatformBindings)
+                .Include(r => r.PlayerPlatform).ThenInclude(pp => pp.Platform)
+                .Include(r => r.PlayerPlatform).ThenInclude(pp => pp.UserPlatformBindings)
                 .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
                 .GroupBy(r => new { r.PlatformId, PlatformName = r.PlayerPlatform.Platform.PlatformName })
                 .Select(g => new
                 {
                     PlatformId = g.Key.PlatformId,
-                    PlatformName = g.Key.PlatformName,
+                    PlatformName = g.Key.PlatformName ?? "Unknown",
                     GamesCount = g.Count(),
                     PlaytimeMinutes = g.Sum(r => r.PlaytimeMinutes)
                 })
@@ -190,7 +262,7 @@ public class AnalyticsController : ControllerBase
                 .Select(p => new PlatformDistribution
                 {
                     PlatformId = p.PlatformId,
-                    PlatformName = p.PlatformName ?? "Unknown",
+                    PlatformName = p.PlatformName,
                     GamesCount = p.GamesCount,
                     PlaytimeMinutes = p.PlaytimeMinutes,
                     Percentage = totalPlaytime > 0 ? Math.Round((decimal)p.PlaytimeMinutes / totalPlaytime * 100, 2) : 0
@@ -198,21 +270,10 @@ public class AnalyticsController : ControllerBase
                 .OrderByDescending(p => p.PlaytimeMinutes)
                 .ToList();
 
-            // 如果没有数据，使用模拟数据
             var response = new PlatformAnalyticsResponse
             {
-                PlatformDistribution = platformDistribution.Any() ? platformDistribution : new List<PlatformDistribution>
-                {
-                    new PlatformDistribution
-                    {
-                        PlatformId = 0,
-                        PlatformName = "暂无数据",
-                        GamesCount = 0,
-                        PlaytimeMinutes = 0,
-                        Percentage = 0
-                    }
-                },
-                MostUsedPlatform = platformDistribution.Any() ? platformDistribution.First().PlatformName : "暂无数据",
+                PlatformDistribution = platformDistribution,
+                MostUsedPlatform = platformDistribution.FirstOrDefault()?.PlatformName ?? "暂无数据",
                 TotalPlatforms = platformDistribution.Count
             };
 
@@ -220,8 +281,8 @@ public class AnalyticsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting platform analytics");
-            return StatusCode(500, ApiResponse<PlatformAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取平台分布分析失败"));
+            _logger.LogError(ex, "获取平台分布分析失败");
+            return StatusCode(500, ApiResponse<PlatformAnalyticsResponse>.ErrorResponse("ERR_INTERNAL", "Error"));
         }
     }
 
@@ -234,59 +295,54 @@ public class AnalyticsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001
-            int userId = 1001;
+            int userId = GetCurrentUserId();
+            if (userId == 0) return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未登录"));
 
-            // 从数据库查询用户的成就记录
             var userAchievements = await _context.UserAchievements
-                .Include(a => a.Achievement)
-                .ThenInclude(ach => ach.Game)
+                .Include(a => a.Achievement).ThenInclude(ach => ach.Game)
                 .Where(a => a.UserId == userId)
                 .ToListAsync();
 
-            // 计算总成就数和已解锁成就数
             var totalAchievements = userAchievements.Count;
             var unlockedAchievements = userAchievements.Count(a => a.Unlocked);
             var unlockRate = totalAchievements > 0 ? Math.Round((decimal)unlockedAchievements / totalAchievements, 2) : 0;
 
-            // 按游戏分组统计
-            var gameAchievements = userAchievements
-                .GroupBy(a => new { a.AchievementId, GameName = a.Achievement?.Game?.Name ?? "Unknown" })
-                .Select(g => new
+            // 完美游戏统计
+            var gameStatsRaw = await _context.UserAchievements
+                .Include(ua => ua.Achievement).ThenInclude(a => a.Game)
+                .Where(ua => ua.UserId == userId)
+                .GroupBy(ua => new { ua.Achievement.GameId, ua.Achievement.Game.Name })
+                .Select(g => new 
                 {
-                    AchievementId = g.Key.AchievementId,
-                    GameName = g.Key.GameName,
-                    TotalAchievements = g.Count(),
-                    Unlocked = g.Count(a => a.Unlocked),
-                    CompletionRate = g.Count() > 0 ? (decimal)g.Count(a => a.Unlocked) / g.Count() : 0
+                    GameId = g.Key.GameId,
+                    GameName = g.Key.Name,
+                    Total = g.Count(),
+                    Unlocked = g.Count(ua => ua.Unlocked)
                 })
-                .ToList();
+                .ToListAsync();
 
-            // 完美游戏数（100%完成率）
-            var perfectGames = gameAchievements.Count(g => g.CompletionRate == 1.0m);
-
-            // 平均完成率
-            var averageCompletionRate = gameAchievements.Any() 
-                ? Math.Round(gameAchievements.Average(g => g.CompletionRate), 2) 
+            var perfectGames = gameStatsRaw.Count(g => g.Unlocked == g.Total && g.Total > 0);
+            var averageCompletionRate = gameStatsRaw.Any() 
+                ? Math.Round((decimal)gameStatsRaw.Average(g => (double)g.Unlocked / g.Total), 2) 
                 : 0;
 
-            // 最近趋势（最近7天和30天解锁的成就）
+            // 最近趋势 (Last 7/30 days)
             var now = DateTime.UtcNow;
             var last7Days = userAchievements.Count(a => a.Unlocked && a.UnlockTime.HasValue && a.UnlockTime.Value >= now.AddDays(-7));
             var last30Days = userAchievements.Count(a => a.Unlocked && a.UnlockTime.HasValue && a.UnlockTime.Value >= now.AddDays(-30));
             var trend = last7Days > 0 ? "increasing" : "stable";
 
-            // 成就最多的游戏TOP 5
-            var topAchievementGames = gameAchievements
+            // Top Games
+            var topAchievementGames = gameStatsRaw
                 .OrderByDescending(g => g.Unlocked)
                 .Take(5)
                 .Select(g => new TopAchievementGame
                 {
-                    GameId = g.AchievementId,
+                    GameId = g.GameId,
                     GameName = g.GameName,
-                    TotalAchievements = g.TotalAchievements,
+                    TotalAchievements = g.Total,
                     Unlocked = g.Unlocked,
-                    CompletionRate = Math.Round(g.CompletionRate, 2)
+                    CompletionRate = g.Total > 0 ? Math.Round((decimal)g.Unlocked / g.Total, 2) : 0
                 })
                 .ToList();
 
@@ -310,13 +366,13 @@ public class AnalyticsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting achievement analytics");
-            return StatusCode(500, ApiResponse<AchievementAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取成就统计分析失败"));
+            _logger.LogError(ex, "获取成就统计分析失败");
+            return StatusCode(500, ApiResponse<AchievementAnalyticsResponse>.ErrorResponse("ERR_INTERNAL", "Error"));
         }
     }
 
     /// <summary>
-    /// 消费分析
+    /// 消费分析 (暂未实现)
     /// </summary>
     [HttpGet("spending")]
     [ProducesResponseType(typeof(ApiResponse<SpendingAnalyticsResponse>), 200)]
@@ -324,39 +380,16 @@ public class AnalyticsController : ControllerBase
         [FromQuery] string? period = null,
         [FromQuery] int? year = null)
     {
-        try
+        var analyzePeriod = period ?? year?.ToString() ?? DateTime.UtcNow.Year.ToString();
+        var response = new SpendingAnalyticsResponse
         {
-            // 确定分析周期
-            var analyzePeriod = period ?? year?.ToString() ?? DateTime.UtcNow.Year.ToString();
-
-            // 由于没有game_purchase表，返回提示信息
-            var response = new SpendingAnalyticsResponse
-            {
-                Period = analyzePeriod,
-                TotalSpending = 0,
-                Currency = "CNY",
-                GamesCount = 0,
-                AverageGamePrice = 0,
-                PlatformBreakdown = new List<PlatformSpending>
-                {
-                    new PlatformSpending
-                    {
-                        Platform = "暂无消费数据",
-                        Spending = 0,
-                        GamesCount = 0
-                    }
-                }
-            };
-
-            _logger.LogWarning("Spending analytics requested but game_purchase table does not exist");
-
-            return Task.FromResult<ActionResult<ApiResponse<SpendingAnalyticsResponse>>>(Ok(ApiResponse<SpendingAnalyticsResponse>.SuccessResponse(response)));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting spending analytics");
-            return Task.FromResult<ActionResult<ApiResponse<SpendingAnalyticsResponse>>>(StatusCode(500, ApiResponse<SpendingAnalyticsResponse>.ErrorResponse("ERR_INTERNAL_SERVER_ERROR", "获取消费分析失败")));
-        }
+            Period = analyzePeriod,
+            TotalSpending = 0,
+            Currency = "CNY",
+            GamesCount = 0,
+            AverageGamePrice = 0,
+            PlatformBreakdown = new List<PlatformSpending>()
+        };
+        return Task.FromResult<ActionResult<ApiResponse<SpendingAnalyticsResponse>>>(Ok(ApiResponse<SpendingAnalyticsResponse>.SuccessResponse(response)));
     }
-
 }

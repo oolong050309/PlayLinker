@@ -3,7 +3,7 @@ import request from './index'
 /**
  * 获取游玩时间分析
  * @param {Object} params - 查询参数
- * @param {string} params.period - 时间周期 (如 '2024-11')
+ * @param {string} params.period - 时间周期 (如 '2024-11', 'week', 'year')
  * @param {number} params.year - 年份
  * @param {number} params.month - 月份
  * @returns {Promise}
@@ -23,6 +23,17 @@ export const getPlaytimeAnalytics = (params) => {
 export const getGenrePreferences = () => {
   return request({
     url: '/analytics/genres',
+    method: 'get'
+  })
+}
+
+/**
+ * 获取平台分布分析 (新增)
+ * @returns {Promise}
+ */
+export const getPlatformAnalytics = () => {
+  return request({
+    url: '/analytics/platforms',
     method: 'get'
   })
 }
@@ -67,10 +78,6 @@ export const getReportTemplates = () => {
 /**
  * 生成报表
  * @param {Object} data - 报表参数
- * @param {number} data.templateId - 模板ID
- * @param {string} data.reportType - 报表类型
- * @param {Object} data.parameters - 报表参数
- * @param {string} data.format - 输出格式 (pdf | excel | html)
  * @returns {Promise}
  */
 export const generateReport = (data) => {
@@ -84,9 +91,6 @@ export const generateReport = (data) => {
 /**
  * 获取报表历史列表
  * @param {Object} params - 查询参数
- * @param {string} params.status - 状态筛选
- * @param {number} params.page - 页码
- * @param {number} params.page_size - 每页数量
  * @returns {Promise}
  */
 export const getReportHistory = (params) => {
@@ -137,6 +141,7 @@ export const deleteReport = (reportId) => {
 export default {
   getPlaytimeAnalytics,
   getGenrePreferences,
+  getPlatformAnalytics, // 新增导出
   getAchievementStats,
   getSpendingAnalytics,
   getReportTemplates,

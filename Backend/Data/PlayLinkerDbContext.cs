@@ -103,6 +103,9 @@ public partial class PlayLinkerDbContext : DbContext
 
     public virtual DbSet<UserPreference> UserPreferences { get; set; }
 
+    // [新增] 注册新表
+    public DbSet<UserPlaytimeHistory> UserPlaytimeHistories { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder

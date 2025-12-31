@@ -86,6 +86,9 @@ builder.Services.AddHostedService<PriceMonitoringService>();
 // [新增] 注册排行榜监控服务
 builder.Services.AddHostedService<PlayLinker.Services.RankingMonitoringService>();
 
+// [新增] 注册时长快照服务
+builder.Services.AddHostedService<PlaytimeHistoryService>(); // [新增] 注册时长快照服务
+
 // --- 家长监管监控后台服务 ---
 // HostedService 只会以 IHostedService 注册，无法通过 GetRequiredService<ParentalMonitoringService>() 解析。
 // 因此需要额外注册为可注入服务。
