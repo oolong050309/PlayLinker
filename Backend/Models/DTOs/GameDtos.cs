@@ -192,3 +192,44 @@ public class UpdateGameRequestDto
     public string? HeaderImage { get; set; }
 }
 
+/// <summary>
+/// 更新游戏信息请求DTO
+/// </summary>
+public class UpdateGameInfoRequestDto
+{
+    public long GameId { get; set; }
+    public bool UpdateAchievement { get; set; } = false;
+}
+
+/// <summary>
+/// 更新游戏信息响应DTO
+/// </summary>
+public class UpdateGameInfoResponseDto
+{
+    public long GameId { get; set; }
+    public string GameName { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string? Message { get; set; }
+    public bool AchievementUpdated { get; set; }
+}
+
+/// <summary>
+/// 批量更新所有Steam游戏请求DTO
+/// </summary>
+public class UpdateAllSteamGamesRequestDto
+{
+    public bool UpdateAchievement { get; set; } = false;
+}
+
+/// <summary>
+/// 批量更新所有Steam游戏响应DTO
+/// </summary>
+public class UpdateAllSteamGamesResponseDto
+{
+    public int TotalGames { get; set; }
+    public int UpdatedGames { get; set; }
+    public int FailedGames { get; set; }
+    public int UpdatedAchievements { get; set; }
+    public List<string> Errors { get; set; } = new();
+}
+

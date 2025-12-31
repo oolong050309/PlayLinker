@@ -55,6 +55,99 @@ public class SteamController : ControllerBase
     }
 
     /// <summary>
+    /// 从 Steam Store API 响应中提取 Metacritic 评分信息
+    /// </summary>
+    /// <param name="appId">Steam AppID</param>
+    /// <param name="jsonContent">Steam Store API 的 JSON 响应内容</param>
+    /// <returns>元组：(评分, URL)，如果不存在则返回 (0, null)</returns>
+    private (int score, string? url) ExtractMetacriticInfo(int appId, string jsonContent)
+    {
+        try
+        {
+            var jsonDoc = JsonDocument.Parse(jsonContent);
+            if (jsonDoc.RootElement.TryGetProperty(appId.ToString(), out var appData))
+            {
+                if (appData.TryGetProperty("success", out var success) && success.GetBoolean())
+                {
+                    if (appData.TryGetProperty("data", out var data))
+                    {
+                        if (data.TryGetProperty("metacritic", out var metacritic))
+                        {
+                            var score = metacritic.TryGetProperty("score", out var scoreProp) 
+                                ? scoreProp.GetInt32() 
+                                : 0;
+                            var url = metacritic.TryGetProperty("url", out var urlProp) 
+                                ? urlProp.GetString() 
+                                : null;
+                            return (score, url);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "解析 Metacritic 信息失败: appId={AppId}", appId);
+        }
+        return (0, null);
+    }
+
+    /// <summary>
+    /// 从第三方 API 获取游戏的评论数据
+    /// </summary>
+    /// <param name="appId">Steam AppID</param>
+    /// <returns>元组：(总评论数, 好评数)，如果获取失败则返回 (0, 0)</returns>
+    private async Task<(int totalReviews, int totalPositive)> GetGameReviewsFromThirdPartyApiAsync(int appId)
+    {
+        try
+        {
+            var httpClient = _httpClientFactory.CreateClient();
+            var url = $"https://games-popularity.com/swagger/api/game/latest/{appId}";
+            _logger.LogInformation("调用第三方API获取游戏评论数据: {Url}", url);
+            
+            var response = await httpClient.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var jsonDoc = JsonDocument.Parse(content);
+                
+                int totalReviews = 0;
+                int totalPositive = 0;
+                
+                // 根据实际 API 响应结构解析数据
+                // reviews 对象包含: reviewsAll, reviewsNegative, reviewsPositive
+                if (jsonDoc.RootElement.TryGetProperty("reviews", out var reviewsObj))
+                {
+                    if (reviewsObj.TryGetProperty("reviewsAll", out var reviewsAllProp))
+                    {
+                        totalReviews = reviewsAllProp.GetInt32();
+                    }
+                    
+                    if (reviewsObj.TryGetProperty("reviewsPositive", out var reviewsPositiveProp))
+                    {
+                        totalPositive = reviewsPositiveProp.GetInt32();
+                    }
+                }
+                
+                _logger.LogInformation("从第三方API获取到评论数据: appId={AppId}, totalReviews={TotalReviews}, totalPositive={TotalPositive}", 
+                    appId, totalReviews, totalPositive);
+                
+                return (totalReviews, totalPositive);
+            }
+            else
+            {
+                _logger.LogWarning("第三方API请求失败: appId={AppId}, StatusCode={StatusCode}", appId, response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "从第三方API获取游戏评论数据失败: appId={AppId}", appId);
+        }
+        
+        return (0, 0);
+    }
+
+    /// <summary>
     /// 解析 supported_languages 字符串，提取语言名称
     /// 去除 HTML 标签、特殊字符和说明文字
     /// </summary>
@@ -335,9 +428,25 @@ public class SteamController : ControllerBase
                                         if (!gameElement.TryGetProperty("appid", out var appIdElement)) continue;
                                         var appId = appIdElement.GetInt32();
 
-                                        // 获取游戏详细信息
+                                        // 获取游戏详细信息（同时获取原始响应以提取 Metacritic 信息）
+                                        var gameUrl = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=schinese&cc=cn";
+                                        var gameResponse = await httpClient.GetAsync(gameUrl);
+                                        
+                                        var (metacriticScore, metacriticUrl) = (0, (string?)null);
+                                        string? gameContent = null;
+                                        
+                                        if (gameResponse.IsSuccessStatusCode)
+                                        {
+                                            gameContent = await gameResponse.Content.ReadAsStringAsync();
+                                            (metacriticScore, metacriticUrl) = ExtractMetacriticInfo(appId, gameContent);
+                                        }
+
+                                        // 使用 SteamService 解析游戏数据
                                         var steamGame = await _steamService.GetSteamGame(appId, apiKey);
                                         if (steamGame == null) continue;
+
+                                        // 从第三方 API 获取评论数据
+                                        var (totalReviews, totalPositive) = await GetGameReviewsFromThirdPartyApiAsync(appId);
 
                                         // 查找或创建游戏
                                         var game = await _context.Games
@@ -360,10 +469,10 @@ public class SteamController : ControllerBase
                                                 Mac = steamGame.Platforms.Mac,
                                                 Linux = steamGame.Platforms.Linux,
                                                 ReleaseDate = DateTime.TryParse(steamGame.ReleaseDate, out var releaseDate) ? releaseDate : DateTime.UtcNow,
-                                                ReviewScore = 0,
-                                                ReviewScoreDesc = "",
-                                                NumReviews = 0,
-                                                TotalPositive = 0
+                                                ReviewScore = metacriticScore,
+                                                ReviewScoreDesc = metacriticUrl ?? "",
+                                                NumReviews = totalReviews,
+                                                TotalPositive = totalPositive
                                             };
                                             _context.Games.Add(game);
                                             await _context.SaveChangesAsync();
@@ -1445,6 +1554,10 @@ public class SteamController : ControllerBase
                                 continue;
                             }
 
+                            // 获取 Metacritic 评分信息（从 Steam Store API 原始响应中提取）
+                            var gameContent = await gameResponse.Content.ReadAsStringAsync();
+                            var (metacriticScore, metacriticUrl) = ExtractMetacriticInfo(appId, gameContent);
+
                             // 使用 SteamService 解析游戏数据
                             var steamGame = await _steamService.GetSteamGame(appId, apiKey);
                             
@@ -1454,6 +1567,9 @@ public class SteamController : ControllerBase
                                 errors.Add($"游戏 {appId}: 无法解析游戏信息");
                                 continue;
                             }
+
+                            // 从第三方 API 获取评论数据
+                            var (totalReviews, totalPositive) = await GetGameReviewsFromThirdPartyApiAsync(appId);
 
                             // 查找或创建游戏
                             game = await _context.Games
@@ -1476,10 +1592,10 @@ public class SteamController : ControllerBase
                                     Mac = steamGame.Platforms.Mac,
                                     Linux = steamGame.Platforms.Linux,
                                     ReleaseDate = DateTime.TryParse(steamGame.ReleaseDate, out var releaseDate) ? releaseDate : DateTime.UtcNow,
-                                    ReviewScore = 0,
-                                    ReviewScoreDesc = "",
-                                    NumReviews = 0,
-                                    TotalPositive = 0
+                                    ReviewScore = metacriticScore,
+                                    ReviewScoreDesc = metacriticUrl ?? "",
+                                    NumReviews = totalReviews,
+                                    TotalPositive = totalPositive
                                 };
                                 _context.Games.Add(game);
                                 await _context.SaveChangesAsync();
@@ -1816,12 +1932,12 @@ public class SteamController : ControllerBase
                                                     }
                                                     else
                                                     {
-                                                        bool needsUpdate = false;
-                                                        if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName)) { existingAchievement.DisplayName = displayName; needsUpdate = true; }
-                                                        if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description)) { existingAchievement.Description = description; needsUpdate = true; }
-                                                        if (existingAchievement.Hidden != hidden) { existingAchievement.Hidden = hidden; needsUpdate = true; }
-                                                        if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon)) { existingAchievement.IconUnlocked = icon; needsUpdate = true; }
-                                                        if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray)) { existingAchievement.IconLocked = iconGray; needsUpdate = true; }
+                                                        // 更新已有成就的缺失字段
+                                                        if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName)) { existingAchievement.DisplayName = displayName; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description)) { existingAchievement.Description = description; }
+                                                        if (existingAchievement.Hidden != hidden) { existingAchievement.Hidden = hidden; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon)) { existingAchievement.IconUnlocked = icon; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray)) { existingAchievement.IconLocked = iconGray; }
                                                     }
                                                 }
                                             }
@@ -1870,12 +1986,12 @@ public class SteamController : ControllerBase
                                                     }
                                                     else
                                                     {
-                                                        bool needsUpdate = false;
-                                                        if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName)) { existingAchievement.DisplayName = displayName; needsUpdate = true; }
-                                                        if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description)) { existingAchievement.Description = description; needsUpdate = true; }
-                                                        if (existingAchievement.Hidden != hidden) { existingAchievement.Hidden = hidden; needsUpdate = true; }
-                                                        if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon)) { existingAchievement.IconUnlocked = icon; needsUpdate = true; }
-                                                        if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray)) { existingAchievement.IconLocked = iconGray; needsUpdate = true; }
+                                                        // 更新已有成就的缺失字段
+                                                        if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName)) { existingAchievement.DisplayName = displayName; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description)) { existingAchievement.Description = description; }
+                                                        if (existingAchievement.Hidden != hidden) { existingAchievement.Hidden = hidden; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon)) { existingAchievement.IconUnlocked = icon; }
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray)) { existingAchievement.IconLocked = iconGray; }
                                                     }
                                                 }
                                             }
@@ -1972,6 +2088,319 @@ public class SteamController : ControllerBase
         {
             _logger.LogError(ex, "获取Steam游戏信息时发生错误");
             return StatusCode(500, ApiResponse<SteamGameDto>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
+    /// 更新所有 Steam 游戏信息
+    /// 批量更新 games 表中所有 Steam 平台游戏的信息
+    /// </summary>
+    /// <param name="request">更新请求</param>
+    [HttpPost("updateAll")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<UpdateAllSteamGamesResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<UpdateAllSteamGamesResponseDto>>> UpdateAllSteamGames(
+        [FromBody] UpdateAllSteamGamesRequestDto? request = null)
+    {
+        try
+        {
+            _logger.LogInformation("开始更新所有 Steam 游戏信息: updateAchievement={UpdateAchievement}", 
+                request?.UpdateAchievement ?? false);
+
+            // 获取 Steam API Key
+            var userId = GetCurrentUserId();
+            var apiKey = await GetSteamApiKeyAsync(userId);
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                return BadRequest(ApiResponse<object>.ErrorResponse("ERR_STEAM_API_KEY_NOT_FOUND", 
+                    "未找到Steam API Key，请先绑定Steam平台"));
+            }
+
+            // 获取所有 Steam 平台游戏
+            var steamGames = await _context.GamePlatforms
+                .Where(gp => gp.PlatformId == STEAM_PLATFORM_ID)
+                .Include(gp => gp.Game)
+                .ToListAsync();
+
+            _logger.LogInformation("找到 {Count} 个 Steam 游戏需要更新", steamGames.Count);
+
+            int updatedGames = 0;
+            int failedGames = 0;
+            int updatedAchievements = 0;
+            var errors = new List<string>();
+            var httpClient = _httpClientFactory.CreateClient();
+
+            foreach (var gamePlatform in steamGames)
+            {
+                try
+                {
+                    if (gamePlatform.Game == null)
+                    {
+                        _logger.LogWarning("游戏不存在: gameId={GameId}", gamePlatform.GameId);
+                        failedGames++;
+                        errors.Add($"游戏 {gamePlatform.GameId}: 游戏记录不存在");
+                        continue;
+                    }
+
+                    // 获取 Steam AppID
+                    if (!int.TryParse(gamePlatform.PlatformGameId, out var appId))
+                    {
+                        _logger.LogWarning("无法解析 Steam AppID: PlatformGameId={PlatformGameId}", 
+                            gamePlatform.PlatformGameId);
+                        failedGames++;
+                        errors.Add($"游戏 {gamePlatform.GameId}: 无法解析 Steam AppID");
+                        continue;
+                    }
+
+                    // 获取游戏详细信息
+                    var gameUrl = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=schinese&cc=cn";
+                    var gameResponse = await httpClient.GetAsync(gameUrl);
+                    
+                    if (!gameResponse.IsSuccessStatusCode)
+                    {
+                        _logger.LogWarning("Steam API 请求失败: appId={AppId}, StatusCode={StatusCode}", 
+                            appId, gameResponse.StatusCode);
+                        failedGames++;
+                        errors.Add($"游戏 {gamePlatform.GameId} (AppID: {appId}): Steam API 请求失败");
+                        continue;
+                    }
+
+                    var gameContent = await gameResponse.Content.ReadAsStringAsync();
+                    var (metacriticScore, metacriticUrl) = ExtractMetacriticInfo(appId, gameContent);
+
+                    // 使用 SteamService 解析游戏数据
+                    var steamGame = await _steamService.GetSteamGame(appId, apiKey);
+                    if (steamGame == null)
+                    {
+                        _logger.LogWarning("无法从 Steam API 获取游戏信息: appId={AppId}", appId);
+                        failedGames++;
+                        errors.Add($"游戏 {gamePlatform.GameId} (AppID: {appId}): 无法获取游戏信息");
+                        continue;
+                    }
+
+                    // 从第三方 API 获取评论数据
+                    var (totalReviews, totalPositive) = await GetGameReviewsFromThirdPartyApiAsync(appId);
+
+                    // 更新游戏信息
+                    var game = gamePlatform.Game;
+                    game.Name = steamGame.Name;
+                    game.IsFree = steamGame.IsFree;
+                    game.RequireAge = (byte?)steamGame.RequiredAge;
+                    game.ShortDescription = steamGame.ShortDescription;
+                    game.DetailedDescription = steamGame.DetailedDescription;
+                    game.HeaderImage = steamGame.HeaderImage;
+                    game.CapsuleImage = steamGame.HeaderImage;
+                    game.Background = steamGame.HeaderImage;
+                    game.Windows = steamGame.Platforms.Windows;
+                    game.Mac = steamGame.Platforms.Mac;
+                    game.Linux = steamGame.Platforms.Linux;
+                    if (DateTime.TryParse(steamGame.ReleaseDate, out var releaseDate))
+                    {
+                        game.ReleaseDate = releaseDate;
+                    }
+                    game.ReviewScore = metacriticScore;
+                    game.ReviewScoreDesc = metacriticUrl ?? "";
+                    game.NumReviews = totalReviews;
+                    game.TotalPositive = totalPositive;
+
+                    await _context.SaveChangesAsync();
+                    updatedGames++;
+                    _logger.LogInformation("成功更新游戏: gameId={GameId}, name={Name}", game.GameId, game.Name);
+
+                    // 如果需要更新成就
+                    if (request?.UpdateAchievement == true)
+                    {
+                        try
+                        {
+                            // 获取游戏成就架构信息
+                            var schemaUrl = $"https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key={apiKey}&appid={appId}&l=schinese";
+                            var schemaResponse = await httpClient.GetAsync(schemaUrl);
+
+                            if (schemaResponse.IsSuccessStatusCode)
+                            {
+                                var schemaContent = await schemaResponse.Content.ReadAsStringAsync();
+                                var schemaDoc = JsonDocument.Parse(schemaContent);
+
+                                if (schemaDoc.RootElement.TryGetProperty("game", out var gameData))
+                                {
+                                    if (gameData.TryGetProperty("availableGameStats", out var stats))
+                                    {
+                                        if (stats.TryGetProperty("achievements", out var achievementsObj))
+                                        {
+                                            int achievementsCount = 0;
+
+                                            // 处理成就数据（数组格式）
+                                            if (achievementsObj.ValueKind == JsonValueKind.Array)
+                                            {
+                                                foreach (var achElement in achievementsObj.EnumerateArray())
+                                                {
+                                                    string? achievementName = null;
+                                                    if (achElement.TryGetProperty("name", out var nameProp))
+                                                    {
+                                                        achievementName = nameProp.GetString();
+                                                    }
+                                                    else if (achElement.TryGetProperty("apiname", out var apiNameProp))
+                                                    {
+                                                        achievementName = apiNameProp.GetString();
+                                                    }
+                                                    
+                                                    if (string.IsNullOrEmpty(achievementName)) continue;
+
+                                                    if (!achElement.TryGetProperty("displayName", out var displayNameProp)) continue;
+                                                    var displayName = displayNameProp.GetString();
+                                                    if (string.IsNullOrEmpty(displayName)) continue;
+
+                                                    var description = achElement.TryGetProperty("description", out var descProp) 
+                                                        ? descProp.GetString() 
+                                                        : null;
+                                                    var hidden = achElement.TryGetProperty("hidden", out var hiddenProp) 
+                                                        ? hiddenProp.GetInt32() == 1 
+                                                        : false;
+                                                    var icon = achElement.TryGetProperty("icon", out var iconProp) 
+                                                        ? iconProp.GetString() ?? "" 
+                                                        : "";
+                                                    var iconGray = achElement.TryGetProperty("icongray", out var iconGrayProp) 
+                                                        ? iconGrayProp.GetString() ?? "" 
+                                                        : "";
+
+                                                    var existingAchievement = await _context.Achievements
+                                                        .FirstOrDefaultAsync(a => a.GameId == game.GameId && a.AchievementName == achievementName);
+
+                                                    if (existingAchievement == null)
+                                                    {
+                                                        existingAchievement = new Achievement
+                                                        {
+                                                            GameId = game.GameId,
+                                                            AchievementName = achievementName,
+                                                            DisplayName = displayName,
+                                                            Description = description,
+                                                            Hidden = hidden,
+                                                            IconUnlocked = icon,
+                                                            IconLocked = iconGray
+                                                        };
+                                                        _context.Achievements.Add(existingAchievement);
+                                                        achievementsCount++;
+                                                    }
+                                                    else
+                                                    {
+                                                        // 更新已有成就的缺失字段
+                                                        if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName)) 
+                                                            existingAchievement.DisplayName = displayName;
+                                                        if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description)) 
+                                                            existingAchievement.Description = description;
+                                                        if (existingAchievement.Hidden != hidden) 
+                                                            existingAchievement.Hidden = hidden;
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon)) 
+                                                            existingAchievement.IconUnlocked = icon;
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray)) 
+                                                            existingAchievement.IconLocked = iconGray;
+                                                    }
+                                                }
+                                            }
+                                            // 处理成就数据（对象格式）
+                                            else if (achievementsObj.ValueKind == JsonValueKind.Object)
+                                            {
+                                                foreach (var achProp in achievementsObj.EnumerateObject())
+                                                {
+                                                    var achKey = achProp.Name;
+                                                    var achValue = achProp.Value;
+
+                                                    if (!achValue.TryGetProperty("displayName", out var displayNameProp)) continue;
+                                                    var displayName = displayNameProp.GetString();
+                                                    if (string.IsNullOrEmpty(displayName)) continue;
+
+                                                    var achievementName = achKey;
+                                                    var description = achValue.TryGetProperty("description", out var descProp) 
+                                                        ? descProp.GetString() 
+                                                        : null;
+                                                    var hidden = achValue.TryGetProperty("hidden", out var hiddenProp) 
+                                                        ? hiddenProp.GetInt32() == 1 
+                                                        : false;
+                                                    var icon = achValue.TryGetProperty("icon", out var iconProp) 
+                                                        ? iconProp.GetString() ?? "" 
+                                                        : "";
+                                                    var iconGray = achValue.TryGetProperty("icongray", out var iconGrayProp) 
+                                                        ? iconGrayProp.GetString() ?? "" 
+                                                        : "";
+
+                                                    var existingAchievement = await _context.Achievements
+                                                        .FirstOrDefaultAsync(a => a.GameId == game.GameId && a.AchievementName == achievementName);
+
+                                                    if (existingAchievement == null)
+                                                    {
+                                                        existingAchievement = new Achievement
+                                                        {
+                                                            GameId = game.GameId,
+                                                            AchievementName = achievementName,
+                                                            DisplayName = displayName,
+                                                            Description = description,
+                                                            Hidden = hidden,
+                                                            IconUnlocked = icon,
+                                                            IconLocked = iconGray
+                                                        };
+                                                        _context.Achievements.Add(existingAchievement);
+                                                        achievementsCount++;
+                                                    }
+                                                    else
+                                                    {
+                                                        // 更新已有成就的缺失字段
+                                                        if (string.IsNullOrEmpty(existingAchievement.DisplayName) && !string.IsNullOrEmpty(displayName)) 
+                                                            existingAchievement.DisplayName = displayName;
+                                                        if (string.IsNullOrEmpty(existingAchievement.Description) && !string.IsNullOrEmpty(description)) 
+                                                            existingAchievement.Description = description;
+                                                        if (existingAchievement.Hidden != hidden) 
+                                                            existingAchievement.Hidden = hidden;
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconUnlocked) && !string.IsNullOrEmpty(icon)) 
+                                                            existingAchievement.IconUnlocked = icon;
+                                                        if (string.IsNullOrEmpty(existingAchievement.IconLocked) && !string.IsNullOrEmpty(iconGray)) 
+                                                            existingAchievement.IconLocked = iconGray;
+                                                    }
+                                                }
+                                            }
+
+                                            await _context.SaveChangesAsync();
+                                            if (achievementsCount > 0)
+                                            {
+                                                updatedAchievements++;
+                                            }
+                                            _logger.LogInformation("成功更新游戏成就: gameId={GameId}, achievementsCount={Count}", 
+                                                game.GameId, achievementsCount);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "更新游戏成就失败: gameId={GameId}", game.GameId);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "更新游戏失败: gameId={GameId}", gamePlatform.GameId);
+                    failedGames++;
+                    errors.Add($"游戏 {gamePlatform.GameId}: {ex.Message}");
+                }
+            }
+
+            var result = new UpdateAllSteamGamesResponseDto
+            {
+                TotalGames = steamGames.Count,
+                UpdatedGames = updatedGames,
+                FailedGames = failedGames,
+                UpdatedAchievements = updatedAchievements,
+                Errors = errors
+            };
+
+            return Ok(ApiResponse<UpdateAllSteamGamesResponseDto>.SuccessResponse(result, 
+                $"批量更新完成: 成功 {updatedGames} 个，失败 {failedGames} 个"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "批量更新所有 Steam 游戏时发生错误");
+            return StatusCode(500, ApiResponse<UpdateAllSteamGamesResponseDto>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
 }
