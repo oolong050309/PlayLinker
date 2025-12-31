@@ -9,9 +9,9 @@ import settingRoutes from './modules/setting'
 import gameRoutes from './modules/game'
 import libraryRoutes from './modules/library'
 import localManageRoutes from './modules/localManage'
-import analyticsRoutes from './modules/analytics'
 import priceRoutes from './modules/price'
 import recommendationRoutes from './modules/recommendation'
+import userReportRoutes from './modules/userReport'
 
 const routes = [
   {
@@ -51,17 +51,17 @@ const routes = [
         path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
         meta: { ...route.meta, requiresAuth: true }
       })),
-      ...analyticsRoutes.map(route => ({
-        ...route,
-        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
-        meta: { ...route.meta, requiresAuth: true }
-      })),
       ...priceRoutes.map(route => ({
         ...route,
         path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
         meta: { ...route.meta, requiresAuth: true }
       })),
       ...recommendationRoutes.map(route => ({
+        ...route,
+        path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
+        meta: { ...route.meta, requiresAuth: true }
+      })),
+      ...userReportRoutes.map(route => ({
         ...route,
         path: route.path.startsWith('/') ? route.path.replace('/', '') : route.path,
         meta: { ...route.meta, requiresAuth: true }

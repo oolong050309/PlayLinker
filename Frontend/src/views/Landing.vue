@@ -36,11 +36,9 @@
           管理面板中，提供高级数据分析、价格追踪和社区分享功能。
         </p>
         <div class="hero-buttons">
-           <router-link to="/login" >
-            <a href="app-library.html" class="primary-btn">
-              立即开始
-              <ArrowRight class="lucide-icon" />
-            </a>
+          <router-link to="/login" class="primary-btn">
+            立即开始
+            <ArrowRight class="lucide-icon" />
           </router-link>
           <a href="#about" class="secondary-btn">
             查看文档

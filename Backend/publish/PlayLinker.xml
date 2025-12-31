@@ -1,0 +1,4916 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>PlayLinker</name>
+    </assembly>
+    <members>
+        <member name="T:PlayLinker.Controllers.AchievementsController">
+            <summary>
+            成就系统API控制器
+            提供游戏成就列表、用户成就查询、成就同步等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AchievementsController.GetSteamApiKeyAsync(System.Int32)">
+            <summary>
+            从数据库获取Steam API Key
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AchievementsController.GetGameAchievements(System.Int64)">
+            <summary>
+            获取游戏成就列表(公开接口)
+            </summary>
+            <param name="gameId">游戏ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AchievementsController.GetUserAchievementsOverview">
+            <summary>
+            获取用户成就总览(需要认证)
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AchievementsController.GetUserGameAchievements(System.Int64)">
+            <summary>
+            获取用户游戏成就(需要认证)
+            返回指定游戏的成就列表，包含当前用户是否已解锁、解锁时间等
+            </summary>
+            <param name="id">游戏ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AchievementsController.SyncAchievements(PlayLinker.Models.DTOs.SyncAchievementsRequestDto)">
+            <summary>
+            同步成就数据(需要认证)
+            </summary>
+            <param name="request">同步请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AchievementsController.SyncSteamAchievementsAsync(System.Int32,System.String,System.Collections.Generic.List{System.Int64},System.Nullable{System.Int64})">
+            <summary>
+            同步 Steam 平台成就数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AnalyticsController.GetPlaytimeAnalytics(System.String,System.Nullable{System.Int32},System.Nullable{System.Int32})">
+            <summary>
+            游玩时间分析
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AnalyticsController.GetGenreAnalytics">
+            <summary>
+            题材偏好分析
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AnalyticsController.GetPlatformAnalytics">
+            <summary>
+            平台分布分析
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AnalyticsController.GetAchievementAnalytics">
+            <summary>
+            成就统计分析
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AnalyticsController.GetSpendingAnalytics(System.String,System.Nullable{System.Int32})">
+            <summary>
+            消费分析
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.AuthController">
+            <summary>
+            认证控制器 - 用于测试和开发环境生成JWT Token
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthController.GenerateToken(PlayLinker.Controllers.TokenRequestDto)">
+            <summary>
+            生成测试用JWT Token
+            </summary>
+            <param name="request">Token生成请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthController.ValidateToken(PlayLinker.Controllers.ValidateTokenRequestDto)">
+            <summary>
+            验证Token是否有效
+            </summary>
+            <param name="request">包含待验证的JWT Token</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.TokenRequestDto">
+            <summary>
+            Token生成请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.TokenRequestDto.UserId">
+            <summary>
+            用户ID (可选,默认1)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.TokenRequestDto.Username">
+            <summary>
+            用户名 (可选,默认testuser)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.TokenRequestDto.Role">
+            <summary>
+            角色 (可选,默认user,可选值: user, admin, parent)
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.ValidateTokenRequestDto">
+            <summary>
+            Token验证请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.ValidateTokenRequestDto.Token">
+            <summary>
+            JWT Token
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.AuthControllerV1">
+            <summary>
+            认证控制器 - 用户注册、登录、Token管理
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthControllerV1.Register(PlayLinker.Models.DTOs.RegisterRequestDto)">
+            <summary>
+            用户注册
+            </summary>
+            <remarks>
+            创建新用户账户。密码必须包含大小写字母、数字和特殊字符，最少8个字符。
+            
+            示例请求:
+            ```
+            POST /api/v1/auth/register
+            {
+              "username": "player123",
+              "password": "SecurePass123!",
+              "email": "player@example.com",
+              "phone": "13800138000"
+            }
+            ```
+            
+            成功后返回用户ID、用户名、JWT Token和刷新Token。
+            </remarks>
+            <param name="request">注册请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthControllerV1.Login(PlayLinker.Models.DTOs.LoginRequestDto)">
+            <summary>
+            用户登录
+            </summary>
+            <remarks>
+            使用用户名或邮箱和密码登录，系统会自动识别输入格式。成功后返回用户信息与JWT Token。
+            
+            示例请求（用户名登录）:
+            ```
+            POST /api/v1/auth/login
+            {
+              "username": "player123",
+              "password": "SecurePass123!"
+            }
+            ```
+            
+            示例请求（邮箱登录）:
+            ```
+            POST /api/v1/auth/login
+            {
+              "username": "player@example.com",
+              "password": "SecurePass123!"
+            }
+            ```
+            
+            可能的错误码：
+            - ERR_INVALID_CREDENTIALS 用户名或邮箱错误，或密码错误
+            - ERR_ACCOUNT_DISABLED 账户已被禁用
+            </remarks>
+            <param name="request">登录请求（username字段支持用户名或邮箱）</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthControllerV1.RefreshToken(PlayLinker.Models.DTOs.RefreshTokenRequestDto)">
+            <summary>
+            刷新Token
+            </summary>
+            <param name="request">刷新Token请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthControllerV1.Logout(PlayLinker.Models.DTOs.LogoutRequestDto)">
+            <summary>
+            退出登录
+            </summary>
+            <param name="request">退出登录请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthControllerV1.ForgotPassword(PlayLinker.Models.DTOs.ForgotPasswordRequestDto)">
+            <summary>
+            忘记密码
+            </summary>
+            <param name="request">忘记密码请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthControllerV1.VerifyResetCode(PlayLinker.Models.DTOs.VerifyResetCodeRequestDto)">
+            <summary>
+            校验邮箱验证码
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthControllerV1.ResetPasswordByCode(PlayLinker.Models.DTOs.ResetPasswordByCodeRequestDto)">
+            <summary>
+            使用验证码重置密码
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.AuthControllerV1.GetClientIpAddress">
+            <summary>
+            获取客户端IP地址
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.CloudController.GetCloudSaves(System.Nullable{System.Int64},System.Int32,System.Int32)">
+            <summary>
+            获取云存档列表
+            </summary>
+            <param name="gameId">游戏ID（可选）</param>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+            <returns>云存档列表</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.CloudController.UploadToCloud(Microsoft.AspNetCore.Http.IFormFile,System.Int64,System.Boolean)">
+            <summary>
+            上传存档到云端
+            </summary>
+            <param name="file">存档文件</param>
+            <param name="saveId">本地存档ID</param>
+            <param name="compress">是否压缩</param>
+            <returns>上传结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.CloudController.DownloadFromCloud(System.String)">
+            <summary>
+            从云端下载存档
+            </summary>
+            <param name="id">云备份ID</param>
+            <returns>存档文件</returns>
+            <remarks>
+            网页版实现：直接返回文件流供用户下载
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.CloudController.DeleteCloudSave(System.String)">
+            <summary>
+            删除云存档
+            </summary>
+            <param name="id">云备份ID</param>
+            <returns>删除结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.CloudController.GetStorageUsage">
+            <summary>
+            获取存储空间使用情况
+            </summary>
+            <returns>存储空间信息</returns>
+        </member>
+        <member name="T:PlayLinker.Controllers.GamesController">
+            <summary>
+            游戏数据API控制器
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.GetGames(System.Int32,System.Int32,System.String,System.String,System.String,System.Nullable{System.Boolean})">
+            <summary>
+            获取游戏列表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.SearchGames(System.String,System.Int32,System.Int32)">
+            <summary>
+            搜索游戏
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.GetGame(System.Int64)">
+            <summary>
+            获取游戏详情
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.GetGameRanking(System.String,System.Int32)">
+            <summary>
+            获取游戏排行榜
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.FetchAndSaveRankingsAsync(System.Int32)">
+            <summary>
+            从 Steam 拉取排行榜并保存到数据库 (冷启动逻辑)
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.ExtractMetacriticInfo(System.Int32,System.String)">
+            <summary>
+            从 Steam Store API 响应中提取 Metacritic 评分信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.GetGameReviewsFromThirdPartyApiAsync(System.Int32)">
+            <summary>
+            从第三方 API 获取游戏的评论数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.GetSteamApiKeyAsync(System.Int32)">
+            <summary>
+            从数据库获取Steam API Key
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GamesController.UpdateGame(PlayLinker.Models.DTOs.UpdateGameInfoRequestDto)">
+            <summary>
+            更新游戏信息
+            根据 game_id 更新 games 表中的游戏信息，支持更新 Steam 平台游戏
+            </summary>
+            <param name="request">更新请求</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.GogController">
+            <summary>
+            GOG API集成控制器
+            提供GOG数据导入、用户信息查询、游戏信息查询等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GogController.InitializePlatformsAsync">
+            <summary>
+            初始化平台数据（优化版本：批量检查，减少数据库查询）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GogController.CheckTokenStatus">
+            <summary>
+            检查GOG令牌状态
+            </summary>
+            <remarks>
+            检查是否已有有效的GOG认证令牌。
+            建议在调用认证接口前先调用此接口,了解当前状态。
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.GogController.Authenticate(PlayLinker.Models.DTOs.GogAuthRequestDto)">
+            <summary>
+            GOG认证
+            </summary>
+            <param name="request">认证请求</param>
+            <remarks>
+            <para><b>认证流程(两步):</b></para>
+            
+            <para><b>步骤1: 获取认证URL</b></para>
+            <code>
+            POST /api/v1/gog/authenticate
+            {
+              "forceReauth": false
+            }
+            </code>
+            <para>响应示例:</para>
+            <code>
+            {
+              "success": false,
+              "message": "请在浏览器中打开authUrl完成登录...",
+              "authUrl": "https://auth.gog.com/auth?client_id=...",
+              "needsBrowserAuth": true
+            }
+            </code>
+            <para>1. 复制响应中的 authUrl</para>
+            <para>2. 在浏览器中打开此URL</para>
+            <para>3. 登录你的GOG账户</para>
+            <para>4. 登录成功后，浏览器会跳转到类似这样的URL:</para>
+            <para>   https://embed.gog.com/on_login_success?origin=client&amp;code=xxxxx</para>
+            <para>5. 复制浏览器地址栏的<b>完整URL</b></para>
+            
+            <para><b>步骤2: 提供重定向URL完成认证</b></para>
+            <code>
+            POST /api/v1/gog/authenticate
+            {
+              "redirectUrl": "https://embed.gog.com/on_login_success?origin=client&amp;code=xxxxx"
+            }
+            </code>
+            <para>系统会自动从URL中提取授权码并完成认证</para>
+            
+            <para><b>刷新令牌(已有令牌时)</b>:</para>
+            <code>
+            {
+              "forceReauth": false
+            }
+            </code>
+            <para>如果已有有效令牌,会自动刷新,无需提供redirectUrl</para>
+            
+            <para><b>注意事项:</b></para>
+            <para>- 只需复制完整URL，不需要手动提取授权码</para>
+            <para>- 令牌保存在 Backend/Tokens/gog_tokens.json</para>
+            <para>- 认证前建议先调用 GET /api/v1/gog/token-status 检查令牌状态</para>
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.GogController.ImportGogData(PlayLinker.Models.DTOs.GogImportRequestDto)">
+            <summary>
+            导入GOG数据
+            </summary>
+            <param name="request">导入请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.GogController.GetGogUser(System.String)">
+            <summary>
+            获取GOG用户信息
+            </summary>
+            <param name="gogUserId">GOG用户ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.GogController.GetGogGame(System.String)">
+            <summary>
+            获取GOG游戏信息
+            </summary>
+            <param name="gogGameId">GOG游戏ID</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.LibraryController">
+            <summary>
+            游戏库管理API控制器
+            提供用户游戏库概览、游戏列表、同步等功能(需要认证)
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.LibraryController.GetLibraryOverview">
+            <summary>
+            获取游戏库概览
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.LibraryController.GetUserGames(System.String,System.String,System.Int32,System.Int32,System.Nullable{System.Int64},System.String)">
+            <summary>
+            获取用户游戏列表
+            </summary>
+            <param name="platform">平台筛选</param>
+            <param name="sortBy">排序字段</param>
+            <param name="gameId">可选：指定游戏ID，仅返回该游戏</param>
+            <param name="search">搜索关键词（游戏名称）</param>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.LibraryController.SyncPlatformData(PlayLinker.Models.DTOs.SyncPlatformRequestDto)">
+            <summary>
+            同步平台数据
+            </summary>
+            <param name="request">同步请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.LibraryController.GetGameStats">
+            <summary>
+            获取游戏统计数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.LocalGamesController.ScanLocalGames(PlayLinker.Models.DTOs.ScanLocalGamesRequest)">
+            <summary>
+            扫描本地游戏
+            </summary>
+            <param name="request">扫描请求参数</param>
+            <returns>扫描结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.LocalGamesController.AddLocalGame(PlayLinker.Models.DTOs.AddLocalGameRequest)">
+            <summary>
+            手动添加本地游戏记录
+            </summary>
+            <param name="request">添加游戏请求</param>
+            <returns>添加结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.LocalGamesController.GetLocalGames(System.Int32,System.Int32,System.String)">
+            <summary>
+            获取本地游戏列表
+            </summary>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+            <param name="sortBy">排序字段</param>
+            <returns>本地游戏列表</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.LocalGamesController.GetLocalGameById(System.Int64)">
+            <summary>
+            获取本地游戏详情
+            </summary>
+            <param name="id">安装ID</param>
+            <returns>游戏详情</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.LocalGamesController.DeleteLocalGame(System.Int64,PlayLinker.Controllers.DeleteGameRequest)">
+            <summary>
+            删除本地游戏
+            </summary>
+            <param name="id">安装ID</param>
+            <param name="request">删除请求</param>
+            <returns>删除结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.LocalGamesController.UpdateGamePath(System.Int64,PlayLinker.Controllers.UpdatePathRequest)">
+            <summary>
+            更新游戏安装路径
+            </summary>
+            <param name="id">安装ID</param>
+            <param name="request">更新请求</param>
+            <returns>更新结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.LocalGamesController.AnalyzeUploadedFiles(System.Collections.Generic.List{PlayLinker.Models.DTOs.UploadedFileInfo})">
+            <summary>
+            分析前端上传的文件列表，识别游戏
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.MetadataController">
+            <summary>
+            游戏元数据API控制器
+            提供题材、分类、开发商、发行商等元数据查询
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.MetadataController.GetGenres">
+            <summary>
+            获取所有游戏题材
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.MetadataController.GetCategories">
+            <summary>
+            获取所有游戏分类
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.MetadataController.GetDevelopers(System.Int32,System.Int32)">
+            <summary>
+            获取开发商列表
+            </summary>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.MetadataController.GetPublishers(System.Int32,System.Int32)">
+            <summary>
+            获取发行商列表
+            </summary>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.ModExploreController">
+            <summary>
+            Mod 浏览控制器
+            聚合多个 Mod 平台的数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModExploreController.GetGameModSources(System.Int64)">
+            <summary>
+            获取游戏支持的 Mod 来源
+            </summary>
+            <param name="gameId">游戏ID</param>
+            <returns>支持的 Mod 平台列表</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModExploreController.GetMods(System.Int64,System.String,System.Int32,System.Int32,System.String)">
+            <summary>
+            获取 Mod 列表
+            </summary>
+            <param name="gameId">游戏ID</param>
+            <param name="source">Mod来源: NexusMods, 3DM, GameBanana</param>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+            <param name="sortBy">排序: downloads, updated, endorsements</param>
+            <returns>Mod 列表</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModExploreController.GetModDetail(System.String,System.String,System.String)">
+            <summary>
+            获取 Mod 详情
+            </summary>
+            <param name="source">Mod来源</param>
+            <param name="modId">Mod ID</param>
+            <param name="domain">域名（NexusMods 需要）</param>
+            <returns>Mod 详情</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModExploreController.SearchMods(System.String,System.String,System.String,System.Int32)">
+            <summary>
+            搜索 Mod
+            </summary>
+            <param name="source">Mod来源</param>
+            <param name="query">搜索关键词</param>
+            <param name="domain">域名（NexusMods 需要）</param>
+            <param name="page">页码</param>
+            <returns>搜索结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModsController.InstallMod(PlayLinker.Models.DTOs.InstallModRequest)">
+            <summary>
+            安装Mod
+            </summary>
+            <param name="request">安装请求</param>
+            <returns>安装结果</returns>
+            <remarks>
+            网页版限制：无法自动安装Mod文件，仅记录Mod信息到数据库
+            实际的Mod文件安装需要用户手动操作或本地客户端版本
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModsController.ToggleMod(System.Int64,PlayLinker.Models.DTOs.ToggleModRequest)">
+            <summary>
+            启用/禁用Mod
+            </summary>
+            <param name="id">Mod ID</param>
+            <param name="request">切换请求</param>
+            <returns>切换结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModsController.ConfirmManualInstall(System.Int64)">
+            <summary>
+            确认手动安装完成
+            </summary>
+            <param name="id">Mod ID</param>
+            <returns>确认结果</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModsController.UninstallMod(System.Int64,PlayLinker.Models.DTOs.UninstallModRequest)">
+            <summary>
+            卸载Mod
+            </summary>
+            <param name="id">Mod ID</param>
+            <param name="request">卸载请求</param>
+            <returns>卸载结果</returns>
+            <remarks>
+            网页版限制：仅从数据库删除记录，无法删除Mod文件
+            deleteFiles 参数在网页版中被忽略，固定为 false
+            删除Mod文件功能需要本地客户端版本
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModsController.GetModConflicts(System.Int64)">
+            <summary>
+            检测Mod冲突
+            </summary>
+            <param name="installId">游戏安装ID</param>
+            <returns>冲突检测结果</returns>
+            <remarks>
+            网页版实现：基于简单的名称匹配检测冲突
+            真正的文件级冲突检测需要本地客户端版本
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.ModsController.IsConflicting(System.String,System.String)">
+            <summary>
+            简单的冲突检测逻辑
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.NewsController">
+            <summary>
+            新闻资讯API控制器
+            提供新闻列表、游戏新闻、新闻详情查询
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.NewsController.SaveNewsToDatabaseAsync(System.Int64,System.Collections.Generic.List{PlayLinker.Models.DTOs.SteamNewsItemDto})">
+            <summary>
+            存储新闻到数据库
+            </summary>
+            <param name="gameId">游戏ID</param>
+            <param name="newsItems">新闻项列表</param>
+            <returns>存储的新闻数量</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.NewsController.GetNews(System.Int32,System.Int32,System.String)">
+            <summary>
+            获取新闻列表
+            </summary>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+            <param name="sortBy">排序字段</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.NewsController.GetNewsDetail(System.Int64)">
+            <summary>
+            获取新闻详情
+            </summary>
+            <param name="id">新闻ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.NewsController.SyncAllSteamNews(PlayLinker.Models.DTOs.SteamNewsSyncAllRequestDto)">
+            <summary>
+            同步所有游戏的Steam新闻
+            </summary>
+            <param name="request">同步请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.NewsController.SyncSteamNews(PlayLinker.Models.DTOs.SteamNewsSyncRequestDto)">
+            <summary>
+            同步指定游戏的Steam新闻
+            </summary>
+            <param name="request">同步请求</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.GameNewsController">
+            <summary>
+            游戏新闻API控制器扩展
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.GameNewsController.GetGameNews(System.Int64,System.Int32,System.Int32)">
+            <summary>
+            获取游戏相关新闻
+            </summary>
+            <param name="id">游戏ID</param>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.NotificationsController">
+            <summary>
+            通知中心控制器
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.NotificationsController.GetNotifications(System.Nullable{System.Boolean},System.String,System.Int32,System.Int32)">
+            <summary>
+            获取通知列表
+            </summary>
+            <param name="isRead">是否已读 (可选)</param>
+            <param name="type">通知类型 (可选)</param>
+            <param name="page">页码，默认1</param>
+            <param name="pageSize">每页数量，默认20</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.NotificationsController.MarkAsRead(System.Int64)">
+            <summary>
+            标记通知为已读
+            </summary>
+            <param name="id">通知ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.NotificationsController.DeleteNotification(System.Int64)">
+            <summary>
+            删除通知
+            </summary>
+            <param name="id">通知ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.NotificationsController.Subscribe(PlayLinker.Models.DTOs.NotificationSubscribeRequestDto)">
+            <summary>
+            通知订阅设置
+            </summary>
+            <param name="request">订阅设置请求</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.ParentalController">
+            <summary>
+            家长监管控制器
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.CreateRelationship(PlayLinker.Controllers.CreateParentalRelationshipRequestDto)">
+            <summary>
+            （旧）直接创建监管关系（使用子账户ID）
+            </summary>
+            <remarks>
+            建议改用基于邀请/令牌的流程：CreateInvitation 和 RespondInvitation。
+            该接口仍然保留用于兼容管理后台或测试。
+            </remarks>
+            <param name="request">创建监管关系请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.CreateInvitation(PlayLinker.Controllers.CreateParentalInvitationRequestDto)">
+            <summary>
+            创建家长监管邀请（通过用户名 + 邀请令牌）
+            </summary>
+            <remarks>
+            流程说明：
+            1. 家长在前端输入子账户用户名，调用本接口创建邀请；
+            2. 系统为被邀请用户生成一条通知（SourceModule = parental_control），内容中包含唯一令牌token；
+            3. 子账户在通知中心中同意或拒绝邀请，调用 RespondInvitation 完成绑定。
+            
+            错误码：
+            - ERR_CHILD_NOT_FOUND 子账户不存在
+            - ERR_CHILD_ALREADY_SUPERVISED 子账户已被监管
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.RespondInvitation(PlayLinker.Controllers.RespondParentalInvitationRequestDto)">
+            <summary>
+            子账户响应家长监管邀请（同意 / 拒绝）
+            </summary>
+            <remarks>
+            - 子账户通过通知中的token调用本接口；
+            - 同意时会正式创建 ParentalControlRelationship；
+            - 无论同意或拒绝，都会给家长发送一条结果通知。
+            
+            错误码：
+            - ERR_INVITE_NOT_FOUND 邀请不存在或已过期
+            - ERR_INVITE_EXPIRED 邀请已过期
+            - ERR_CHILD_ALREADY_SUPERVISED 子账户已被监管
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.GetChildren">
+            <summary>
+            获取子账户列表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.SetRule(PlayLinker.Controllers.SetParentalRuleRequestDto)">
+            <summary>
+            设置监管规则
+            </summary>
+            <param name="request">规则设置请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.UpdateRule(System.Int32,PlayLinker.Controllers.UpdateParentalRuleRequestDto)">
+            <summary>
+            更新监管规则
+            </summary>
+            <param name="ruleId">规则ID</param>
+            <param name="request">规则更新请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.DisableAllRules(System.Int32)">
+            <summary>
+            批量禁用用户的所有规则
+            </summary>
+            <param name="parentUserId">家长用户ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.DeleteRule(System.Int32)">
+            <summary>
+            删除监管规则
+            </summary>
+            <param name="ruleId">规则ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.GetRules(System.Int32)">
+            <summary>
+            获取规则列表
+            </summary>
+            <param name="childId">子账户ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.GetAlerts(System.Nullable{System.Int32},System.String,System.Nullable{System.DateTime},System.Nullable{System.DateTime},System.Int32,System.Int32)">
+            <summary>
+            获取违规记录
+            </summary>
+            <param name="childId">子账户ID (可选)</param>
+            <param name="ruleType">规则类型 (可选)</param>
+            <param name="startDate">开始日期 (可选)</param>
+            <param name="endDate">结束日期 (可选)</param>
+            <param name="page">页码，默认1</param>
+            <param name="pageSize">每页数量，默认20</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.GetParent">
+            <summary>
+            获取家长信息（供子账户使用）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ParentalController.DeleteRelationship(System.Int32)">
+            <summary>
+            删除监管关系（仅家长可以删除）
+            </summary>
+            <param name="childId">子账户ID</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.CreateParentalRelationshipRequestDto">
+            <summary>
+            创建监管关系请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.CreateParentalRelationshipRequestDto.ChildUserId">
+            <summary>
+            子账户用户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.CreateParentalRelationshipRequestDto.ParentUserId">
+            <summary>
+            家长用户ID（可选）。默认为当前登录用户；仅admin可指定他人。
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.SetParentalRuleRequestDto">
+            <summary>
+            设置监管规则请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.SetParentalRuleRequestDto.ChildUserId">
+            <summary>
+            子账户用户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.SetParentalRuleRequestDto.ParentUserId">
+            <summary>
+            家长用户ID（可选）。默认为当前登录用户；仅admin可指定他人。
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.SetParentalRuleRequestDto.RuleType">
+            <summary>
+            规则类型
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.SetParentalRuleRequestDto.RuleValue">
+            <summary>
+            规则值
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.SetParentalRuleRequestDto.IsActive">
+            <summary>
+            是否激活
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.UpdateParentalRuleRequestDto">
+            <summary>
+            更新监管规则请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.UpdateParentalRuleRequestDto.RuleValue">
+            <summary>
+            规则值
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.UpdateParentalRuleRequestDto.IsActive">
+            <summary>
+            是否激活
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.CreateParentalInvitationRequestDto">
+            <summary>
+            创建家长监管邀请请求DTO（基于用户名）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.CreateParentalInvitationRequestDto.ChildUsername">
+            <summary>
+            子账户用户名
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.CreateParentalInvitationRequestDto.Message">
+            <summary>
+            给对方的附加留言（可选）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.CreateParentalInvitationResponseDto">
+            <summary>
+            创建家长监管邀请响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.CreateParentalInvitationResponseDto.Token">
+            <summary>
+            邀请令牌（仅用于前端调试或日志，不建议在URL中长期暴露）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.CreateParentalInvitationResponseDto.ExpiresAt">
+            <summary>
+            邀请过期时间
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.RespondParentalInvitationRequestDto">
+            <summary>
+            子账户响应家长监管邀请请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.RespondParentalInvitationRequestDto.Token">
+            <summary>
+            邀请令牌
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Controllers.RespondParentalInvitationRequestDto.Accept">
+            <summary>
+            是否同意（true=同意，false=拒绝）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.ParentalInvitationPayload">
+            <summary>
+            存储在通知Content中的家长邀请载荷
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.PlatformsController">
+            <summary>
+            平台绑定控制器
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.InitializePlatformsAsync">
+            <summary>
+            初始化平台数据，确保所有平台都已存在
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.BindPlatform(PlayLinker.Models.DTOs.PlatformBindRequestDto)">
+            <summary>
+            获取OAuth URL
+            </summary>
+            <param name="platform">平台名称 (steam|epic|origin|uplay|gog)</param>
+            <summary>
+            绑定平台
+            </summary>
+            <param name="request">绑定请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.BindSteamPlatform(System.Int32,PlayLinker.Models.DTOs.PlatformBindRequestDto)">
+            <summary>
+            绑定Steam平台
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.BindXboxPlatform(System.Int32,PlayLinker.Models.DTOs.PlatformBindRequestDto)">
+            <summary>
+            绑定Xbox平台
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.BindPsnPlatform(System.Int32,PlayLinker.Models.DTOs.PlatformBindRequestDto)">
+            <summary>
+            绑定PSN平台
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.BindGogPlatform(System.Int32,PlayLinker.Models.DTOs.PlatformBindRequestDto)">
+            <summary>
+            绑定GOG平台
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.GetBindings">
+            <summary>
+            获取绑定列表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.UnbindPlatform(System.Int32)">
+            <summary>
+            解绑平台
+            </summary>
+            <param name="id">绑定ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.PlatformsController.RecalculateUserLibraryStats(System.Int32)">
+            <summary>
+            重新计算用户游戏库统计数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PricesController.TrackPrice(PlayLinker.Models.DTOs.TrackPriceDto)">
+            <summary>
+            添加价格监控订阅
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PricesController.CheckAndNotifyImmediatelyAsync(PlayLinker.Models.Entities.PriceAlertSubscription,System.Int32)">
+            <summary>
+            立即检查价格提醒条件并发送通知（用于新创建的订阅）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PricesController.GetSubscriptions">
+            <summary>
+            获取当前用户的价格监控订阅列表（包括非活跃的订阅）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PricesController.UpdateSubscription(System.Int64,PlayLinker.Models.DTOs.TrackPriceDto)">
+            <summary>
+            更新价格监控订阅
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PricesController.DeleteSubscription(System.Int64)">
+            <summary>
+            删除价格监控订阅
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PricesController.UpdatePricesNow">
+            <summary>
+            手动触发价格更新（管理员功能，用于测试）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PricesController.GetMonitoringStatus">
+            <summary>
+            获取价格监控状态和统计信息
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.PsnController">
+            <summary>
+            PSN API集成控制器
+            提供PSN数据导入、用户信息查询、游戏信息查询、奖杯数据等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PsnController.InitializePlatformsAsync">
+            <summary>
+            初始化平台数据（优化版本：批量检查，减少数据库查询）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.PsnController.CheckTokenStatus">
+            <summary>
+            检查PSN令牌状态
+            </summary>
+            <remarks>
+            检查是否已有有效的PSN认证令牌。
+            建议在调用认证接口前先调用此接口,了解当前状态。
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.PsnController.Authenticate(PlayLinker.Models.DTOs.PsnAuthRequestDto)">
+            <summary>
+            PSN认证
+            </summary>
+            <param name="request">认证请求</param>
+            <remarks>
+            <para><b>如何获取NPSSO:</b></para>
+            <para>1. 在浏览器中登录 PlayStation 账户</para>
+            <para>2. 访问: https://ca.account.sony.com/api/v1/ssocookie</para>
+            <para>3. 复制返回的 npsso 值(64个字符的字符串)</para>
+            <para>4. 将 npsso 值填入请求的 npsso 字段</para>
+            
+            <para><b>使用场景:</b></para>
+            <para>1. <b>首次认证</b>:</para>
+            <code>
+            {
+              "npsso": "你的64位NPSSO字符串",
+              "forceReauth": false
+            }
+            </code>
+            <para>令牌会保存到 Backend/Tokens/psn_tokens.json</para>
+            
+            <para>2. <b>刷新令牌</b>:</para>
+            <para>令牌会自动刷新,无需手动操作</para>
+            
+            <para>3. <b>服务器部署建议</b>:</para>
+            <para>- 在本地完成首次认证</para>
+            <para>- 将生成的 Backend/Tokens/psn_tokens.json 文件上传到服务器</para>
+            <para>- 令牌会自动刷新</para>
+            
+            <para><b>注意事项:</b></para>
+            <para>- NPSSO有效期约2个月</para>
+            <para>- 令牌过期后需要重新获取NPSSO进行认证</para>
+            <para>- 认证前建议先调用 GET /api/v1/psn/token-status 检查令牌状态</para>
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.PsnController.ImportPsnData(PlayLinker.Models.DTOs.PsnImportRequestDto)">
+            <summary>
+            导入PSN数据
+            </summary>
+            <param name="request">导入请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.PsnController.GetPsnUser(System.String)">
+            <summary>
+            获取PSN用户信息
+            </summary>
+            <param name="onlineId">PSN在线ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.PsnController.GetPsnGame(System.String)">
+            <summary>
+            获取PSN游戏信息
+            </summary>
+            <param name="titleId">PSN游戏标题ID(npCommunicationId)</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.PsnController.GetPsnUserTrophies(System.String)">
+            <summary>
+            获取PSN用户奖杯
+            </summary>
+            <param name="onlineId">PSN在线ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.RecommendationsController.GetRecommendations(System.String,System.Int32)">
+            <summary>
+            获取普通推荐列表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.RecommendationsController.ExploreGames(System.Boolean)">
+            <summary>
+            获取探索推荐 (AI 推荐 + 规则推荐)
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ReportsController.GetTemplates">
+            <summary>
+            获取报表模板列表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ReportsController.GenerateReport(PlayLinker.Models.DTOs.GenerateReportRequest)">
+            <summary>
+            生成报表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ReportsController.GetReports(System.String,System.Int32,System.Int32)">
+            <summary>
+            获取报表历史
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ReportsController.GetReportDetail(System.String)">
+            <summary>
+            获取报表详情
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ReportsController.DownloadReport(System.String,System.String)">
+            <summary>
+            下载报表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.ReportsController.DeleteReport(System.String)">
+            <summary>
+            删除报表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.SavesController.GetLocalSaves(System.Nullable{System.Int64},System.Int32,System.Int32)">
+            <summary>
+            获取本地存档列表
+            </summary>
+            <param name="gameId">游戏ID（可选）</param>
+            <param name="page">页码</param>
+            <param name="pageSize">每页数量</param>
+            <returns>本地存档列表</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.SavesController.AddLocalSave(PlayLinker.Models.DTOs.AddLocalSaveRequest)">
+            <summary>
+            手动添加本地存档记录
+            </summary>
+            <param name="request">添加存档请求</param>
+            <returns>添加结果</returns>
+            <remarks>
+            网页版功能：用户手动选择存档文件，系统记录文件信息到数据库
+            不上传文件本身，只记录文件路径、大小等元数据
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.SavesController.BackupSave(PlayLinker.Models.DTOs.BackupSaveRequest)">
+            <summary>
+            备份存档
+            </summary>
+            <param name="request">备份请求</param>
+            <returns>备份结果</returns>
+            <remarks>
+            ⚠️ 网页版限制：此接口仅返回模拟数据，不执行实际文件备份操作
+            原因：浏览器无法访问本地文件系统进行文件复制和压缩
+            真正的文件备份功能需要本地客户端版本
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.SavesController.RestoreSave(System.String,PlayLinker.Models.DTOs.RestoreSaveRequest)">
+            <summary>
+            恢复存档
+            </summary>
+            <param name="id">备份ID</param>
+            <param name="request">恢复请求</param>
+            <returns>恢复结果</returns>
+            <remarks>
+            ⚠️ 网页版限制：此接口仅返回模拟数据，不执行实际文件恢复操作
+            原因：浏览器无法读取备份文件并写入到存档位置
+            真正的文件恢复功能需要本地客户端版本
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.SavesController.DeleteSave(System.Int64,PlayLinker.Models.DTOs.DeleteSaveRequest)">
+            <summary>
+            删除存档
+            </summary>
+            <param name="id">存档ID</param>
+            <param name="request">删除请求</param>
+            <returns>删除结果</returns>
+            <remarks>
+            ⚠️ 网页版限制：仅删除数据库记录，不删除物理文件
+            deleteFile 和 deleteBackups 参数在网页版中被忽略
+            删除本地文件功能需要本地客户端版本
+            </remarks>
+        </member>
+        <member name="T:PlayLinker.Controllers.SteamController">
+            <summary>
+            Steam API集成控制器
+            提供Steam数据导入、用户信息查询、游戏信息查询等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.ExtractMetacriticInfo(System.Int32,System.String)">
+            <summary>
+            从 Steam Store API 响应中提取 Metacritic 评分信息
+            </summary>
+            <param name="appId">Steam AppID</param>
+            <param name="jsonContent">Steam Store API 的 JSON 响应内容</param>
+            <returns>元组：(评分, URL)，如果不存在则返回 (0, null)</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.GetGameReviewsFromThirdPartyApiAsync(System.Int32)">
+            <summary>
+            从第三方 API 获取游戏的评论数据
+            </summary>
+            <param name="appId">Steam AppID</param>
+            <returns>元组：(总评论数, 好评数)，如果获取失败则返回 (0, 0)</returns>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.ParseSupportedLanguages(System.String)">
+            <summary>
+            解析 supported_languages 字符串，提取语言名称
+            去除 HTML 标签、特殊字符和说明文字
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.InitializePlatformsAsync">
+            <summary>
+            初始化平台数据，确保所有平台都已存在
+            根据API文档中的平台列表初始化platforms表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.ImportSteamData(PlayLinker.Models.DTOs.SteamImportRequestDto)">
+            <summary>
+            导入Steam数据
+            将Steam用户数据导入到数据库中
+            </summary>
+            <param name="request">导入请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.GetSteamUser(System.String)">
+            <summary>
+            获取Steam用户信息
+            </summary>
+            <param name="steamId">Steam用户ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.GetHotGameIdsFromThirdPartyApiAsync">
+            <summary>
+            从第三方API获取热门游戏ID列表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.ImportHotGames(PlayLinker.Models.DTOs.SteamImportHotGamesRequestDto)">
+            <summary>
+            导入热门Steam游戏
+            从第三方API获取愿望单和销量榜排名，然后导入这些游戏
+            </summary>
+            <param name="request">导入请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.GetSteamGame(System.Int32)">
+            <summary>
+            获取Steam游戏信息
+            </summary>
+            <param name="appId">Steam AppID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.SteamController.UpdateAllSteamGames(PlayLinker.Models.DTOs.UpdateAllSteamGamesRequestDto)">
+            <summary>
+            更新所有 Steam 游戏信息
+            批量更新 games 表中所有 Steam 平台游戏的信息
+            </summary>
+            <param name="request">更新请求</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.UserReportController">
+            <summary>
+            用户报表控制器
+            提供用户个人数据报表功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GetCurrentUserId">
+            <summary>
+            获取当前用户ID
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GetOverview">
+            <summary>
+            获取用户报表概览
+            </summary>
+            <remarks>
+            获取用户的完整报表数据，包括：
+            - 用户资料摘要（Steam等级、徽章、好友数等）
+            - 游戏库统计（总游戏数、总时长、时长分布等）
+            - 成就统计（总成就、完成率、稀有成就等）
+            - 最近游玩记录
+            - 愿望单摘要
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GetGameLibraryStats">
+            <summary>
+            获取游戏库统计
+            </summary>
+            <remarks>
+            获取用户游戏库的详细统计数据：
+            - 总游戏数、总时长
+            - 已玩/未玩游戏数
+            - 最近2周游玩时长
+            - 按类型的时长分布（饼图数据）
+            - TOP 10 最常玩游戏
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GetAchievementStats">
+            <summary>
+            获取成就统计
+            </summary>
+            <remarks>
+            获取用户成就的详细统计数据：
+            - 总成就数、已解锁数、完成率
+            - 完美游戏数（100%成就）
+            - 最近解锁的成就
+            - 稀有成就列表
+            - 各游戏成就进度
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GetRecentPlayed(System.Int32)">
+            <summary>
+            获取最近游玩记录
+            </summary>
+            <param name="count">返回数量，默认10</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GetWishlist">
+            <summary>
+            获取愿望单
+            </summary>
+            <remarks>
+            获取用户的Steam愿望单数据：
+            - 愿望单游戏列表
+            - 当前价格和折扣信息
+            - 打折游戏数量
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.SyncFromSteam">
+            <summary>
+            同步Steam数据
+            </summary>
+            <remarks>
+            从Steam同步用户数据到本地数据库：
+            - 同步游戏库（游戏列表、游玩时长）
+            - 同步成就数据
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GenerateMonthlyReportHtml(System.Nullable{System.Int32},System.Nullable{System.Int32})">
+            <summary>
+            生成月度报告 HTML
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GenerateMonthlyReportCsv(System.Nullable{System.Int32},System.Nullable{System.Int32})">
+            <summary>
+            生成月度报告 CSV
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GenerateMonthlyReportPdf(System.Nullable{System.Int32},System.Nullable{System.Int32})">
+            <summary>
+            生成月度报告 PDF
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GenerateYearlyReportHtml(System.Nullable{System.Int32})">
+            <summary>
+            生成年度报告 HTML
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GenerateYearlyReportPdf(System.Nullable{System.Int32})">
+            <summary>
+            生成年度报告 PDF
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GenerateInventoryReportHtml">
+            <summary>
+            生成库存报告 HTML
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GenerateInventoryReportCsv">
+            <summary>
+            生成库存报告 CSV
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UserReportController.GenerateInventoryReportPdf">
+            <summary>
+            生成库存报告 PDF
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Controllers.UsersController">
+            <summary>
+            用户管理控制器
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UsersController.GetProfile">
+            <summary>
+            获取个人信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UsersController.UpdateProfile(PlayLinker.Models.DTOs.UpdateUserProfileRequestDto)">
+            <summary>
+            更新个人信息
+            </summary>
+            <remarks>
+            可更新邮箱、手机号、性别与头像URL。会进行唯一性校验。
+            </remarks>
+            <param name="request">更新请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.UsersController.ChangePassword(PlayLinker.Models.DTOs.ChangePasswordRequestDto)">
+            <summary>
+            修改密码
+            </summary>
+            <param name="request">修改密码请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.UsersController.UploadAvatar(Microsoft.AspNetCore.Http.IFormFile)">
+            <summary>
+            上传头像（上传到阿里云 OSS，并更新用户 AvatarUrl）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.UsersController.UpdateRole(PlayLinker.Models.DTOs.UpdateUserRoleRequestDto)">
+            <summary>
+            更新用户角色
+            </summary>
+            <param name="request">更新角色请求</param>
+        </member>
+        <member name="T:PlayLinker.Controllers.XboxController">
+            <summary>
+            Xbox API集成控制器
+            提供Xbox数据导入、用户信息查询、游戏信息查询等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.XboxController.InitializePlatformsAsync">
+            <summary>
+            初始化平台数据（优化版本：批量检查，减少数据库查询）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Controllers.XboxController.CheckTokenStatus">
+            <summary>
+            检查Xbox令牌状态
+            </summary>
+            <remarks>
+            检查是否已有有效的Xbox认证令牌。
+            建议在调用认证接口前先调用此接口，了解当前状态。
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.XboxController.Authenticate(PlayLinker.Models.DTOs.XboxAuthRequestDto)">
+            <summary>
+            Xbox认证
+            </summary>
+            <param name="request">认证请求</param>
+            <remarks>
+            <para><b>使用场景：</b></para>
+            <para>1. <b>本地开发环境首次认证</b>（推荐）：</para>
+            <code>
+            {
+              "openBrowser": true,
+              "forceReauth": false
+            }
+            </code>
+            <para>会打开浏览器进行OAuth2登录，完成后令牌保存到 Backend/Tokens/xbox_tokens.json</para>
+            
+            <para>2. <b>服务器环境刷新令牌</b>：</para>
+            <code>
+            {
+              "openBrowser": false,
+              "forceReauth": false
+            }
+            </code>
+            <para>使用已有令牌进行刷新，不需要浏览器</para>
+            
+            <para>3. <b>服务器部署建议</b>：</para>
+            <para>- 在本地开发环境完成首次认证（openBrowser=true）</para>
+            <para>- 将生成的 Backend/Tokens/xbox_tokens.json 文件上传到服务器</para>
+            <para>- 服务器上只需要刷新令牌（openBrowser=false）</para>
+            
+            <para><b>注意事项：</b></para>
+            <para>- 首次认证必须在有图形界面的环境中进行（会打开浏览器）</para>
+            <para>- 令牌会自动刷新，但长期不使用可能需要重新认证</para>
+            <para>- 认证前建议先调用 GET /api/v1/xbox/token-status 检查令牌状态</para>
+            </remarks>
+        </member>
+        <member name="M:PlayLinker.Controllers.XboxController.ImportXboxData(PlayLinker.Models.DTOs.XboxImportRequestDto)">
+            <summary>
+            导入Xbox数据
+            </summary>
+            <param name="request">导入请求</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.XboxController.GetXboxUser(System.String)">
+            <summary>
+            获取Xbox用户信息
+            </summary>
+            <param name="xuid">Xbox用户ID（XUID）</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.XboxController.GetXboxGame(System.String)">
+            <summary>
+            获取Xbox游戏信息
+            </summary>
+            <param name="titleId">Xbox游戏标题ID</param>
+        </member>
+        <member name="M:PlayLinker.Controllers.XboxController.GetXboxUserAchievements(System.String)">
+            <summary>
+            获取Xbox用户成就
+            </summary>
+            <param name="xuid">Xbox用户ID</param>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.ApiResponse`1">
+            <summary>
+            统一API响应格式
+            </summary>
+            <typeparam name="T">数据类型</typeparam>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.ApiResponse`1.Success">
+            <summary>
+            操作是否成功
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.ApiResponse`1.Code">
+            <summary>
+            响应代码
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.ApiResponse`1.Message">
+            <summary>
+            响应消息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.ApiResponse`1.Data">
+            <summary>
+            响应数据
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.ApiResponse`1.Meta">
+            <summary>
+            元数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Models.DTOs.ApiResponse`1.SuccessResponse(`0,System.String)">
+            <summary>
+            创建成功响应
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Models.DTOs.ApiResponse`1.ErrorResponse(System.String,System.String,`0)">
+            <summary>
+            创建错误响应
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.ResponseMeta">
+            <summary>
+            响应元数据
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameAchievementsDto">
+            <summary>
+            游戏成就列表响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.AchievementDto">
+            <summary>
+            成就DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UserAchievementsOverviewDto">
+            <summary>
+            用户成就总览响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.RecentUnlockDto">
+            <summary>
+            最近解锁成就DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.RareAchievementDto">
+            <summary>
+            稀有成就DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.AchievementStatisticsDto">
+            <summary>
+            成就统计DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SyncAchievementsRequestDto">
+            <summary>
+            同步成就请求DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SyncAchievementsResponseDto">
+            <summary>
+            同步成就响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.RegisterRequestDto">
+            <summary>
+            用户注册请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.LoginRequestDto.Username">
+            <summary>
+            用户名或邮箱地址（系统会自动识别输入格式）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameListDto">
+            <summary>
+            游戏列表响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameItemDto">
+            <summary>
+            游戏项DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PlatformSupportDto">
+            <summary>
+            平台支持DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameDetailDto">
+            <summary>
+            游戏详情响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameMediaDto">
+            <summary>
+            游戏媒体DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameRequirementsDto">
+            <summary>
+            游戏系统需求DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameReviewsDto">
+            <summary>
+            游戏评价DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GenreDto">
+            <summary>
+            题材DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.DeveloperDto">
+            <summary>
+            开发商DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PublisherDto">
+            <summary>
+            发行商DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.CategoryDto">
+            <summary>
+            分类DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.LanguageDto">
+            <summary>
+            语言DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameRankingListDto">
+            <summary>
+            游戏排行榜响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameRankingItemDto">
+            <summary>
+            游戏排行榜项DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.AddGameRequestDto">
+            <summary>
+            添加游戏请求DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UpdateGameRequestDto">
+            <summary>
+            更新游戏请求DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UpdateGameInfoRequestDto">
+            <summary>
+            更新游戏信息请求DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UpdateGameInfoResponseDto">
+            <summary>
+            更新游戏信息响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UpdateAllSteamGamesRequestDto">
+            <summary>
+            批量更新所有Steam游戏请求DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UpdateAllSteamGamesResponseDto">
+            <summary>
+            批量更新所有Steam游戏响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogImportRequestDto">
+            <summary>
+            GOG导入请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportRequestDto.UserId">
+            <summary>
+            用户ID(必需)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportRequestDto.GogUserId">
+            <summary>
+            GOG用户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportRequestDto.ImportGames">
+            <summary>
+            是否导入游戏库
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogImportResponseDto">
+            <summary>
+            GOG导入响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportResponseDto.TaskId">
+            <summary>
+            任务ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportResponseDto.Status">
+            <summary>
+            状态: processing, completed, failed
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportResponseDto.Message">
+            <summary>
+            消息(成功或错误信息)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportResponseDto.EstimatedTime">
+            <summary>
+            预计时间(秒)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportResponseDto.Items">
+            <summary>
+            导入项目统计
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogImportItemsDto">
+            <summary>
+            GOG导入项目统计DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportItemsDto.Games">
+            <summary>
+            游戏数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogImportItemsDto.Achievements">
+            <summary>
+            成就数量
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogUserDto">
+            <summary>
+            GOG用户信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogUserDto.GogUserId">
+            <summary>
+            GOG用户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogUserDto.Username">
+            <summary>
+            用户名
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogUserDto.ProfileUrl">
+            <summary>
+            个人资料URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogUserDto.AvatarUrl">
+            <summary>
+            头像URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogUserDto.AccountCreated">
+            <summary>
+            账户创建时间
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogUserDto.Country">
+            <summary>
+            国家/地区
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogUserDto.GamesOwned">
+            <summary>
+            拥有游戏数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogUserDto.IsPublic">
+            <summary>
+            资料是否公开
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogGameDto">
+            <summary>
+            GOG游戏信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.GogGameId">
+            <summary>
+            GOG游戏ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.Name">
+            <summary>
+            游戏名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.Type">
+            <summary>
+            游戏类型
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.IsFree">
+            <summary>
+            是否免费
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.ShortDescription">
+            <summary>
+            简短描述
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.DetailedDescription">
+            <summary>
+            详细描述
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.HeaderImage">
+            <summary>
+            头图URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.Developers">
+            <summary>
+            开发商列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.Publishers">
+            <summary>
+            发行商列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.Platforms">
+            <summary>
+            平台支持
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.Categories">
+            <summary>
+            分类列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.Genres">
+            <summary>
+            题材列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.ReleaseDate">
+            <summary>
+            发行日期
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.RequiredAge">
+            <summary>
+            需要的年龄
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.PriceOverview">
+            <summary>
+            价格信息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.Achievements">
+            <summary>
+            成就信息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogGameDto.PlayTimeMinutes">
+            <summary>
+            游玩时长(分钟) - 从游戏会话统计
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogPriceDto">
+            <summary>
+            GOG价格信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogPriceDto.Currency">
+            <summary>
+            货币代码
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogPriceDto.Initial">
+            <summary>
+            原价(分)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogPriceDto.Final">
+            <summary>
+            现价(分)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogPriceDto.DiscountPercent">
+            <summary>
+            折扣百分比
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogAchievementsInfoDto">
+            <summary>
+            GOG成就信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAchievementsInfoDto.Total">
+            <summary>
+            成就总数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAchievementsInfoDto.CurrentAchievements">
+            <summary>
+            当前已解锁成就数
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogAuthRequestDto">
+            <summary>
+            GOG认证请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthRequestDto.RedirectUrl">
+            <summary>
+            浏览器重定向后的完整URL
+            登录成功后浏览器地址栏的URL,例如: https://embed.gog.com/on_login_success?origin=client&amp;code=xxxxx
+            系统会自动从URL中提取授权码完成认证
+            如果不提供,将返回需要访问的认证URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthRequestDto.TokensPath">
+            <summary>
+            令牌文件路径(可选,默认使用项目内路径)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthRequestDto.ForceReauth">
+            <summary>
+            是否强制重新认证(会删除现有令牌)
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GogAuthResponseDto">
+            <summary>
+            GOG认证响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthResponseDto.Success">
+            <summary>
+            是否认证成功
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthResponseDto.Message">
+            <summary>
+            消息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthResponseDto.UserId">
+            <summary>
+            用户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthResponseDto.TokensPath">
+            <summary>
+            令牌路径
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthResponseDto.TokenExists">
+            <summary>
+            令牌是否存在
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthResponseDto.AuthUrl">
+            <summary>
+            认证URL(需要浏览器认证时提供)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GogAuthResponseDto.NeedsBrowserAuth">
+            <summary>
+            是否需要浏览器认证
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.LibraryOverviewDto">
+            <summary>
+            游戏库概览响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PlatformStatsDto">
+            <summary>
+            平台统计DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GenreDistributionDto">
+            <summary>
+            题材分布DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UserGameListDto">
+            <summary>
+            用户游戏列表响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UserGameItemDto">
+            <summary>
+            用户游戏项DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.OwnedPlatformDto">
+            <summary>
+            拥有的平台DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SyncPlatformRequestDto">
+            <summary>
+            同步平台数据请求DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SyncPlatformResponseDto">
+            <summary>
+            同步平台数据响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameStatsDto">
+            <summary>
+            游戏统计数据响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.MostPlayedGameDto">
+            <summary>
+            最常玩游戏DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PlatformDistributionDto">
+            <summary>
+            平台分布DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.RecentActivityDto">
+            <summary>
+            最近活动DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.ModExploreRequest">
+            <summary>
+            Mod 浏览相关 DTOs
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.ExploreModItemDto">
+            <summary>
+            第三方平台 Mod 项目（用于浏览）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.ExploreModDetailDto">
+            <summary>
+            第三方平台 Mod 详情（用于浏览）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.ExploreModFileDto">
+            <summary>
+            第三方平台 Mod 文件信息
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.NewsListDto">
+            <summary>
+            新闻列表响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.NewsItemDto">
+            <summary>
+            新闻项DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.RelatedGameDto">
+            <summary>
+            关联游戏DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameNewsDto">
+            <summary>
+            游戏新闻响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.NewsDetailDto">
+            <summary>
+            新闻详情响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamNewsSyncAllRequestDto">
+            <summary>
+            Steam新闻同步请求DTO（所有游戏）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.SteamNewsSyncAllRequestDto.Count">
+            <summary>
+            每个游戏获取的新闻数量（默认20）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamNewsSyncRequestDto">
+            <summary>
+            Steam新闻同步请求DTO（单个游戏）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.SteamNewsSyncRequestDto.GameId">
+            <summary>
+            游戏ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.SteamNewsSyncRequestDto.Count">
+            <summary>
+            获取的新闻数量（默认20）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamNewsSyncResponseDto">
+            <summary>
+            Steam新闻同步响应DTO（所有游戏）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamGameNewsResponseDto">
+            <summary>
+            Steam游戏新闻响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamNewsItemDto">
+            <summary>
+            Steam新闻项DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.NotificationDto">
+            <summary>
+            通知DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationDto.NotificationId">
+            <summary>
+            通知ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationDto.SourceModule">
+            <summary>
+            来源模块
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationDto.Title">
+            <summary>
+            标题
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationDto.Content">
+            <summary>
+            内容
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationDto.NotificationType">
+            <summary>
+            通知类型
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationDto.IsRead">
+            <summary>
+            是否已读
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationDto.CreatedAt">
+            <summary>
+            创建时间
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.NotificationsListResponseDto">
+            <summary>
+            通知列表响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationsListResponseDto.Items">
+            <summary>
+            通知列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationsListResponseDto.UnreadCount">
+            <summary>
+            未读数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationsListResponseDto.Meta">
+            <summary>
+            分页元数据
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PaginationMetaDto">
+            <summary>
+            分页元数据DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PaginationMetaDto.Page">
+            <summary>
+            当前页
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PaginationMetaDto.PageSize">
+            <summary>
+            每页数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PaginationMetaDto.Total">
+            <summary>
+            总数
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.NotificationSubscribeRequestDto">
+            <summary>
+            通知订阅设置请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationSubscribeRequestDto.PriceAlert">
+            <summary>
+            价格提醒设置
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationSubscribeRequestDto.ParentalControl">
+            <summary>
+            家长监管设置
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationSubscribeRequestDto.System">
+            <summary>
+            系统通知设置
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationSubscribeRequestDto.Recommendation">
+            <summary>
+            推荐设置
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationSubscribeRequestDto.GameUpdate">
+            <summary>
+            游戏更新设置
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.NotificationSettingDto">
+            <summary>
+            通知设置DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationSettingDto.Enabled">
+            <summary>
+            是否启用
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationSettingDto.Email">
+            <summary>
+            是否邮件通知
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.NotificationSettingDto.Push">
+            <summary>
+            是否推送通知
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.OAuthUrlResponseDto">
+            <summary>
+            OAuth URL响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.OAuthUrlResponseDto.Platform">
+            <summary>
+            平台名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.OAuthUrlResponseDto.AuthUrl">
+            <summary>
+            OAuth认证URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.OAuthUrlResponseDto.State">
+            <summary>
+            状态值（用于验证）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.OAuthUrlResponseDto.ExpiresIn">
+            <summary>
+            过期时间（秒）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PlatformBindRequestDto">
+            <summary>
+            平台绑定请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.PlatformId">
+            <summary>
+            平台ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.AuthCode">
+            <summary>
+            OAuth授权码（可选，用于需要OAuth的平台）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.State">
+            <summary>
+            状态值（可选，用于验证OAuth）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.SteamId">
+            <summary>
+            Steam平台用户ID（Steam必需）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.ApiKey">
+            <summary>
+            Steam API Key（Steam必需）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.XboxUserId">
+            <summary>
+            Xbox用户ID（Xbox必需）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.PsnOnlineId">
+            <summary>
+            PSN在线ID（PSN必需）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.GogUserId">
+            <summary>
+            GOG用户ID（GOG必需）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.AccessToken">
+            <summary>
+            访问令牌（用于需要OAuth令牌的平台）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindRequestDto.RefreshToken">
+            <summary>
+            刷新令牌（用于需要刷新令牌的平台）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PlatformBindResponseDto">
+            <summary>
+            平台绑定响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindResponseDto.BindingId">
+            <summary>
+            绑定ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindResponseDto.PlatformName">
+            <summary>
+            平台名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindResponseDto.PlatformUserId">
+            <summary>
+            平台用户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindResponseDto.BindingTime">
+            <summary>
+            绑定时间
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PlatformBindingDto">
+            <summary>
+            平台绑定记录DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindingDto.BindingId">
+            <summary>
+            绑定ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindingDto.PlatformName">
+            <summary>
+            平台名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindingDto.PlatformUserId">
+            <summary>
+            平台用户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindingDto.ProfileName">
+            <summary>
+            个人资料名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindingDto.BindingTime">
+            <summary>
+            绑定时间
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PlatformBindingsListResponseDto">
+            <summary>
+            平台绑定列表响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindingsListResponseDto.Bindings">
+            <summary>
+            绑定列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PlatformBindingsListResponseDto.TotalCount">
+            <summary>
+            总数
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnImportRequestDto">
+            <summary>
+            PSN导入请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportRequestDto.UserId">
+            <summary>
+            用户ID(必需)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportRequestDto.PsnOnlineId">
+            <summary>
+            PSN在线ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportRequestDto.ImportGames">
+            <summary>
+            是否导入游戏库
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportRequestDto.ImportTrophies">
+            <summary>
+            是否导入奖杯数据(PSN的成就系统)
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnImportResponseDto">
+            <summary>
+            PSN导入响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportResponseDto.TaskId">
+            <summary>
+            任务ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportResponseDto.Status">
+            <summary>
+            状态: processing, completed, failed
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportResponseDto.Message">
+            <summary>
+            消息(成功或错误信息)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportResponseDto.EstimatedTime">
+            <summary>
+            预计时间(秒)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportResponseDto.Items">
+            <summary>
+            导入项目统计
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnImportItemsDto">
+            <summary>
+            PSN导入项目统计DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportItemsDto.Games">
+            <summary>
+            游戏数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnImportItemsDto.Achievements">
+            <summary>
+            奖杯数量
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnUserDto">
+            <summary>
+            PSN用户信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.OnlineId">
+            <summary>
+            PSN在线ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.ProfileUrl">
+            <summary>
+            个人资料URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.AvatarUrl">
+            <summary>
+            头像URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.AccountCreated">
+            <summary>
+            账户创建时间
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.Country">
+            <summary>
+            国家/地区
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.GamesOwned">
+            <summary>
+            拥有游戏数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.TrophySummary">
+            <summary>
+            奖杯统计
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.Level">
+            <summary>
+            奖杯等级
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserDto.IsPublic">
+            <summary>
+            资料是否公开
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnTrophySummaryDto">
+            <summary>
+            PSN奖杯统计DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnTrophySummaryDto.Bronze">
+            <summary>
+            铜杯数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnTrophySummaryDto.Silver">
+            <summary>
+            银杯数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnTrophySummaryDto.Gold">
+            <summary>
+            金杯数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnTrophySummaryDto.Platinum">
+            <summary>
+            白金杯数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnTrophySummaryDto.Total">
+            <summary>
+            总奖杯数
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnGameDto">
+            <summary>
+            PSN游戏信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.TitleId">
+            <summary>
+            PSN游戏标题ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Name">
+            <summary>
+            游戏名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Type">
+            <summary>
+            游戏类型
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.IsFree">
+            <summary>
+            是否免费
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.ShortDescription">
+            <summary>
+            简短描述
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.DetailedDescription">
+            <summary>
+            详细描述
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.HeaderImage">
+            <summary>
+            头图URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Developers">
+            <summary>
+            开发商列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Publishers">
+            <summary>
+            发行商列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Platforms">
+            <summary>
+            平台支持
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Categories">
+            <summary>
+            分类列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Genres">
+            <summary>
+            题材列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.ReleaseDate">
+            <summary>
+            发行日期
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.RequiredAge">
+            <summary>
+            需要的年龄
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.PriceOverview">
+            <summary>
+            价格信息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Achievements">
+            <summary>
+            成就(奖杯)信息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.TrophyTitlePlatform">
+            <summary>
+            游戏平台(PS4/PS5等)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnGameDto.Progress">
+            <summary>
+            奖杯进度百分比
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnPriceDto">
+            <summary>
+            PSN价格信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnPriceDto.Currency">
+            <summary>
+            货币代码
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnPriceDto.Initial">
+            <summary>
+            原价(分)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnPriceDto.Final">
+            <summary>
+            现价(分)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnPriceDto.DiscountPercent">
+            <summary>
+            折扣百分比
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnAchievementsInfoDto">
+            <summary>
+            PSN成就(奖杯)信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAchievementsInfoDto.Total">
+            <summary>
+            成就总数
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnUserTrophyDto">
+            <summary>
+            PSN用户奖杯DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.TrophyId">
+            <summary>
+            奖杯ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.GameId">
+            <summary>
+            游戏ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.GameName">
+            <summary>
+            游戏名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.AchievementName">
+            <summary>
+            成就名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.DisplayName">
+            <summary>
+            显示名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.Description">
+            <summary>
+            描述
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.Type">
+            <summary>
+            奖杯类型: bronze/silver/gold/platinum
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.Score">
+            <summary>
+            奖杯分数(映射为成就分数)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.Unlocked">
+            <summary>
+            是否解锁
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.UnlockTime">
+            <summary>
+            解锁时间
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.IconUnlocked">
+            <summary>
+            解锁图标URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.IconLocked">
+            <summary>
+            锁定图标URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophyDto.Rarity">
+            <summary>
+            稀有度: common/rare/very_rare/ultra_rare
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnUserTrophiesResponseDto">
+            <summary>
+            PSN用户奖杯列表响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophiesResponseDto.Items">
+            <summary>
+            奖杯列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnUserTrophiesResponseDto.Total">
+            <summary>
+            总数量
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnAuthRequestDto">
+            <summary>
+            PSN认证请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthRequestDto.Npsso">
+            <summary>
+            NPSSO令牌(从PlayStation网站获取)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthRequestDto.TokensPath">
+            <summary>
+            令牌文件路径(可选,默认使用项目内路径)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthRequestDto.ForceReauth">
+            <summary>
+            是否强制重新认证(会删除现有令牌)
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PsnAuthResponseDto">
+            <summary>
+            PSN认证响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthResponseDto.Success">
+            <summary>
+            是否认证成功
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthResponseDto.Message">
+            <summary>
+            消息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthResponseDto.AccountId">
+            <summary>
+            账户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthResponseDto.OnlineId">
+            <summary>
+            在线ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthResponseDto.TokensPath">
+            <summary>
+            令牌路径
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.PsnAuthResponseDto.TokenExists">
+            <summary>
+            令牌是否存在
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamImportRequestDto">
+            <summary>
+            Steam导入请求DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamImportResponseDto">
+            <summary>
+            Steam导入响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamImportItemsDto">
+            <summary>
+            Steam导入项目DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamUserDto">
+            <summary>
+            Steam用户信息响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamGameDto">
+            <summary>
+            Steam游戏信息响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamPriceDto">
+            <summary>
+            Steam价格DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamAchievementsInfoDto">
+            <summary>
+            Steam成就信息DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamRecommendationsDto">
+            <summary>
+            Steam推荐DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamImportHotGamesRequestDto">
+            <summary>
+            Steam热门游戏导入请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.SteamImportHotGamesRequestDto.UserId">
+            <summary>
+            用户ID（可选，用于获取API Key）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.SteamImportHotGamesRequestDto.ImportGames">
+            <summary>
+            是否导入游戏详情
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.SteamImportHotGamesRequestDto.ImportAchievements">
+            <summary>
+            是否导入成就数据
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.SteamImportHotGamesResponseDto">
+            <summary>
+            Steam热门游戏导入响应DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UserProfileDto">
+            <summary>
+            用户个人信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.UserId">
+            <summary>
+            用户ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.Username">
+            <summary>
+            用户名
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.Email">
+            <summary>
+            邮箱
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.Phone">
+            <summary>
+            手机号
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.Gender">
+            <summary>
+            性别 (1男/2女/0未知)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.AvatarUrl">
+            <summary>
+            头像URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.Role">
+            <summary>
+            角色
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.Status">
+            <summary>
+            状态
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserProfileDto.CreatedAt">
+            <summary>
+            创建时间
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UpdateUserProfileRequestDto">
+            <summary>
+            更新用户个人信息请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UpdateUserProfileRequestDto.Email">
+            <summary>
+            邮箱
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UpdateUserProfileRequestDto.Phone">
+            <summary>
+            手机号
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UpdateUserProfileRequestDto.Gender">
+            <summary>
+            性别 (1男/2女/0未知)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UpdateUserProfileRequestDto.AvatarUrl">
+            <summary>
+            头像URL
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.ChangePasswordRequestDto">
+            <summary>
+            修改密码请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.ChangePasswordRequestDto.OldPassword">
+            <summary>
+            旧密码
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.ChangePasswordRequestDto.NewPassword">
+            <summary>
+            新密码
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UpdateUserRoleRequestDto">
+            <summary>
+            更新用户角色请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UpdateUserRoleRequestDto.Role">
+            <summary>
+            角色名称 (user, parent, admin)
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UserReportOverviewDto">
+            <summary>
+            用户报表概览响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportOverviewDto.Profile">
+            <summary>
+            用户基本信息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportOverviewDto.GameLibrary">
+            <summary>
+            游戏库统计
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportOverviewDto.Achievements">
+            <summary>
+            成就统计
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportOverviewDto.RecentPlayed">
+            <summary>
+            最近游玩记录
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportOverviewDto.Wishlist">
+            <summary>
+            愿望单摘要
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UserProfileSummaryDto">
+            <summary>
+            用户资料摘要
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameLibrarySummaryDto">
+            <summary>
+            游戏库摘要
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GameLibrarySummaryDto.TotalGames">
+            <summary>
+            总游戏数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GameLibrarySummaryDto.TotalPlaytimeMinutes">
+            <summary>
+            总游玩时长（分钟）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GameLibrarySummaryDto.TotalPlaytimeFormatted">
+            <summary>
+            总游玩时长（小时，格式化）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GameLibrarySummaryDto.PlayedGames">
+            <summary>
+            已玩过的游戏数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GameLibrarySummaryDto.NeverPlayedGames">
+            <summary>
+            从未玩过的游戏数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GameLibrarySummaryDto.RecentPlaytimeMinutes">
+            <summary>
+            最近2周游玩时长（分钟）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GameLibrarySummaryDto.PlaytimeByGenre">
+            <summary>
+            游戏时长分布（按类型）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.GameLibrarySummaryDto.TopPlayedGames">
+            <summary>
+            TOP 10 最常玩游戏
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.PlaytimeByGenreDto">
+            <summary>
+            按类型的游戏时长
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.TopPlayedGameDto">
+            <summary>
+            最常玩游戏
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.AchievementSummaryDto">
+            <summary>
+            成就摘要
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.AchievementSummaryDto.TotalAchievements">
+            <summary>
+            总成就数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.AchievementSummaryDto.UnlockedAchievements">
+            <summary>
+            已解锁成就数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.AchievementSummaryDto.CompletionRate">
+            <summary>
+            完成率
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.AchievementSummaryDto.PerfectGames">
+            <summary>
+            完美游戏数（100%成就）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.AchievementSummaryDto.RecentUnlocks">
+            <summary>
+            最近解锁的成就
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.AchievementSummaryDto.RareAchievements">
+            <summary>
+            稀有成就（全球解锁率低于5%）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.AchievementSummaryDto.GameProgress">
+            <summary>
+            各游戏成就进度
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.RecentAchievementDto">
+            <summary>
+            最近解锁成就
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.RareAchievementSummaryDto">
+            <summary>
+            稀有成就摘要
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.GameAchievementProgressDto">
+            <summary>
+            游戏成就进度
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.RecentPlayedGameDto">
+            <summary>
+            最近游玩游戏
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.WishlistSummaryDto">
+            <summary>
+            愿望单摘要
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.WishlistSummaryDto.TotalItems">
+            <summary>
+            愿望单游戏数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.WishlistSummaryDto.OnSaleCount">
+            <summary>
+            当前有折扣的游戏数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.WishlistSummaryDto.Items">
+            <summary>
+            愿望单游戏列表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.UserReportWishlistItemDto">
+            <summary>
+            用户报表愿望单项目
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportWishlistItemDto.CurrentPrice">
+            <summary>
+            当前价格（分）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportWishlistItemDto.OriginalPrice">
+            <summary>
+            原价（分）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportWishlistItemDto.DiscountPercent">
+            <summary>
+            折扣百分比
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.UserReportWishlistItemDto.IsOnSale">
+            <summary>
+            是否在打折
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxImportRequestDto">
+            <summary>
+            Xbox导入请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportRequestDto.UserId">
+            <summary>
+            用户ID（必需）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportRequestDto.XboxUserId">
+            <summary>
+            Xbox用户ID（XUID格式）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportRequestDto.ImportGames">
+            <summary>
+            是否导入游戏库
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportRequestDto.ImportAchievements">
+            <summary>
+            是否导入成就数据
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxImportResponseDto">
+            <summary>
+            Xbox导入响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportResponseDto.TaskId">
+            <summary>
+            任务ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportResponseDto.Status">
+            <summary>
+            状态：processing, completed, failed
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportResponseDto.Message">
+            <summary>
+            消息（成功或错误信息）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportResponseDto.EstimatedTime">
+            <summary>
+            预计时间（秒）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportResponseDto.Items">
+            <summary>
+            导入项目统计
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxImportItemsDto">
+            <summary>
+            Xbox导入项目统计DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportItemsDto.Games">
+            <summary>
+            游戏数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxImportItemsDto.Achievements">
+            <summary>
+            成就数量
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxUserDto">
+            <summary>
+            Xbox用户信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.Xuid">
+            <summary>
+            Xbox用户ID（XUID）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.Gamertag">
+            <summary>
+            玩家标签
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.ProfileUrl">
+            <summary>
+            个人资料URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.AvatarUrl">
+            <summary>
+            头像URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.AccountCreated">
+            <summary>
+            账户创建时间
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.Country">
+            <summary>
+            国家/地区
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.Gamerscore">
+            <summary>
+            玩家分数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.Tier">
+            <summary>
+            会员等级
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.GamesOwned">
+            <summary>
+            拥有游戏数量
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserDto.IsPublic">
+            <summary>
+            资料是否公开
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxGameDto">
+            <summary>
+            Xbox游戏信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.TitleId">
+            <summary>
+            Xbox游戏标题ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.Name">
+            <summary>
+            游戏名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.Type">
+            <summary>
+            游戏类型
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.IsFree">
+            <summary>
+            是否免费
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.ShortDescription">
+            <summary>
+            简短描述
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.DetailedDescription">
+            <summary>
+            详细描述
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.HeaderImage">
+            <summary>
+            头图URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.Developers">
+            <summary>
+            开发商列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.Publishers">
+            <summary>
+            发行商列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.Platforms">
+            <summary>
+            平台支持
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.Categories">
+            <summary>
+            分类列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.Genres">
+            <summary>
+            题材列表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.ReleaseDate">
+            <summary>
+            发行日期
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.RequiredAge">
+            <summary>
+            需要的年龄
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.PriceOverview">
+            <summary>
+            价格信息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.Achievements">
+            <summary>
+            成就信息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.PlayTimeMinutes">
+            <summary>
+            游玩时长（分钟）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxGameDto.LastPlayed">
+            <summary>
+            最后游玩时间
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxPriceDto">
+            <summary>
+            Xbox价格信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxPriceDto.Currency">
+            <summary>
+            货币代码
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxPriceDto.Initial">
+            <summary>
+            原价（分）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxPriceDto.Final">
+            <summary>
+            现价（分）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxPriceDto.DiscountPercent">
+            <summary>
+            折扣百分比
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxAchievementsInfoDto">
+            <summary>
+            Xbox成就信息DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAchievementsInfoDto.Total">
+            <summary>
+            成就总数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAchievementsInfoDto.CurrentAchievements">
+            <summary>
+            当前已解锁成就数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAchievementsInfoDto.CurrentGamerscore">
+            <summary>
+            当前玩家分数
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxUserAchievementDto">
+            <summary>
+            Xbox用户成就DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.AchievementId">
+            <summary>
+            成就ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.GameId">
+            <summary>
+            游戏ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.GameName">
+            <summary>
+            游戏名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.AchievementName">
+            <summary>
+            成就名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.DisplayName">
+            <summary>
+            显示名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.Description">
+            <summary>
+            描述
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.Score">
+            <summary>
+            成就分数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.Unlocked">
+            <summary>
+            是否解锁
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.UnlockTime">
+            <summary>
+            解锁时间
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.IconUnlocked">
+            <summary>
+            解锁图标URL
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxUserAchievementDto.IconLocked">
+            <summary>
+            锁定图标URL
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxAuthRequestDto">
+            <summary>
+            Xbox认证请求DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthRequestDto.TokensPath">
+            <summary>
+            令牌文件路径（可选，默认使用项目内路径）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthRequestDto.ForceReauth">
+            <summary>
+            是否强制重新认证（会删除现有令牌）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthRequestDto.OpenBrowser">
+            <summary>
+            是否启动浏览器进行首次认证
+            注意：首次认证必须设置为true，且需要在有图形界面的环境中运行
+            服务器部署时，建议在本地完成首次认证，然后上传tokens文件
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.DTOs.XboxAuthResponseDto">
+            <summary>
+            Xbox认证响应DTO
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthResponseDto.Success">
+            <summary>
+            是否认证成功
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthResponseDto.Message">
+            <summary>
+            消息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthResponseDto.Xuid">
+            <summary>
+            XUID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthResponseDto.TokensPath">
+            <summary>
+            令牌路径
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthResponseDto.TokenExists">
+            <summary>
+            令牌是否存在
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthResponseDto.AuthUrl">
+            <summary>
+            认证URL（需要浏览器认证时提供）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.DTOs.XboxAuthResponseDto.NeedsBrowserAuth">
+            <summary>
+            是否需要浏览器认证
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Achievement">
+            <summary>
+            成就表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.Achievement.Hidden">
+            <summary>
+            0=不隐藏，1=隐藏
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.Achievement.IconUnlocked">
+            <summary>
+            解锁状态
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.Achievement.IconLocked">
+            <summary>
+            未解锁状态/灰色
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Category">
+            <summary>
+            分类/标签词表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.CloudSaveBackup">
+            <summary>
+            云端备份存档
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.CloudSaveBackup.FileSize">
+            <summary>
+            大小MB
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Developer">
+            <summary>
+            游戏开发商
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.ExternalLink">
+            <summary>
+            第三方攻略/外链源
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.ExternalLink.Source">
+            <summary>
+            bilibili,youtube等
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Game">
+            <summary>
+            游戏主表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.Game.IsFree">
+            <summary>
+            1代表免费，0代表不免费
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GameCategory">
+            <summary>
+            游戏与分类关联表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GameDeveloper">
+            <summary>
+            游戏与开发商关联表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GameExternalLink">
+            <summary>
+            游戏与外链关联表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GameGenre">
+            <summary>
+            游戏与题材关联表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GameLanguage">
+            <summary>
+            游戏语言关联表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GameLanguage.Notes">
+            <summary>
+            比如 是否有简体中文
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GameModSource">
+            <summary>
+            游戏Mod平台映射表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GameModSource.Source">
+            <summary>
+            Mod来源: NexusMods, 3DM, GameBanana, Steam
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GameModSource.ExternalGameId">
+            <summary>
+            第三方平台的游戏ID
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GameModSource.ExternalDomain">
+            <summary>
+            如 NexusMods 的 domain_name
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GameNews">
+            <summary>
+            游戏与新闻关联表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GamePlatform">
+            <summary>
+            游戏在平台的映射
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GamePlatform.PlatformGameId">
+            <summary>
+            平台内部标识
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GamePublisher">
+            <summary>
+            游戏与发行商关联表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.GameRanking">
+            <summary>
+            游戏排行榜表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GameRanking.PeakPlayers">
+            <summary>
+            峰值在线人数
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GameRanking.LastWeekRank">
+            <summary>
+            上周排名
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GameRanking.CurrentRank">
+            <summary>
+            排名
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.GameRanking.UpdatedAt">
+            <summary>
+            [新增] 数据最后更新时间
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Genre">
+            <summary>
+            游戏题材/风格词表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Language">
+            <summary>
+            支持语言表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.LocalGameInstall">
+            <summary>
+            本地安装信息
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.LocalGameInstall.SizeBytes">
+            <summary>
+            游戏大小（字节）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.LocalMod">
+            <summary>
+            本地mod
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.LocalMod.Enabled">
+            <summary>
+            0代表不启用，1代表启用
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.LocalSaveFile">
+            <summary>
+            本地存档
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.LocalSaveFile.FileSize">
+            <summary>
+            文件大小KB
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.LocalSaveFile.IsBackupLocal">
+            <summary>
+            0代表不备份，1代表备份
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.News">
+            <summary>
+            新闻/公告源
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.News.Date">
+            <summary>
+            Unix时间戳
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.NotificationCenter">
+            <summary>
+            通知中心表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.ParentalAlertLog">
+            <summary>
+            家长监管报警日志表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.ParentalControlRelationship">
+            <summary>
+            家长监管关系表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.ParentalControlRule">
+            <summary>
+            家长监管规则表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Platform">
+            <summary>
+            游戏平台表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.Platform.Status">
+            <summary>
+            0不启用,1启用
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.PlayerPlatform">
+            <summary>
+            玩家在某一平台的账号资料
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.PlayerPlatform.PlatformUserId">
+            <summary>
+            平台侧用户标识（平台唯一）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.PlayerPlatform.PlatformId">
+            <summary>
+            平台ID（标识Steam/Epic等）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.PreferenceGenre">
+            <summary>
+            用户偏好与游戏题材关联表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.PriceAlertLog">
+            <summary>
+            价格提醒日志表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.PriceAlertSubscription">
+            <summary>
+            价格提醒订阅表(愿望单)
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.PriceAlertSubscription.TargetPrice">
+            <summary>
+            NULL表示不启用
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.PriceAlertSubscription.TargetDiscount">
+            <summary>
+            NULL表示不启用
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.PriceHistory">
+            <summary>
+            游戏价格历史表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.PriceHistory.DiscountRate">
+            <summary>
+            0-100
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Publisher">
+            <summary>
+            游戏发行商
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Recommendation">
+            <summary>
+            AI推荐结果表-个性化推荐记录
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.Recommendation.RecommendationType">
+            <summary>
+            推荐类型
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.Recommendation.Reason">
+            <summary>
+            AI生成解释短文
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.Recommendation.ExpireTime">
+            <summary>
+            默认7天
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.RecommendationFeedback">
+            <summary>
+            推荐反馈表-AI算法优化反馈记录
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.RecommendationFeedback.FeedbackResult">
+            <summary>
+            1喜欢/2不喜欢
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.ReportGenerationRecord">
+            <summary>
+            报表生成历史
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.ReportGenerationRecord.Status">
+            <summary>
+            0代表未生成，1代表生成
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.ReportTemplate">
+            <summary>
+            报表模板
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.Role">
+            <summary>
+            登录权限控制表
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.User">
+            <summary>
+            核心登录与基础信息表
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.User.HashedPassword">
+            <summary>
+            AES-256加密
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.User.Gender">
+            <summary>
+            1男/2女/0未知
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.UserAchievement">
+            <summary>
+            用户成就解锁记录
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserAchievement.Unlocked">
+            <summary>
+            0未解锁/1已解锁
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserAchievement.UnlockTime">
+            <summary>
+            null表示未解锁
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.UserGameLibrary">
+            <summary>
+            用户统一游戏库统计
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.UserPlatformBinding">
+            <summary>
+            跨平台账号OAuth绑定记录
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformBinding.PlatformUserId">
+            <summary>
+            第三方平台用户ID（如SteamID）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformBinding.AccessToken">
+            <summary>
+            AES-256加密存储
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformBinding.RefreshToken">
+            <summary>
+            AES-256加密存储
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformBinding.BindingStatus">
+            <summary>
+            1已绑定/0已解绑
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformBinding.ExpireTime">
+            <summary>
+            按平台API规则设置
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.UserPlatformLibrary">
+            <summary>
+            用户在某平台的单款游戏记录
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformLibrary.PlatformUserId">
+            <summary>
+            平台侧用户标识（平台唯一）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformLibrary.GameId">
+            <summary>
+            若为单款记录
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformLibrary.PlaytimeMinutes">
+            <summary>
+            累计游玩分钟数（该平台/该游戏）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformLibrary.AchievementsTotal">
+            <summary>
+            成就总数（平台/该游戏）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPlatformLibrary.AchievementsUnlocked">
+            <summary>
+            已解锁成就数（平台/该游戏）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Models.Entities.UserPreference">
+            <summary>
+            用户偏好表-AI推荐算法支撑数据
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPreference.PlaytimeRange">
+            <summary>
+            偏好游玩时长区间（如&quot;1-3小时/天&quot;）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Models.Entities.UserPreference.PriceSensitivity">
+            <summary>
+            价格敏感度（1高/2中/3低）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.AliyunOssOptions">
+            <summary>
+            阿里云 OSS 配置
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Services.AliyunOssOptions.Endpoint">
+            <summary>
+            访问域名，如：https://oss-cn-hangzhou.aliyuncs.com
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Services.AliyunOssOptions.AccessKeyId">
+            <summary>
+            AccessKeyId（建议通过安全配置注入，而不是写死在 appsettings.json 中）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Services.AliyunOssOptions.AccessKeySecret">
+            <summary>
+            AccessKeySecret（建议通过安全配置注入，而不是写死在 appsettings.json 中）
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Services.AliyunOssOptions.BucketName">
+            <summary>
+            Bucket 名称
+            </summary>
+        </member>
+        <member name="P:PlayLinker.Services.AliyunOssOptions.BaseUrl">
+            <summary>
+            外网访问前缀，如：https://bucket-name.oss-cn-hangzhou.aliyuncs.com
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.AliyunOssService">
+            <summary>
+            阿里云 OSS 存储服务实现
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.AliyunOssService.UploadCloudSaveAsync(System.Int32,System.Int64,System.IO.Stream,System.String)">
+            <summary>
+            上传云存档文件到 OSS
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.AliyunOssService.DownloadCloudSaveAsync(System.String)">
+            <summary>
+            从 OSS 下载云存档文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.AliyunOssService.DeleteCloudSaveAsync(System.String)">
+            <summary>
+            从 OSS 删除云存档文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.AliyunOssService.GetFileUrl(System.String)">
+            <summary>
+            获取文件访问 URL
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.AuthService">
+            <summary>
+            认证服务
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.GogService">
+            <summary>
+            GOG API集成服务实现
+            通过Python脚本桥接GOG API
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.SafeGetInt32(System.Text.Json.JsonElement,System.Int32)">
+            <summary>
+            安全地从 JsonElement 获取整数值,支持数字和字符串两种格式
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.RunPythonScript(System.String,System.String)">
+            <summary>
+            执行Python脚本
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.GetTokenFilePath(System.String)">
+            <summary>
+            获取令牌文件路径
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.LoadTokenFromDatabase(System.Int32,System.Int32)">
+            <summary>
+            从数据库加载令牌到临时文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.SaveTokenToDatabase(System.Int32,System.Int32,System.String)">
+            <summary>
+            保存令牌到数据库
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.CleanupTempTokenFile(System.String)">
+            <summary>
+            清理临时令牌文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.TestPythonEnvironment">
+            <summary>
+            测试Python环境
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.CheckTokenStatus(System.Int32,System.Int32)">
+            <summary>
+            检查令牌状态（从数据库）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.ExtractAuthCodeFromUrl(System.String)">
+            <summary>
+            从重定向URL中提取授权码
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.AuthenticateGog(PlayLinker.Models.DTOs.GogAuthRequestDto,System.Int32)">
+            <summary>
+            执行GOG认证
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.GetGogDataFromPython(System.Int32,System.Int32)">
+            <summary>
+            获取GOG数据（支持用户级令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.ImportGogData(PlayLinker.Models.DTOs.GogImportRequestDto,System.Int32)">
+            <summary>
+            导入GOG数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.GetGogUser(System.String,System.Int32)">
+            <summary>
+            获取GOG用户信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.GetGogGame(System.String,System.Int32)">
+            <summary>
+            获取GOG游戏信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.GogService.GetGogUserGames(System.String,System.Int32)">
+            <summary>
+            获取GOG用户的游戏列表(用于导入)
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.IAliyunOssService">
+            <summary>
+            阿里云 OSS 存储服务（用于上传用户头像等）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IAliyunOssService.UploadUserAvatarAsync(System.Int32,Microsoft.AspNetCore.Http.IFormFile)">
+            <summary>
+            上传用户头像，返回可直接访问的 URL
+            </summary>
+            <param name="userId">用户ID，用于生成文件路径</param>
+            <param name="file">上传的头像文件</param>
+            <returns>头像完整 URL</returns>
+        </member>
+        <member name="M:PlayLinker.Services.IAliyunOssService.UploadCloudSaveAsync(System.Int32,System.Int64,System.IO.Stream,System.String)">
+            <summary>
+            上传云存档文件到 OSS
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IAliyunOssService.DownloadCloudSaveAsync(System.String)">
+            <summary>
+            从 OSS 下载云存档文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IAliyunOssService.DeleteCloudSaveAsync(System.String)">
+            <summary>
+            从 OSS 删除云存档文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IAliyunOssService.GetFileUrl(System.String)">
+            <summary>
+            获取文件访问 URL
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.IGogService">
+            <summary>
+            GOG API集成服务接口
+            提供GOG用户信息、游戏信息、数据导入等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IGogService.ImportGogData(PlayLinker.Models.DTOs.GogImportRequestDto,System.Int32)">
+            <summary>
+            导入GOG数据（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IGogService.GetGogUser(System.String,System.Int32)">
+            <summary>
+            获取GOG用户信息（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IGogService.GetGogGame(System.String,System.Int32)">
+            <summary>
+            获取GOG游戏信息（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IGogService.GetGogUserGames(System.String,System.Int32)">
+            <summary>
+            获取GOG用户的游戏列表(用于导入)（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IGogService.AuthenticateGog(PlayLinker.Models.DTOs.GogAuthRequestDto,System.Int32)">
+            <summary>
+            执行GOG认证
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IGogService.CheckTokenStatus(System.Int32,System.Int32)">
+            <summary>
+            检查令牌状态（需要用户ID）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.IModExploreService">
+            <summary>
+            Mod 浏览服务接口
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IModExploreService.GetModsAsync(PlayLinker.Models.DTOs.ModExploreRequest)">
+            <summary>
+            获取 Mod 列表
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IModExploreService.GetModDetailAsync(System.String,System.String,System.String)">
+            <summary>
+            获取 Mod 详情
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IModExploreService.GetGameModSourcesAsync(System.Int64)">
+            <summary>
+            获取游戏支持的 Mod 来源
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IModExploreService.SearchModsAsync(System.String,System.String,System.String,System.Int32)">
+            <summary>
+            搜索 Mod
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.IPsnService">
+            <summary>
+            PSN API集成服务接口
+            提供PSN用户信息、游戏信息、奖杯数据导入等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IPsnService.ImportPsnData(PlayLinker.Models.DTOs.PsnImportRequestDto,System.Int32)">
+            <summary>
+            导入PSN数据（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IPsnService.GetPsnUser(System.String,System.Int32)">
+            <summary>
+            获取PSN用户信息（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IPsnService.GetPsnGame(System.String,System.Int32)">
+            <summary>
+            获取PSN游戏信息（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IPsnService.GetPsnUserTrophies(System.String,System.Int32)">
+            <summary>
+            获取PSN用户奖杯（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IPsnService.GetPsnUserGames(System.String,System.Int32)">
+            <summary>
+            获取PSN用户的游戏列表(用于导入)（需要用户ID）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IPsnService.AuthenticatePsn(PlayLinker.Models.DTOs.PsnAuthRequestDto,System.Int32)">
+            <summary>
+            执行PSN认证
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IPsnService.CheckTokenStatus(System.Int32,System.Int32)">
+            <summary>
+            检查令牌状态（需要用户ID）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.ISteamService">
+            <summary>
+            Steam API集成服务接口
+            提供Steam用户信息、游戏信息、数据导入等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ISteamService.ImportSteamData(PlayLinker.Models.DTOs.SteamImportRequestDto,System.String)">
+            <summary>
+            导入Steam数据（需要用户的API Key）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ISteamService.GetSteamUser(System.String,System.String)">
+            <summary>
+            获取Steam用户信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ISteamService.GetSteamGame(System.Int32,System.String)">
+            <summary>
+            获取Steam游戏信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ISteamService.GetGameDetails(System.Int32)">
+            <summary>
+            获取游戏详情(从Steam API)
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ISteamService.GetMostPlayedGames(System.Int32,System.String)">
+            <summary>
+            获取最受欢迎的游戏
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ISteamService.GetGameReviews(System.Int32)">
+            <summary>
+            获取游戏评价
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ISteamService.GetGameAchievements(System.Int32,System.String)">
+            <summary>
+            获取游戏成就信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ISteamService.GetGameNews(System.Int32,System.Int32,System.String)">
+            <summary>
+            获取游戏新闻
+            </summary>
+            <param name="appId">Steam AppID</param>
+            <param name="count">获取的新闻数量，0表示获取所有新闻</param>
+            <param name="apiKey">Steam API Key</param>
+            <returns>新闻数据和是否获取完所有新闻的标识</returns>
+        </member>
+        <member name="T:PlayLinker.Services.ITokenEncryptionService">
+            <summary>
+            令牌加密服务接口
+            用于加密/解密存储在数据库中的平台令牌
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ITokenEncryptionService.EncryptToken(System.String)">
+            <summary>
+            加密令牌（AES-256）
+            </summary>
+            <param name="plainToken">明文令牌</param>
+            <returns>Base64编码的加密令牌</returns>
+        </member>
+        <member name="M:PlayLinker.Services.ITokenEncryptionService.DecryptToken(System.String)">
+            <summary>
+            解密令牌（AES-256）
+            </summary>
+            <param name="encryptedToken">Base64编码的加密令牌</param>
+            <returns>明文令牌</returns>
+        </member>
+        <member name="T:PlayLinker.Services.IUserReportService">
+            <summary>
+            用户报表服务接口
+            提供用户个人数据报表功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IUserReportService.GetUserReportOverviewAsync(System.Int32)">
+            <summary>
+            获取用户报表概览
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IUserReportService.GetGameLibraryStatsAsync(System.Int32)">
+            <summary>
+            获取游戏库详细统计
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IUserReportService.GetAchievementStatsAsync(System.Int32)">
+            <summary>
+            获取成就详细统计
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IUserReportService.GetRecentPlayedGamesAsync(System.Int32,System.Int32)">
+            <summary>
+            获取最近游玩记录
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IUserReportService.GetWishlistAsync(System.Int32)">
+            <summary>
+            获取愿望单
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IUserReportService.SyncFromSteamAsync(System.Int32)">
+            <summary>
+            从Steam同步用户数据（游戏库、成就、愿望单等）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.SyncResultDto">
+            <summary>
+            同步结果DTO
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.IXboxService">
+            <summary>
+            Xbox API集成服务接口
+            提供Xbox用户信息、游戏信息、数据导入等功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IXboxService.ImportXboxData(PlayLinker.Models.DTOs.XboxImportRequestDto,System.Int32)">
+            <summary>
+            导入Xbox数据（需要用户ID以获取令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IXboxService.GetXboxUser(System.String,System.Int32)">
+            <summary>
+            获取Xbox用户信息（需要用户ID以获取令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IXboxService.GetXboxGame(System.String,System.Int32)">
+            <summary>
+            获取Xbox游戏信息（需要用户ID以获取令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IXboxService.GetXboxUserAchievements(System.String,System.Int32)">
+            <summary>
+            获取Xbox用户成就（需要用户ID以获取令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IXboxService.GetXboxUserGames(System.String,System.Int32)">
+            <summary>
+            获取Xbox用户的游戏列表（用于导入）（需要用户ID以获取令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IXboxService.AuthenticateXbox(PlayLinker.Models.DTOs.XboxAuthRequestDto,System.Int32)">
+            <summary>
+            执行Xbox认证（首次认证，创建令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.IXboxService.CheckTokenStatus(System.Int32,System.Int32)">
+            <summary>
+            检查令牌状态（需要用户ID）
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.ModExploreService">
+            <summary>
+            Mod 浏览服务实现
+            聚合多个 Mod 平台的 API
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.ParentalMonitoringService">
+            <summary>
+            家长监管监控后台服务
+            定期检查监管规则违规情况并发送提醒
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ParentalMonitoringService.CheckParentalRulesAsync(System.Threading.CancellationToken)">
+            <summary>
+            检查所有活跃的家长监管规则
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ParentalMonitoringService.CheckSingleRuleAsync(System.Int64,System.Threading.CancellationToken)">
+            <summary>
+            检查单个规则是否违规（公共方法，允许从外部调用）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ParentalMonitoringService.CheckRuleViolationAsync(PlayLinker.Data.PlayLinkerDbContext,PlayLinker.Models.Entities.ParentalControlRule,System.Threading.CancellationToken)">
+            <summary>
+            检查单个规则是否违规
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ParentalMonitoringService.CheckPlaytimeDailyLimitAsync(PlayLinker.Data.PlayLinkerDbContext,PlayLinker.Models.Entities.ParentalControlRule,System.Text.Json.JsonElement,System.Collections.Generic.Dictionary{System.String,System.Object},System.Threading.CancellationToken)">
+            <summary>
+            检查每日游戏时长限制
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ParentalMonitoringService.CheckPlaytimeCurfewAsync(PlayLinker.Data.PlayLinkerDbContext,PlayLinker.Models.Entities.ParentalControlRule,System.Text.Json.JsonElement,System.Collections.Generic.Dictionary{System.String,System.Object},System.Threading.CancellationToken)">
+            <summary>
+            检查宵禁时间
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ParentalMonitoringService.CheckGameRestrictionAsync(PlayLinker.Data.PlayLinkerDbContext,PlayLinker.Models.Entities.ParentalControlRule,System.Text.Json.JsonElement,System.Collections.Generic.Dictionary{System.String,System.Object},System.Threading.CancellationToken)">
+            <summary>
+            检查游戏限制
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ParentalMonitoringService.CheckAgeRestrictionAsync(PlayLinker.Data.PlayLinkerDbContext,PlayLinker.Models.Entities.ParentalControlRule,System.Text.Json.JsonElement,System.Collections.Generic.Dictionary{System.String,System.Object},System.Threading.CancellationToken)">
+            <summary>
+            检查年龄限制
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.PasswordHasher">
+            <summary>
+            密码哈希服务 - 使用PBKDF2算法
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.PriceMonitoringService">
+            <summary>
+            价格监控后台服务
+            每天定时获取 Steam 游戏价格并记录到数据库
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PriceMonitoringService.UpdateSteamPricesAsync(System.Threading.CancellationToken)">
+            <summary>
+            更新 Steam 游戏价格
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PriceMonitoringService.GetSteamPriceAsyncWithRetry(System.Net.Http.HttpClient,System.Int32,System.Threading.CancellationToken,System.Int32)">
+            <summary>
+            从 Steam API 获取游戏价格（带重试机制）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PriceMonitoringService.GetSteamPriceAsync(System.Net.Http.HttpClient,System.Int32,System.Threading.CancellationToken,System.Int32)">
+            <summary>
+            从 Steam API 获取游戏价格
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PriceMonitoringService.CheckPriceChangeAndNotifyAsync(PlayLinker.Data.PlayLinkerDbContext,System.Int64,PlayLinker.Models.Entities.PriceHistory,System.Threading.CancellationToken)">
+            <summary>
+            检查价格变化并创建通知
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.PriceMonitoringService.SteamPriceInfo">
+            <summary>
+            Steam 价格信息
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.PsnService">
+            <summary>
+            PSN API集成服务实现
+            通过Node.js脚本桥接psn-api
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.SafeGetInt32(System.Text.Json.JsonElement,System.Int32)">
+            <summary>
+            安全地从 JsonElement 获取整数值,支持数字和字符串两种格式
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.RunNodeScript(System.String,System.String)">
+            <summary>
+            执行Node.js脚本
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.GetTokenFilePath(System.String)">
+            <summary>
+            获取令牌文件路径
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.LoadTokenFromDatabase(System.Int32,System.Int32)">
+            <summary>
+            从数据库加载令牌到临时文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.SaveTokenToDatabase(System.Int32,System.Int32,System.String,System.String)">
+            <summary>
+            保存令牌到数据库（如果绑定不存在则创建）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.CleanupTempTokenFile(System.String)">
+            <summary>
+            清理临时令牌文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.TestNodeEnvironment">
+            <summary>
+            测试Node.js环境
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.CheckTokenStatus(System.Int32,System.Int32)">
+            <summary>
+            检查令牌状态（从数据库）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.AuthenticatePsn(PlayLinker.Models.DTOs.PsnAuthRequestDto,System.Int32)">
+            <summary>
+            执行PSN认证
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.GetPsnDataFromNode(System.Int32,System.Int32)">
+            <summary>
+            获取PSN数据
+            </summary>
+            <summary>
+            获取PSN数据（支持用户级令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.ImportPsnData(PlayLinker.Models.DTOs.PsnImportRequestDto,System.Int32)">
+            <summary>
+            导入PSN数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.GetPsnUser(System.String,System.Int32)">
+            <summary>
+            获取PSN用户信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.GetPsnGame(System.String,System.Int32)">
+            <summary>
+            获取PSN游戏信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.GetPsnUserGames(System.String,System.Int32)">
+            <summary>
+            获取PSN用户的游戏列表(用于导入)
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.PsnService.GetPsnUserTrophies(System.String,System.Int32)">
+            <summary>
+            获取PSN用户奖杯
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.RankingMonitoringService">
+            <summary>
+            排行榜监控服务
+            每周更新一次游戏排行榜数据（仅限本地已存在的游戏）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ReportGenerationService.GenerateMonthlyReportHtml(System.Int32,System.DateTime,System.DateTime)">
+            <summary>
+            生成HTML格式的月度游戏报告
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ReportGenerationService.GenerateMonthlyReportCsv(System.Int32,System.DateTime,System.DateTime)">
+            <summary>
+            生成CSV格式的月度游戏报告（可用Excel打开）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ReportGenerationService.GenerateMonthlyReportPdf(System.Int32,System.DateTime,System.DateTime)">
+            <summary>
+            生成PDF格式的月度游戏报告
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ReportGenerationService.GenerateYearlyReportHtml(System.Int32,System.Int32)">
+            <summary>
+            生成年度总结报告 HTML
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ReportGenerationService.GenerateYearlyReportPdf(System.Int32,System.Int32)">
+            <summary>
+            生成年度总结报告 PDF
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ReportGenerationService.GenerateInventoryReportHtml(System.Int32)">
+            <summary>
+            生成游戏库存报告 HTML
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ReportGenerationService.GenerateInventoryReportCsv(System.Int32)">
+            <summary>
+            生成游戏库存报告 CSV
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.ReportGenerationService.GenerateInventoryReportPdf(System.Int32)">
+            <summary>
+            生成游戏库存报告 PDF
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.SteamService">
+            <summary>
+            Steam API集成服务实现
+            实现与Steam Web API的交互功能
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.SafeGetInt32(System.Text.Json.JsonElement,System.Int32)">
+            <summary>
+            安全地从 JsonElement 获取整数值，支持数字和字符串两种格式
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.SafeGetInt64(System.Text.Json.JsonElement,System.Int64)">
+            <summary>
+            安全地从 JsonElement 获取长整数值，支持数字和字符串两种格式
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.ImportSteamData(PlayLinker.Models.DTOs.SteamImportRequestDto,System.String)">
+            <summary>
+            导入Steam数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.GetSteamUser(System.String,System.String)">
+            <summary>
+            获取Steam用户信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.GetSteamGame(System.Int32,System.String)">
+            <summary>
+            获取Steam游戏信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.GetGameDetails(System.Int32)">
+            <summary>
+            获取游戏详情
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.GetMostPlayedGames(System.Int32,System.String)">
+            <summary>
+            获取最受欢迎的游戏
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.GetGameReviews(System.Int32)">
+            <summary>
+            获取游戏评价
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.GetGameAchievements(System.Int32,System.String)">
+            <summary>
+            获取游戏成就信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.SteamService.GetGameNews(System.Int32,System.Int32,System.String)">
+            <summary>
+            获取游戏新闻
+            </summary>
+            <summary>
+            获取游戏新闻
+            </summary>
+            <param name="appId">Steam AppID</param>
+            <param name="count">获取的新闻数量，0表示获取所有新闻</param>
+            <param name="apiKey">Steam API Key</param>
+            <returns>新闻数据，包含是否获取完所有新闻的标识</returns>
+        </member>
+        <member name="T:PlayLinker.Services.TokenEncryptionService">
+            <summary>
+            令牌加密服务实现
+            使用AES-256-CBC加密算法
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.TokenEncryptionService.EncryptToken(System.String)">
+            <summary>
+            加密令牌
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.TokenEncryptionService.DecryptToken(System.String)">
+            <summary>
+            解密令牌
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.TokenService">
+            <summary>
+            Token服务 - 生成和验证JWT Token和Refresh Token
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.UserReportService">
+            <summary>
+            用户报表服务实现
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetUserReportOverviewAsync(System.Int32)">
+            <summary>
+            获取用户报表概览
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetUserProfileAsync(System.Int32)">
+            <summary>
+            获取用户资料摘要（仅从数据库获取，不调用Steam API）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetGameLibraryStatsAsync(System.Int32)">
+            <summary>
+            获取游戏库详细统计
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetAchievementStatsAsync(System.Int32)">
+            <summary>
+            获取成就详细统计
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetRecentPlayedGamesAsync(System.Int32,System.Int32)">
+            <summary>
+            获取最近游玩记录（优先从数据库获取）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetWishlistAsync(System.Int32)">
+            <summary>
+            获取愿望单（暂时返回空，需要同步时获取）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.SyncFromSteamAsync(System.Int32)">
+            <summary>
+            从Steam同步用户数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetSteamApiKeyAsync(System.Int32)">
+            <summary>
+            获取Steam API Key
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetSteamUserStatsAsync(System.String,System.String)">
+            <summary>
+            获取Steam用户统计（等级、徽章、好友）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetRecentPlaytimeFromSteamAsync(System.String,System.String)">
+            <summary>
+            获取最近2周游玩时长
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetRecentPlayedFromSteamAsync(System.String,System.String,System.Int32)">
+            <summary>
+            从Steam获取最近游玩的游戏
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.GetWishlistFromSteamAsync(System.String,System.String)">
+            <summary>
+            从Steam获取愿望单
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.SyncOwnedGamesAsync(System.Int32,System.String,System.String)">
+            <summary>
+            同步拥有的游戏
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.SyncAchievementsAsync(System.Int32,System.String,System.String)">
+            <summary>
+            同步成就（只同步最近玩过的10个游戏，避免API超时）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.UserReportService.FormatPlaytime(System.Int64)">
+            <summary>
+            格式化游戏时长
+            </summary>
+        </member>
+        <member name="T:PlayLinker.Services.XboxService">
+            <summary>
+            Xbox API集成服务实现
+            通过Python脚本桥接Xbox Web API
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.LoadTokenFromDatabase(System.Int32,System.Int32)">
+            <summary>
+            从数据库加载令牌到临时文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.SaveTokenToDatabase(System.Int32,System.Int32,System.String,System.String)">
+            <summary>
+            保存令牌到数据库（如果绑定不存在则创建）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.CleanupTempTokenFile(System.String)">
+            <summary>
+            清理临时令牌文件
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.SafeGetInt32(System.Text.Json.JsonElement,System.Int32)">
+            <summary>
+            安全地从 JsonElement 获取整数值，支持数字和字符串两种格式
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.SafeGetInt64(System.Text.Json.JsonElement,System.Int64)">
+            <summary>
+            安全地从 JsonElement 获取长整数值，支持数字和字符串两种格式
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.RunPythonScript(System.String,System.String)">
+            <summary>
+            执行Python脚本
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.GetTokenFilePath(System.String)">
+            <summary>
+            获取令牌文件路径
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.TestPythonEnvironment">
+            <summary>
+            测试Python环境
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.CheckTokenStatus(System.Int32,System.Int32)">
+            <summary>
+            检查令牌状态（从数据库）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.AuthenticateXbox(PlayLinker.Models.DTOs.XboxAuthRequestDto,System.Int32)">
+            <summary>
+            执行Xbox认证（首次认证，生成并保存令牌到数据库）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.GetXboxDataFromPython(System.Int32,System.Int32)">
+            <summary>
+            获取Xbox数据（支持用户级令牌）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.ImportXboxData(PlayLinker.Models.DTOs.XboxImportRequestDto,System.Int32)">
+            <summary>
+            导入Xbox数据
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.GetXboxUser(System.String,System.Int32)">
+            <summary>
+            获取Xbox用户信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.GetXboxGame(System.String,System.Int32)">
+            <summary>
+            获取Xbox游戏信息
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.GetXboxUserGames(System.String,System.Int32)">
+            <summary>
+            获取Xbox用户的游戏列表（用于导入）
+            </summary>
+        </member>
+        <member name="M:PlayLinker.Services.XboxService.GetXboxUserAchievements(System.String,System.Int32)">
+            <summary>
+            获取Xbox用户成就
+            </summary>
+        </member>
+    </members>
+</doc>

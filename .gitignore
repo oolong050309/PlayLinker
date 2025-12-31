@@ -77,6 +77,10 @@ appsettings.Production.json
 Backend/Tokens/
 **/xbox_tokens.json
 
+# SSH Keys (sensitive)
+*.pem
+github-deploy.pem
+
 1210_1041.md
 1216_1824.md
 1216_1916.md
