@@ -1,0 +1,60 @@
+name: Deploy to Alibaba Cloud
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 构建前端
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: Frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: Frontend
+
+      # 构建后端
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build backend
+        run: dotnet publish PlayLinker.csproj -c Release -o ./publish
+        working-directory: Backend
+
+      # 部署到服务器
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy frontend
+        run: |
+          rsync -avz --delete Frontend/dist/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/playlinker/frontend/
+
+      - name: Deploy backend
+        run: |
+          rsync -avz --delete --exclude='appsettings.json' Backend/publish/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/playlinker/backend/
+
+      - name: Restart backend service
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo systemctl restart playlinker"
