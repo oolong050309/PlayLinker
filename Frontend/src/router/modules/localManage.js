@@ -16,5 +16,14 @@ export default [
       title: 'Mod详情',
       requiresAuth: true
     }
+  },
+  {
+    path: '/mod-explore',
+    name: 'ModExplore',
+    component: () => import('@/views/ModExplore/ModExploreView.vue'),
+    meta: {
+      title: 'Mod商店',
+      requiresAuth: true
+    }
   }
 ]

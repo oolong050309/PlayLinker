@@ -99,6 +99,8 @@ public partial class PlayLinkerDbContext : DbContext
 
     public virtual DbSet<UserPlatformLibrary> UserPlatformLibraries { get; set; }
 
+    public virtual DbSet<GameModSource> GameModSources { get; set; }
+
     public virtual DbSet<UserPreference> UserPreferences { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
