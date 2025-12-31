@@ -1,12 +1,5 @@
 <template>
   <div class="discover-container">
-    <div class="search-section">
-      <div class="search-wrapper">
-        <Search class="search-icon" size="20" />
-        <input type="text" placeholder="搜索游戏..." class="search-input" />
-      </div>
-    </div>
-
     <div class="header-control">
       <button 
         @click="loadRecommendations(true)" 
@@ -52,8 +45,7 @@
             <h3 class="game-card-title">{{ item.gameName }}</h3>
             <div class="reason-box"><p class="game-card-reason">{{ item.whyExplore }}</p></div>
             <div class="game-card-footer">
-              <div class="game-rating"><Star class="star-icon" size="14" /><span>{{ item.reviewScore }}</span></div>
-              <div class="feedback-actions">
+              <div class="spacer"></div> <div class="feedback-actions">
                 <button class="action-btn like-btn" :class="{ active: item.userFeedback === 1 }" @click="handleFeedback(item, 1)"><ThumbsUp size="14" /></button>
                 <button class="action-btn dislike-btn" :class="{ active: item.userFeedback === 2 }" @click="handleFeedback(item, 2)"><ThumbsDown size="14" /></button>
               </div>
@@ -89,8 +81,7 @@
             <h3 class="game-card-title">{{ item.gameName }}</h3>
             <p class="game-card-simple-reason">{{ item.whyExplore }}</p>
             <div class="game-card-footer">
-              <div class="game-rating"><Star class="star-icon" size="14" /><span>{{ item.reviewScore }}</span></div>
-              <div class="feedback-actions">
+              <div class="spacer"></div> <div class="feedback-actions">
                 <button class="action-btn like-btn" :class="{ active: item.userFeedback === 1 }" @click="handleFeedback(item, 1)"><ThumbsUp size="14" /></button>
                 <button class="action-btn dislike-btn" :class="{ active: item.userFeedback === 2 }" @click="handleFeedback(item, 2)"><ThumbsDown size="14" /></button>
               </div>
@@ -105,7 +96,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { recommendationApi } from '@/api/recommendation'
-import { Search, RefreshCw, Star, Sparkles, ThumbsUp, ThumbsDown, Zap } from 'lucide-vue-next'
+import { RefreshCw, Sparkles, ThumbsUp, ThumbsDown, Zap } from 'lucide-vue-next'
 
 const aiItems = ref([])
 const ruleItems = ref([])
@@ -153,11 +144,8 @@ onMounted(() => {
 
 <style scoped>
 .discover-container { min-height: 100vh; background: #0f0f13; color: #f8fafc; padding: 24px; }
-.search-section { margin-bottom: 20px; }
-.search-wrapper { position: relative; max-width: 800px; }
-.search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
-.search-input { width: 100%; background: rgba(20, 20, 23, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 14px 16px 14px 48px; color: #fff; font-size: 15px; }
 
+/* 头部控制栏：现在只包含刷新按钮 */
 .header-control { display: flex; justify-content: flex-end; margin-bottom: 20px; }
 
 .section-card { background: rgba(20, 20, 23, 0.5); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 24px; margin-bottom: 30px; }
@@ -173,8 +161,8 @@ onMounted(() => {
 
 .game-card { background: rgba(30, 30, 35, 0.6); border-radius: 12px; overflow: hidden; transition: transform 0.2s; border: 1px solid rgba(255,255,255,0.05); }
 .game-card:hover { transform: translateY(-4px); }
-.ai-game-card { border-color: rgba(139, 92, 246, 0.3); } /* 紫色边框 */
-.rule-game-card { border-color: rgba(245, 158, 11, 0.3); } /* 黄色边框 */
+.ai-game-card { border-color: rgba(139, 92, 246, 0.3); } 
+.rule-game-card { border-color: rgba(245, 158, 11, 0.3); } 
 
 .game-card-image { position: relative; height: 160px; cursor: pointer; }
 .game-card-image img { width: 100%; height: 100%; object-fit: cover; }
@@ -187,8 +175,9 @@ onMounted(() => {
 .game-card-reason { font-size: 12px; color: #ddd; margin: 0; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .game-card-simple-reason { font-size: 12px; color: #94a3b8; margin-bottom: 10px; }
 
+/* 底部区域调整：移除评分后，确保反馈按钮靠右对齐 */
 .game-card-footer { display: flex; justify-content: space-between; align-items: center; }
-.game-rating { display: flex; align-items: center; gap: 4px; color: #fbbf24; font-size: 13px; font-weight: bold; }
+.spacer { flex: 1; } /* 占位符，把反馈按钮推到右边 */
 
 .feedback-actions { display: flex; gap: 6px; }
 .action-btn { background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #64748b; padding: 4px; border-radius: 4px; cursor: pointer; display: flex; }
