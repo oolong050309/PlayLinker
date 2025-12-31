@@ -614,6 +614,49 @@ public class XboxService : IXboxService
                 {
                     var errorMessage = !string.IsNullOrEmpty(error) ? error : "Python脚本执行失败，未返回错误信息";
                     
+                    // 尝试从输出中解析错误信息
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        try
+                        {
+                            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                            var jsonLine = lines.LastOrDefault(l => l.Trim().StartsWith("{"));
+                            
+                            if (!string.IsNullOrEmpty(jsonLine))
+                            {
+                                var result = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(jsonLine);
+                                if (result != null && result.ContainsKey("message"))
+                                {
+                                    var msg = result["message"].GetString();
+                                    if (!string.IsNullOrEmpty(msg))
+                                    {
+                                        errorMessage = msg;
+                                    }
+                                    
+                                    // 如果有更详细的错误信息，也包含进来
+                                    if (result.ContainsKey("error_type"))
+                                    {
+                                        var errorType = result["error_type"].GetString();
+                                        errorMessage = $"{errorType}: {errorMessage}";
+                                    }
+                                    
+                                    if (result.ContainsKey("traceback"))
+                                    {
+                                        var traceback = result["traceback"].GetString();
+                                        if (!string.IsNullOrEmpty(traceback))
+                                        {
+                                            _logger.LogError("Python脚本详细错误堆栈: {Traceback}", traceback);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "解析Python错误输出失败，使用原始错误信息");
+                        }
+                    }
+                    
                     // 检查是否是依赖问题
                     if (error.Contains("ModuleNotFoundError") || error.Contains("ImportError"))
                     {

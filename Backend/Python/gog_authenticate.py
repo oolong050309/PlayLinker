@@ -241,7 +241,7 @@ def main():
                 "tokensPath": args.tokens
             }
             print(json.dumps(result, ensure_ascii=False))
-            return
+            sys.exit(0)
         
         # 检查是否已有令牌且不强制重新认证
         if not args.force_reauth:
@@ -265,7 +265,7 @@ def main():
                         "tokensPath": args.tokens
                     }
                     print(json.dumps(result, ensure_ascii=False))
-                    return
+                    sys.exit(0)
                 except Exception as e:
                     print_info(f"刷新令牌失败: {e}, 需要提供授权码重新认证")
         
@@ -290,7 +290,7 @@ def main():
             "needsAuth": True
         }
         print(json.dumps(result, ensure_ascii=False))
-        return
+        sys.exit(0)
         
     except KeyboardInterrupt:
         print_info("用户取消操作")

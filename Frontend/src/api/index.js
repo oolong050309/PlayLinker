@@ -244,6 +244,14 @@ export const xboxApi = {
   // 获取Xbox用户成就
   getUserAchievements(xuid) {
     return api.get(`/xbox/user/${xuid}/achievements`)
+  },
+  // 检查Xbox令牌状态
+  checkTokenStatus() {
+    return api.get('/xbox/token-status', { timeout: 30000 }) // 30秒超时
+  },
+  // Xbox认证（增加超时时间，因为可能需要打开浏览器）
+  authenticate(data) {
+    return api.post('/xbox/authenticate', data, { timeout: 300000 }) // 5分钟超时
   }
 }
 
@@ -264,6 +272,14 @@ export const psnApi = {
   // 获取PSN用户奖杯
   getUserTrophies(onlineId) {
     return api.get(`/psn/user/${onlineId}/trophies`)
+  },
+  // 检查PSN令牌状态
+  checkTokenStatus() {
+    return api.get('/psn/token-status', { timeout: 30000 }) // 30秒超时
+  },
+  // PSN认证（增加超时时间）
+  authenticate(data) {
+    return api.post('/psn/authenticate', data, { timeout: 300000 }) // 5分钟超时
   }
 }
 
@@ -280,6 +296,14 @@ export const gogApi = {
   // 获取GOG游戏信息
   getGame(gogGameId) {
     return api.get(`/gog/games/${gogGameId}`)
+  },
+  // 检查GOG令牌状态
+  checkTokenStatus() {
+    return api.get('/gog/token-status', { timeout: 30000 }) // 30秒超时
+  },
+  // GOG认证（增加超时时间，因为可能需要浏览器认证）
+  authenticate(data) {
+    return api.post('/gog/authenticate', data, { timeout: 300000 }) // 5分钟超时
   }
 }
 

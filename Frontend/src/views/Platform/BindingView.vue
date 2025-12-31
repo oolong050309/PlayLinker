@@ -257,99 +257,169 @@
             <p class="form-hint">在 <a href="https://steamcommunity.com/dev/apikey" target="_blank">Steam API Key页面</a> 申请</p>
           </div>
 
-          <div v-if="selectedPlatform?.id === 7" class="form-group">
-            <label>Xbox用户ID *</label>
-            <input 
-              v-model="bindForm.xboxUserId" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入Xbox用户ID"
-            />
-                </div>
-          <div v-if="selectedPlatform?.id === 7" class="form-group">
-            <label>访问令牌（可选）</label>
-            <input 
-              v-model="bindForm.accessToken" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入访问令牌"
-            />
-                </div>
-          <div v-if="selectedPlatform?.id === 7" class="form-group">
-            <label>刷新令牌（可选）</label>
-            <input 
-              v-model="bindForm.refreshToken" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入刷新令牌"
-            />
+          <!-- Xbox认证流程 -->
+          <div v-if="selectedPlatform?.id === 7">
+            <div class="form-group">
+              <label>Xbox用户ID *</label>
+              <input 
+                v-model="bindForm.xboxUserId" 
+                type="text" 
+                class="form-input"
+                placeholder="请输入Xbox用户ID"
+              />
+              <p class="form-hint">认证成功后会自动获取</p>
+            </div>
+            <div class="form-group">
+              <label>
+                <input 
+                  type="checkbox" 
+                  v-model="bindForm.openBrowser"
+                  style="margin-right: 0.5rem;"
+                />
+                打开浏览器进行OAuth2登录（首次认证推荐）
+              </label>
+              <p class="form-hint">本地开发环境建议开启，服务器环境建议关闭</p>
+            </div>
+            <div v-if="xboxAuthStep === 'authUrl'" class="form-group">
+              <div class="alert alert-info">
+                <p><strong>请在浏览器中完成登录</strong></p>
+                <p v-if="xboxAuthUrl" style="word-break: break-all; margin: 0.5rem 0;">
+                  <a :href="xboxAuthUrl" target="_blank" style="color: #4f46e5;">{{ xboxAuthUrl }}</a>
+                </p>
+                <p style="margin-top: 0.5rem;">登录完成后，系统会自动完成认证</p>
               </div>
+            </div>
+          </div>
 
-          <div v-if="selectedPlatform?.id === 6" class="form-group">
-            <label>PSN在线ID *</label>
-            <input 
-              v-model="bindForm.psnOnlineId" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入PSN在线ID"
-            />
+          <!-- PSN认证流程 -->
+          <div v-if="selectedPlatform?.id === 6">
+            <div class="form-group">
+              <label>PSN在线ID *</label>
+              <input 
+                v-model="bindForm.psnOnlineId" 
+                type="text" 
+                class="form-input"
+                placeholder="请输入PSN在线ID"
+              />
+              <p class="form-hint">认证成功后会自动获取</p>
             </div>
-          <div v-if="selectedPlatform?.id === 6" class="form-group">
-            <label>访问令牌（可选）</label>
-            <input 
-              v-model="bindForm.accessToken" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入访问令牌"
-            />
+            <div class="form-group">
+              <label>NPSSO *</label>
+              <input 
+                v-model="bindForm.npsso" 
+                type="text" 
+                class="form-input"
+                placeholder="请输入64位NPSSO字符串"
+              />
+              <p class="form-hint">
+                如何获取NPSSO：
+                <br>1. 在浏览器中登录 PlayStation 账户
+                <br>2. 访问: <a href="https://ca.account.sony.com/api/v1/ssocookie" target="_blank" style="color: #4f46e5;">https://ca.account.sony.com/api/v1/ssocookie</a>
+                <br>3. 复制返回的 npsso 值(64个字符的字符串)
+              </p>
             </div>
-          <div v-if="selectedPlatform?.id === 6" class="form-group">
-            <label>刷新令牌（可选）</label>
-            <input 
-              v-model="bindForm.refreshToken" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入刷新令牌"
-            />
-      </div>
+          </div>
 
-          <div v-if="selectedPlatform?.id === 5" class="form-group">
-            <label>GOG用户ID *</label>
-            <input 
-              v-model="bindForm.gogUserId" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入GOG用户ID"
-            />
+          <!-- GOG认证流程（两步） -->
+          <div v-if="selectedPlatform?.id === 5">
+            <!-- 步骤1: 获取认证URL -->
+            <div v-if="gogAuthStep === 'step1'">
+              <div class="form-group">
+                <div class="alert alert-info">
+                  <p><strong>步骤1: 获取认证URL</strong></p>
+                  <p>点击下方按钮获取认证URL，然后在浏览器中打开并完成登录</p>
+                </div>
               </div>
-          <div v-if="selectedPlatform?.id === 5" class="form-group">
-            <label>访问令牌（可选）</label>
-            <input 
-              v-model="bindForm.accessToken" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入访问令牌"
-            />
+              <div v-if="gogAuthUrl" class="form-group">
+                <label>认证URL</label>
+                <div style="display: flex; gap: 0.5rem;">
+                  <input 
+                    :value="gogAuthUrl" 
+                    type="text" 
+                    class="form-input"
+                    readonly
+                    style="flex: 1;"
+                  />
+                  <button 
+                    class="btn btn-secondary"
+                    @click="copyToClipboard(gogAuthUrl)"
+                  >
+                    复制
+                  </button>
+                  <button 
+                    class="btn btn-primary"
+                    @click="openUrl(gogAuthUrl)"
+                  >
+                    打开
+                  </button>
+                </div>
+                <p class="form-hint">登录成功后，浏览器会跳转到类似这样的URL: https://embed.gog.com/on_login_success?origin=client&code=xxxxx</p>
+              </div>
             </div>
-          <div v-if="selectedPlatform?.id === 5" class="form-group">
-            <label>刷新令牌（可选）</label>
-            <input 
-              v-model="bindForm.refreshToken" 
-              type="text" 
-              class="form-input"
-              placeholder="请输入刷新令牌"
-            />
+            <!-- 步骤2: 提供重定向URL -->
+            <div v-if="gogAuthStep === 'step2'">
+              <div class="form-group">
+                <div class="alert alert-success">
+                  <p><strong>步骤2: 提供重定向URL完成认证</strong></p>
+                  <p>请复制浏览器地址栏的完整URL并粘贴到下方</p>
+                </div>
               </div>
+              <div class="form-group">
+                <label>重定向URL *</label>
+                <input 
+                  v-model="bindForm.redirectUrl" 
+                  type="text" 
+                  class="form-input"
+                  placeholder="https://embed.gog.com/on_login_success?origin=client&code=xxxxx"
+                />
+                <p class="form-hint">只需复制完整URL，不需要手动提取授权码</p>
+              </div>
+            </div>
+            <!-- 刷新令牌提示 -->
+            <div v-if="gogAuthStep === 'refresh'">
+              <div class="form-group">
+                <div class="alert alert-info">
+                  <p><strong>刷新令牌</strong></p>
+                  <p>如果已有有效令牌，会自动刷新，无需提供redirectUrl</p>
+                </div>
+              </div>
+            </div>
+          </div>
             </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeBindModal">取消</button>
           <button 
+            v-if="selectedPlatform?.id === 5 && gogAuthStep === 'step1'"
+            class="btn btn-primary" 
+            @click="handleBind"
+            :disabled="loading"
+          >
+            {{ loading ? '获取认证URL中...' : '获取认证URL' }}
+          </button>
+          <button 
+            v-else-if="selectedPlatform?.id === 5 && gogAuthStep === 'step2'"
+            class="btn btn-primary" 
+            @click="handleBind"
+            :disabled="loading"
+          >
+            {{ loading ? '认证中...' : '完成认证' }}
+          </button>
+          <button 
+            v-else-if="selectedPlatform?.id === 5 && gogAuthStep === 'refresh'"
+            class="btn btn-primary" 
+            @click="handleBind"
+            :disabled="loading"
+          >
+            {{ loading ? '刷新令牌中...' : '刷新令牌' }}
+          </button>
+          <button 
+            v-else
             class="btn btn-primary" 
             @click="handleBind"
             :disabled="loading"
           >
             {{ loading ? '绑定中...' : '确认绑定' }}
-              </button>
+          </button>
             </div>
             </div>
           </div>
@@ -416,10 +486,21 @@ const bindForm = ref({
   apiKey: '',
   xboxUserId: '',
   psnOnlineId: '',
+  npsso: '',
   gogUserId: '',
+  redirectUrl: '',
   accessToken: '',
-  refreshToken: ''
+  refreshToken: '',
+  openBrowser: true // Xbox认证选项
 })
+
+// GOG认证步骤状态
+const gogAuthStep = ref('step1') // 'step1' | 'step2' | 'refresh'
+const gogAuthUrl = ref('')
+
+// Xbox认证状态
+const xboxAuthStep = ref('') // '' | 'authUrl'
+const xboxAuthUrl = ref('')
 
 // 计算属性
 const connectedPlatforms = computed(() => {
@@ -505,7 +586,7 @@ const updateStats = () => {
 }
 
 // 打开绑定模态框
-const openBindModal = (platform) => {
+const openBindModal = async (platform) => {
   selectedPlatform.value = platform
   bindForm.value = {
     platformId: platform.id,
@@ -513,10 +594,50 @@ const openBindModal = (platform) => {
     apiKey: '',
     xboxUserId: '',
     psnOnlineId: '',
+    npsso: '',
     gogUserId: '',
+    redirectUrl: '',
     accessToken: '',
-    refreshToken: ''
+    refreshToken: '',
+    openBrowser: true
   }
+  
+  // 重置认证状态
+  gogAuthStep.value = 'step1'
+  gogAuthUrl.value = ''
+  xboxAuthStep.value = ''
+  xboxAuthUrl.value = ''
+  
+  // 如果是GOG、PSN或Xbox，先检查令牌状态
+  if (platform.id === 5) { // GOG
+    try {
+      const statusRes = await gogApi.checkTokenStatus()
+      if (statusRes.success && statusRes.data?.success) {
+        gogAuthStep.value = 'refresh'
+      }
+    } catch (error) {
+      console.log('检查GOG令牌状态失败，将进行首次认证')
+    }
+  } else if (platform.id === 6) { // PSN
+    try {
+      const statusRes = await psnApi.checkTokenStatus()
+      if (statusRes.success && statusRes.data?.success) {
+        // 令牌有效，可以直接绑定
+      }
+    } catch (error) {
+      console.log('检查PSN令牌状态失败，将进行首次认证')
+    }
+  } else if (platform.id === 7) { // Xbox
+    try {
+      const statusRes = await xboxApi.checkTokenStatus()
+      if (statusRes.success && statusRes.data?.success) {
+        // 令牌有效，可以直接绑定
+      }
+    } catch (error) {
+      console.log('检查Xbox令牌状态失败，将进行首次认证')
+    }
+  }
+  
   showBindModal.value = true
 }
 
@@ -531,18 +652,166 @@ const handleBind = async () => {
   if (!selectedPlatform.value) return
 
   const platform = selectedPlatform.value
-  const requiredFields = platform.requires || []
   
-  // 验证必填字段
-  for (const field of requiredFields) {
-    if (!bindForm.value[field] || bindForm.value[field].trim() === '') {
-      alert(`请填写${getFieldLabel(field)}`)
-      return
-    }
-  }
-
   loading.value = true
   try {
+    // GOG认证流程（两步）
+    if (platform.id === 5) {
+      if (gogAuthStep.value === 'step1') {
+        // 步骤1: 获取认证URL
+        try {
+          const authRes = await gogApi.authenticate({
+            forceReauth: false
+          })
+          
+          if (authRes.success && authRes.data) {
+            if (authRes.data.needsBrowserAuth && authRes.data.authUrl) {
+              gogAuthUrl.value = authRes.data.authUrl
+              gogAuthStep.value = 'step2'
+              alert('请复制认证URL并在浏览器中打开完成登录，然后将跳转后的完整URL粘贴到下方')
+            } else if (authRes.data.success) {
+              // 已有有效令牌，直接刷新
+              alert('GOG认证成功！正在同步数据...')
+              await handleGogPostAuth(authRes)
+            } else {
+              alert(authRes.data.message || '获取认证URL失败')
+            }
+          }
+        } catch (error) {
+          console.error('GOG认证失败:', error)
+          alert('GOG认证失败: ' + (error.message || '未知错误'))
+        } finally {
+          loading.value = false
+        }
+        return
+      } else if (gogAuthStep.value === 'step2') {
+        // 步骤2: 提供重定向URL完成认证
+        if (!bindForm.value.redirectUrl || bindForm.value.redirectUrl.trim() === '') {
+          alert('请提供重定向URL')
+          loading.value = false
+          return
+        }
+        
+        try {
+          const authRes = await gogApi.authenticate({
+            redirectUrl: bindForm.value.redirectUrl,
+            forceReauth: false
+          })
+          
+          if (authRes.success && authRes.data?.success) {
+            alert('GOG认证成功！正在同步数据...')
+            await handleGogPostAuth(authRes)
+          } else {
+            alert(authRes.data?.message || 'GOG认证失败')
+          }
+        } catch (error) {
+          console.error('GOG认证失败:', error)
+          alert('GOG认证失败: ' + (error.message || '未知错误'))
+        } finally {
+          loading.value = false
+        }
+        return
+      } else if (gogAuthStep.value === 'refresh') {
+        // 刷新令牌
+        try {
+          const authRes = await gogApi.authenticate({
+            forceReauth: false
+          })
+          
+          if (authRes.success && authRes.data?.success) {
+            alert('GOG令牌刷新成功！正在同步数据...')
+            await handleGogPostAuth(authRes)
+          } else {
+            // 刷新失败，回到步骤1
+            gogAuthStep.value = 'step1'
+            alert('令牌刷新失败，请重新进行认证')
+          }
+        } catch (error) {
+          console.error('GOG令牌刷新失败:', error)
+          gogAuthStep.value = 'step1'
+          alert('令牌刷新失败，请重新进行认证')
+        } finally {
+          loading.value = false
+        }
+        return
+      }
+    }
+    
+    // PSN认证流程
+    if (platform.id === 6) {
+      if (!bindForm.value.npsso || bindForm.value.npsso.trim() === '') {
+        alert('请填写NPSSO')
+        loading.value = false
+        return
+      }
+      
+      try {
+        const authRes = await psnApi.authenticate({
+          npsso: bindForm.value.npsso,
+          forceReauth: false
+        })
+        
+        if (authRes.success && authRes.data?.success) {
+          alert('PSN认证成功！正在同步数据...')
+          await handlePsnPostAuth(authRes)
+        } else {
+          alert(authRes.data?.message || 'PSN认证失败')
+        }
+      } catch (error) {
+        console.error('PSN认证失败:', error)
+        alert('PSN认证失败: ' + (error.message || '未知错误'))
+      } finally {
+        loading.value = false
+      }
+      return
+    }
+    
+    // Xbox认证流程
+    if (platform.id === 7) {
+      try {
+        const authRes = await xboxApi.authenticate({
+          openBrowser: bindForm.value.openBrowser,
+          forceReauth: false
+        })
+        
+        if (authRes.success && authRes.data) {
+          if (authRes.data.needsBrowserAuth && authRes.data.authUrl) {
+            xboxAuthUrl.value = authRes.data.authUrl
+            xboxAuthStep.value = 'authUrl'
+            if (bindForm.value.openBrowser) {
+              openUrl(authRes.data.authUrl)
+            }
+            alert('请在浏览器中完成登录，登录完成后系统会自动完成认证')
+            // 轮询检查认证状态
+            checkXboxAuthStatus()
+          } else if (authRes.data.success) {
+            alert('Xbox认证成功！正在同步数据...')
+            await handleXboxPostAuth(authRes)
+          } else {
+            alert(authRes.data.message || 'Xbox认证失败')
+          }
+        }
+      } catch (error) {
+        console.error('Xbox认证失败:', error)
+        alert('Xbox认证失败: ' + (error.message || '未知错误'))
+      } finally {
+        loading.value = false
+      }
+      return
+    }
+    
+    // Steam等其他平台的原有逻辑
+    const requiredFields = platform.requires || []
+    
+    // 验证必填字段
+    for (const field of requiredFields) {
+      if (!bindForm.value[field] || bindForm.value[field].trim() === '') {
+        alert(`请填写${getFieldLabel(field)}`)
+        loading.value = false
+        return
+      }
+    }
+
     const bindData = {
       platformId: platform.id
     }
@@ -551,18 +820,6 @@ const handleBind = async () => {
     if (platform.id === 1) { // Steam
       bindData.steamId = bindForm.value.steamId
       bindData.apiKey = bindForm.value.apiKey
-    } else if (platform.id === 7) { // Xbox
-      bindData.xboxUserId = bindForm.value.xboxUserId
-      if (bindForm.value.accessToken) bindData.accessToken = bindForm.value.accessToken
-      if (bindForm.value.refreshToken) bindData.refreshToken = bindForm.value.refreshToken
-    } else if (platform.id === 6) { // PSN
-      bindData.psnOnlineId = bindForm.value.psnOnlineId
-      if (bindForm.value.accessToken) bindData.accessToken = bindForm.value.accessToken
-      if (bindForm.value.refreshToken) bindData.refreshToken = bindForm.value.refreshToken
-    } else if (platform.id === 5) { // GOG
-      bindData.gogUserId = bindForm.value.gogUserId
-      if (bindForm.value.accessToken) bindData.accessToken = bindForm.value.accessToken
-      if (bindForm.value.refreshToken) bindData.refreshToken = bindForm.value.refreshToken
     }
 
     const response = await platformsApi.bindPlatform(bindData)
@@ -570,73 +827,20 @@ const handleBind = async () => {
       alert(`${platform.name}绑定成功！正在同步数据...`)
 
       // 绑定成功后，根据平台调用对应的导入接口
-      // 注意：导入接口会自动从JWT token获取userId，不需要传递userId
       try {
-        switch (platform.id) {
-          case 1: // Steam
-            try {
-              await steamApi.importData({
-                steamId: bindForm.value.steamId,
-                importGames: true,
-                importAchievements: true,
-                importFriends: false
-              })
-              await new Promise(resolve => setTimeout(resolve, 1000))
-            } catch (e) {
-              console.error('Steam 数据导入失败:', e)
-              alert('Steam 数据同步失败，请稍后手动同步')
-            }
-            break
-          
-          case 7: // Xbox
-            try {
-              const xboxUserId = bindForm.value.xboxUserId || response.data?.platformUserId
-              if (xboxUserId) {
-                await xboxApi.importData({
-                  xboxUserId,
-                  importGames: true,
-                  importAchievements: true
-                })
-                await new Promise(resolve => setTimeout(resolve, 1000))
-              }
-            } catch (e) {
-              console.error('Xbox 数据导入失败:', e)
-              alert('Xbox 数据同步失败，请稍后手动同步')
-            }
-            break
-          
-          case 6: // PSN
-            try {
-              const psnOnlineId = bindForm.value.psnOnlineId || response.data?.platformUserId
-              if (psnOnlineId) {
-                await psnApi.importData({
-                  psnOnlineId,
-                  importGames: true,
-                  importTrophies: true
-                })
-                await new Promise(resolve => setTimeout(resolve, 1000))
-              }
-            } catch (e) {
-              console.error('PSN 数据导入失败:', e)
-              alert('PSN 数据同步失败，请稍后手动同步')
-            }
-            break
-          
-          case 5: // GOG
-            try {
-              const gogUserId = bindForm.value.gogUserId || response.data?.platformUserId
-              if (gogUserId) {
-                await gogApi.importData({
-                  gogUserId,
-                  importGames: true
-                })
-                await new Promise(resolve => setTimeout(resolve, 1000))
-              }
-            } catch (e) {
-              console.error('GOG 数据导入失败:', e)
-              alert('GOG 数据同步失败，请稍后手动同步')
-            }
-            break
+        if (platform.id === 1) { // Steam
+          try {
+            await steamApi.importData({
+              steamId: bindForm.value.steamId,
+              importGames: true,
+              importAchievements: true,
+              importFriends: false
+            })
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          } catch (e) {
+            console.error('Steam 数据导入失败:', e)
+            alert('Steam 数据同步失败，请稍后手动同步')
+          }
         }
       } catch (error) {
         console.error('数据同步过程出错:', error)
@@ -644,7 +848,6 @@ const handleBind = async () => {
 
       closeBindModal()
       await loadBindings()
-      // 等待数据同步完成后再刷新统计数据
       await new Promise(resolve => setTimeout(resolve, 2000))
       await refreshStats()
       alert('数据同步完成！')
@@ -656,6 +859,168 @@ const handleBind = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// GOG认证后的处理
+const handleGogPostAuth = async (authResponse) => {
+  try {
+    // 从认证响应中获取gogUserId
+    const gogUserId = authResponse?.data?.userId || bindForm.value.gogUserId
+    
+    if (gogUserId) {
+      // 绑定平台
+      const bindData = {
+        platformId: 5,
+        gogUserId: gogUserId
+      }
+      const bindRes = await platformsApi.bindPlatform(bindData)
+      
+      if (bindRes.success) {
+        // 导入数据
+        const userId = getCurrentUserId()
+        await gogApi.importData({
+          userId,
+          gogUserId,
+          importGames: true
+        })
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        closeBindModal()
+        await loadBindings()
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await refreshStats()
+        alert('数据同步完成！')
+      }
+    } else {
+      alert('GOG认证成功，但无法获取用户ID，请手动输入GOG用户ID')
+    }
+  } catch (error) {
+    console.error('GOG认证后处理失败:', error)
+    alert('GOG认证成功，但数据同步失败，请稍后手动同步')
+  }
+}
+
+// PSN认证后的处理
+const handlePsnPostAuth = async (authResponse) => {
+  try {
+    // 从认证响应中获取onlineId，如果没有则使用表单中的值
+    const psnOnlineId = authResponse?.data?.onlineId || bindForm.value.psnOnlineId
+    
+    if (psnOnlineId) {
+      // 绑定平台
+      const bindData = {
+        platformId: 6,
+        psnOnlineId: psnOnlineId
+      }
+      const bindRes = await platformsApi.bindPlatform(bindData)
+      
+      if (bindRes.success) {
+        // 导入数据
+        const userId = getCurrentUserId()
+        await psnApi.importData({
+          userId,
+          psnOnlineId,
+          importGames: true,
+          importTrophies: true
+        })
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        closeBindModal()
+        await loadBindings()
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await refreshStats()
+        alert('数据同步完成！')
+      }
+    } else {
+      alert('PSN认证成功，但无法获取在线ID，请手动输入PSN在线ID')
+    }
+  } catch (error) {
+    console.error('PSN认证后处理失败:', error)
+    alert('PSN认证成功，但数据同步失败，请稍后手动同步')
+  }
+}
+
+// Xbox认证后的处理
+const handleXboxPostAuth = async (authResponse) => {
+  try {
+    // 从认证响应中获取xuid，如果没有则使用表单中的值
+    const xboxUserId = authResponse?.data?.xuid || bindForm.value.xboxUserId
+    
+    if (xboxUserId) {
+      // 绑定平台
+      const bindData = {
+        platformId: 7,
+        xboxUserId: xboxUserId
+      }
+      const bindRes = await platformsApi.bindPlatform(bindData)
+      
+      if (bindRes.success) {
+        // 导入数据
+        const userId = getCurrentUserId()
+        await xboxApi.importData({
+          userId,
+          xboxUserId,
+          importGames: true,
+          importAchievements: true
+        })
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        closeBindModal()
+        await loadBindings()
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await refreshStats()
+        alert('数据同步完成！')
+      }
+    } else {
+      alert('Xbox认证成功，但无法获取用户ID，请手动输入Xbox用户ID')
+    }
+  } catch (error) {
+    console.error('Xbox认证后处理失败:', error)
+    alert('Xbox认证成功，但数据同步失败，请稍后手动同步')
+  }
+}
+
+// 检查Xbox认证状态（轮询）
+const checkXboxAuthStatus = async () => {
+  const maxAttempts = 30
+  let attempts = 0
+  
+  const checkInterval = setInterval(async () => {
+    attempts++
+    try {
+      const statusRes = await xboxApi.checkTokenStatus()
+      if (statusRes.success && statusRes.data?.success) {
+        clearInterval(checkInterval)
+        xboxAuthStep.value = ''
+        alert('Xbox认证成功！正在同步数据...')
+        await handleXboxPostAuth(statusRes)
+      } else if (attempts >= maxAttempts) {
+        clearInterval(checkInterval)
+        alert('认证超时，请重试')
+      }
+    } catch (error) {
+      if (attempts >= maxAttempts) {
+        clearInterval(checkInterval)
+        alert('认证检查失败，请重试')
+      }
+    }
+  }, 2000) // 每2秒检查一次
+}
+
+// 复制到剪贴板
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    alert('已复制到剪贴板')
+  } catch (error) {
+    console.error('复制失败:', error)
+    alert('复制失败，请手动复制')
+  }
+}
+
+// 打开URL
+const openUrl = (url) => {
+  window.open(url, '_blank')
 }
 
 // 获取字段标签
@@ -800,14 +1165,14 @@ const formatTime = (dateString) => {
   
   try {
     // 创建日期对象（假设后端返回的是 UTC 时间字符串）
-    const date = new Date(dateString)
+  const date = new Date(dateString)
     
     // 计算时间差（直接使用 UTC 时间戳）
-    const now = new Date()
-    const diff = Math.floor((now - date) / 1000 / 60) // 分钟差
-    
-    if (diff < 1) return '刚刚'
-    if (diff < 60) return `${diff}分钟前`
+  const now = new Date()
+  const diff = Math.floor((now - date) / 1000 / 60) // 分钟差
+  
+  if (diff < 1) return '刚刚'
+  if (diff < 60) return `${diff}分钟前`
     if (diff < 1440) {
       const hours = Math.floor(diff / 60)
       return `${hours}小时前`
@@ -1550,5 +1915,43 @@ onMounted(() => {
   padding: 2rem;
   color: #ffffff;
   font-size: 1rem;
+}
+
+/* Alert样式 */
+.alert {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.alert-info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+
+.alert-success {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+.alert p {
+  margin: 0.25rem 0;
+}
+
+.alert p:first-child {
+  margin-top: 0;
+}
+
+.alert p:last-child {
+  margin-bottom: 0;
+}
+
+.alert strong {
+  color: #ffffff;
+  font-weight: 600;
 }
 </style>

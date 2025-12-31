@@ -474,8 +474,8 @@ public class SteamController : ControllerBase
                                                 if (finalCategoriesToAdd.Any())
                                                 {
                                                     _context.GameCategories.AddRange(finalCategoriesToAdd);
-                                                    await _context.SaveChangesAsync();
-                                                    _logger.LogInformation("为游戏添加 categories: gameId={GameId}, count={Count}", 
+                                            await _context.SaveChangesAsync();
+                                            _logger.LogInformation("为游戏添加 categories: gameId={GameId}, count={Count}", 
                                                         game.GameId, finalCategoriesToAdd.Count);
                                                 }
                                             }
@@ -536,8 +536,8 @@ public class SteamController : ControllerBase
                                                 if (finalGenresToAdd.Any())
                                                 {
                                                     _context.GameGenres.AddRange(finalGenresToAdd);
-                                                    await _context.SaveChangesAsync();
-                                                    _logger.LogInformation("为游戏添加 genres: gameId={GameId}, count={Count}", 
+                                            await _context.SaveChangesAsync();
+                                            _logger.LogInformation("为游戏添加 genres: gameId={GameId}, count={Count}", 
                                                         game.GameId, finalGenresToAdd.Count);
                                                 }
                                             }
@@ -599,8 +599,8 @@ public class SteamController : ControllerBase
                                                 if (finalLanguagesToAdd.Any())
                                                 {
                                                     _context.GameLanguages.AddRange(finalLanguagesToAdd);
-                                                    await _context.SaveChangesAsync();
-                                                    _logger.LogInformation("为游戏添加 languages: gameId={GameId}, count={Count}", 
+                                            await _context.SaveChangesAsync();
+                                            _logger.LogInformation("为游戏添加 languages: gameId={GameId}, count={Count}", 
                                                         game.GameId, finalLanguagesToAdd.Count);
                                                 }
                                             }
@@ -1580,7 +1580,7 @@ public class SteamController : ControllerBase
                                     if (finalCategoriesToAdd.Any())
                                     {
                                         _context.GameCategories.AddRange(finalCategoriesToAdd);
-                                        await _context.SaveChangesAsync();
+                                await _context.SaveChangesAsync();
                                     }
                                 }
                             }
@@ -1630,7 +1630,7 @@ public class SteamController : ControllerBase
                                     if (finalGenresToAdd.Any())
                                     {
                                         _context.GameGenres.AddRange(finalGenresToAdd);
-                                        await _context.SaveChangesAsync();
+                                await _context.SaveChangesAsync();
                                     }
                                 }
                             }
@@ -1683,7 +1683,7 @@ public class SteamController : ControllerBase
                                         if (finalLanguagesToAdd.Any())
                                         {
                                             _context.GameLanguages.AddRange(finalLanguagesToAdd);
-                                            await _context.SaveChangesAsync();
+                                    await _context.SaveChangesAsync();
                                         }
                                     }
                                 }

@@ -1,4 +1,4 @@
-xbox-webapi-python
+xbox-webapi
 appdirs>=1.4.4
 ecdsa>=0.18.0
 httpx>=0.24.0

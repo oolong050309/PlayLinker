@@ -158,7 +158,8 @@ async def do_auth(
                     "xuid": str(auth_mgr.xsts_token.xuid) if auth_mgr.xsts_token else None,
                     "tokens_path": token_filepath
                 }, ensure_ascii=False), flush=True)
-                return
+                # 成功后立即退出，避免挂起
+                sys.exit(0)
             except Exception as e:
                 # 刷新失败，继续执行新认证
                 pass
@@ -198,7 +199,13 @@ async def do_auth(
                 await auth_mgr.request_tokens(code)
                 print("INFO: 令牌获取成功", flush=True)
             except Exception as e:
-                print(f"ERROR: 获取令牌失败: {e}", flush=True)
+                import traceback
+                error_details = {
+                    "error_type": type(e).__name__,
+                    "error_message": str(e) if str(e) else repr(e),
+                    "traceback": traceback.format_exc()
+                }
+                print(f"ERROR: 获取令牌失败: {json.dumps(error_details, ensure_ascii=False)}", flush=True)
                 raise
 
         # 保存令牌
@@ -216,6 +223,9 @@ async def do_auth(
             "xuid": str(auth_mgr.xsts_token.xuid) if auth_mgr.xsts_token else None,
             "tokens_path": token_filepath
         }, ensure_ascii=False), flush=True)
+        
+        # 成功后立即退出，避免挂起
+        sys.exit(0)
 
 
 async def async_main():
@@ -299,10 +309,16 @@ async def async_main():
         }, ensure_ascii=False), flush=True)
         exit_code = 0
     except Exception as e:
+        import traceback
+        error_message = str(e) if str(e) else repr(e)
+        if not error_message:
+            error_message = f"{type(e).__name__}: 未知错误"
         print(json.dumps({
             "success": False,
             "error": "exception",
-            "message": str(e)
+            "error_type": type(e).__name__,
+            "message": error_message,
+            "traceback": traceback.format_exc()
         }, ensure_ascii=False), flush=True)
         exit_code = 1
     finally:

@@ -280,19 +280,37 @@ public class ParentalMonitoringService : BackgroundService
                     notificationContent = $"您的孩子 {childUser.Username} 的游戏库中包含超出年龄分级（{maxAgeRating}+）的游戏：{string.Join("、", violatingGameNames)}。";
                 }
 
-                var notification = new NotificationCenter
-                {
-                    UserId = parentUser.UserId,
-                    SourceModule = "parental_control",
-                    Title = notificationTitle,
-                    Content = notificationContent,
-                    NotificationType = "warning",
-                    IsRead = false,
-                    RelatedId = rule.RuleId,
-                    CreatedAt = DateTime.UtcNow
-                };
+                // 检查是否已存在相同的通知（基于 related_id 和 user_id）
+                var existingNotification = await context.NotificationCenters
+                    .FirstOrDefaultAsync(n => n.RelatedId == rule.RuleId && n.UserId == parentUser.UserId, cancellationToken);
 
-                context.NotificationCenters.Add(notification);
+                NotificationCenter notification;
+                if (existingNotification != null)
+                {
+                    // 更新现有通知
+                    existingNotification.Title = notificationTitle;
+                    existingNotification.Content = notificationContent;
+                    existingNotification.IsRead = false; // 重置为未读
+                    existingNotification.CreatedAt = DateTime.UtcNow; // 更新创建时间
+                    notification = existingNotification;
+                }
+                else
+                {
+                    // 创建新通知
+                    notification = new NotificationCenter
+                    {
+                        UserId = parentUser.UserId,
+                        SourceModule = "parental_control",
+                        Title = notificationTitle,
+                        Content = notificationContent,
+                        NotificationType = "warning",
+                        IsRead = false,
+                        RelatedId = rule.RuleId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    context.NotificationCenters.Add(notification);
+                }
+
                 await context.SaveChangesAsync(cancellationToken);
 
                 // 创建违规日志

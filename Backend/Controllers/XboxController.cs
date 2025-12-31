@@ -39,7 +39,7 @@ public class XboxController : ControllerBase
     }
 
     /// <summary>
-    /// 初始化平台数据
+    /// 初始化平台数据（优化版本：批量检查，减少数据库查询）
     /// </summary>
     private async Task InitializePlatformsAsync()
     {
@@ -55,49 +55,66 @@ public class XboxController : ControllerBase
             new { Id = 8, Name = "Nintendo Switch", Description = "任天堂Switch平台" }
         };
 
+        // 批量检查所有平台ID和名称，只查询一次
+        var platformIds = platforms.Select(p => p.Id).ToList();
+        var platformNames = platforms.Select(p => p.Name).ToList();
+        
+        var existingPlatforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId) || platformNames.Contains(p.PlatformName))
+            .Select(p => new { p.PlatformId, p.PlatformName })
+            .ToListAsync();
+
+        var existingIds = existingPlatforms.Select(p => p.PlatformId).ToHashSet();
+        var existingNames = existingPlatforms.Select(p => p.PlatformName).ToHashSet();
+
+        // 只插入不存在的平台
+        var platformsToInsert = platforms
+            .Where(p => !existingIds.Contains(p.Id) && !existingNames.Contains(p.Name))
+            .ToList();
+
+        if (platformsToInsert.Count == 0)
+        {
+            return; // 所有平台都已存在，无需操作
+        }
+
         var connection = _context.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
         {
             await connection.OpenAsync();
         }
 
-        foreach (var platformInfo in platforms)
+        // 批量插入（使用ON DUPLICATE KEY UPDATE避免重复）
+        foreach (var platformInfo in platformsToInsert)
         {
-            var exists = await _context.Platforms
-                .AnyAsync(p => p.PlatformId == platformInfo.Id || p.PlatformName == platformInfo.Name);
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO platforms (platform_id, platform_name, description, status) 
+                VALUES (@id, @name, @desc, 1)
+                ON DUPLICATE KEY UPDATE platform_name = VALUES(platform_name), description = VALUES(description)";
+            
+            var idParam = command.CreateParameter();
+            idParam.ParameterName = "@id";
+            idParam.Value = platformInfo.Id;
+            command.Parameters.Add(idParam);
 
-            if (!exists)
+            var nameParam = command.CreateParameter();
+            nameParam.ParameterName = "@name";
+            nameParam.Value = platformInfo.Name;
+            command.Parameters.Add(nameParam);
+
+            var descParam = command.CreateParameter();
+            descParam.ParameterName = "@desc";
+            descParam.Value = platformInfo.Description ?? "";
+            command.Parameters.Add(descParam);
+
+            try
             {
-                using var command = connection.CreateCommand();
-                command.CommandText = @"
-                    INSERT INTO platforms (platform_id, platform_name, description, status) 
-                    VALUES (@id, @name, @desc, 1)
-                    ON DUPLICATE KEY UPDATE platform_name = VALUES(platform_name), description = VALUES(description)";
-                
-                var idParam = command.CreateParameter();
-                idParam.ParameterName = "@id";
-                idParam.Value = platformInfo.Id;
-                command.Parameters.Add(idParam);
-
-                var nameParam = command.CreateParameter();
-                nameParam.ParameterName = "@name";
-                nameParam.Value = platformInfo.Name;
-                command.Parameters.Add(nameParam);
-
-                var descParam = command.CreateParameter();
-                descParam.ParameterName = "@desc";
-                descParam.Value = platformInfo.Description ?? "";
-                command.Parameters.Add(descParam);
-
-                try
-                {
-                    await command.ExecuteNonQueryAsync();
-                    _logger.LogInformation("创建平台: {PlatformName} (ID: {PlatformId})", platformInfo.Name, platformInfo.Id);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "创建平台失败: {PlatformName} (ID: {PlatformId})", platformInfo.Name, platformInfo.Id);
-                }
+                await command.ExecuteNonQueryAsync();
+                _logger.LogInformation("创建平台: {PlatformName} (ID: {PlatformId})", platformInfo.Name, platformInfo.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "创建平台失败: {PlatformName} (ID: {PlatformId})", platformInfo.Name, platformInfo.Id);
             }
         }
     }
