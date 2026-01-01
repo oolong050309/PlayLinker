@@ -657,6 +657,7 @@ public class EpicController : ControllerBase
                                         existingAchievement = new Achievement
                                         {
                                             GameId = game.GameId,
+                                            PlatformId = EPIC_PLATFORM_ID,
                                             AchievementName = achievement.Id,
                                             DisplayName = achievement.Name,
                                             Description = achievement.Description,

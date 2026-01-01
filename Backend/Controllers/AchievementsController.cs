@@ -793,6 +793,7 @@ public class AchievementsController : ControllerBase
                                             existingAchievement = new Achievement
                                             {
                                                 GameId = gameId,
+                                                PlatformId = STEAM_PLATFORM_ID,
                                                 AchievementName = achievementName,
                                                 DisplayName = displayName,
                                                 Description = description,
@@ -901,6 +902,7 @@ public class AchievementsController : ControllerBase
                                             existingAchievement = new Achievement
                                             {
                                                 GameId = gameId,
+                                                PlatformId = STEAM_PLATFORM_ID,
                                                 AchievementName = achievementName,
                                                 DisplayName = displayName,
                                                 Description = description,

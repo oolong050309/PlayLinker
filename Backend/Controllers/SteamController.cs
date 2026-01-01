@@ -891,6 +891,7 @@ public class SteamController : ControllerBase
                                                         existingAchievement = new Achievement
                                                         {
                                                             GameId = userGame.GameId,
+                                                            PlatformId = STEAM_PLATFORM_ID,
                                                             AchievementName = achievementName,
                                                             DisplayName = displayName,
                                                             Description = description,
@@ -999,6 +1000,7 @@ public class SteamController : ControllerBase
                                                         existingAchievement = new Achievement
                                                         {
                                                             GameId = userGame.GameId,
+                                                            PlatformId = STEAM_PLATFORM_ID,
                                                             AchievementName = achievementName,
                                                             DisplayName = displayName,
                                                             Description = description,
@@ -2290,6 +2292,7 @@ public class SteamController : ControllerBase
                                                         existingAchievement = new Achievement
                                                         {
                                                             GameId = game.GameId,
+                                                            PlatformId = STEAM_PLATFORM_ID,
                                                             AchievementName = achievementName,
                                                             DisplayName = displayName,
                                                             Description = description,
@@ -2350,6 +2353,7 @@ public class SteamController : ControllerBase
                                                         existingAchievement = new Achievement
                                                         {
                                                             GameId = game.GameId,
+                                                            PlatformId = STEAM_PLATFORM_ID,
                                                             AchievementName = achievementName,
                                                             DisplayName = displayName,
                                                             Description = description,

@@ -55,4 +55,7 @@ public partial class Platform
 
     [InverseProperty("Platform")]
     public virtual ICollection<UserPlatformBinding> UserPlatformBindings { get; set; } = new List<UserPlatformBinding>();
+
+    [InverseProperty("Platform")]
+    public virtual ICollection<Achievement> Achievements { get; set; } = new List<Achievement>();
 }

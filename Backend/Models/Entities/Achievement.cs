@@ -20,6 +20,9 @@ public partial class Achievement
     [Column("game_id")]
     public long GameId { get; set; }
 
+    [Column("platform_id")]
+    public int PlatformId { get; set; } = 1; // 默认Steam平台
+
     [Column("achievement_name")]
     [StringLength(128)]
     public string AchievementName { get; set; } = null!;
@@ -54,6 +57,10 @@ public partial class Achievement
     [ForeignKey("GameId")]
     [InverseProperty("Achievements")]
     public virtual Game Game { get; set; } = null!;
+
+    [ForeignKey("PlatformId")]
+    [InverseProperty("Achievements")]
+    public virtual Platform? Platform { get; set; }
 
     [InverseProperty("Achievement")]
     public virtual ICollection<UserAchievement> UserAchievements { get; set; } = new List<UserAchievement>();

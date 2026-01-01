@@ -26,3 +26,18 @@ CREATE TABLE IF NOT EXISTS game_mod_source (
 -- 2. local_save_file.file_size 存储的是字节
 -- 3. 前端显示时会自动转换为合适的单位（B/KB/MB/GB）
 -- 4. game_mod_source 表用于 Mod 浏览功能，映射游戏到各 Mod 平台
+
+-- ============================================
+-- 日期: 2025-01-XX
+-- ============================================
+
+-- 3. 在 achievements 表中添加 platform_id 字段
+-- 用于标识成就属于哪个游戏平台，默认为1（Steam）
+ALTER TABLE achievements 
+ADD COLUMN platform_id INT NOT NULL DEFAULT 1 COMMENT '游戏平台ID，1=Steam' AFTER game_id,
+ADD FOREIGN KEY fk_achievements_platform (platform_id) REFERENCES platforms(platform_id);
+
+-- 4. 在 user_platform_library 表中添加 playtime_minutes_twoweeks 字段
+-- 用于存储用户两周内的游玩时间（分钟）
+ALTER TABLE user_platform_library 
+ADD COLUMN playtime_minutes_twoweeks INT NOT NULL DEFAULT 0 COMMENT '两周内游玩时间（分钟）' AFTER playtime_minutes;

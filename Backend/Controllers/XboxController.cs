@@ -540,6 +540,7 @@ public class XboxController : ControllerBase
                                             achievement = new Achievement
                                             {
                                                 GameId = userGame.GameId,
+                                                PlatformId = XBOX_PLATFORM_ID,
                                                 AchievementName = achData.Id,
                                                 DisplayName = achData.Name,
                                                 Description = achData.Description,
