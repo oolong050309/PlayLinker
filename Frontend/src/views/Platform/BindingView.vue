@@ -87,7 +87,7 @@
             </div>
             <div class="platform-actions">
               <div class="time-info">
-                <span class="last-synced">绑定时间：{{ formatTime(binding.bindingTime) }}</span>
+                <span class="last-synced">同步时间：{{ formatTime(binding.bindingTime) }}</span>
                 <span class="last-synced" v-if="binding.lastSyncTime">最后同步：{{ formatTime(binding.lastSyncTime) }}</span>
               </div>
               <div class="action-buttons">
@@ -885,36 +885,98 @@ const handleGogPostAuth = async (authResponse) => {
     // 从认证响应中获取gogUserId
     const gogUserId = authResponse?.data?.userId || bindForm.value.gogUserId
     
-    if (gogUserId) {
-      // 绑定平台
-      const bindData = {
-        platformId: 5,
-        gogUserId: gogUserId
-      }
-      const bindRes = await platformsApi.bindPlatform(bindData)
-      
-      if (bindRes.success) {
-        // 导入数据
-        const userId = getCurrentUserId()
-        await gogApi.importData({
-          userId,
-          gogUserId,
-          importGames: true
-        })
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        closeBindModal()
-        await loadBindings()
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        await refreshStats()
-        alert('数据同步完成！')
-      }
-    } else {
+    if (!gogUserId) {
       alert('GOG认证成功，但无法获取用户ID，请手动输入GOG用户ID')
+      return
+    }
+
+    // 先绑定平台（如果已绑定，409错误是正常的，继续执行同步）
+    const bindData = {
+      platformId: 5,
+      gogUserId: gogUserId
+    }
+    
+    let bindRes
+    try {
+      bindRes = await platformsApi.bindPlatform(bindData)
+    } catch (bindError) {
+      // 处理409冲突错误（绑定已存在）
+      if (bindError.response?.status === 409) {
+        console.log('GOG平台已绑定，继续执行同步...')
+        bindRes = { success: true } // 视为成功，继续执行
+      } else {
+        // 其他错误则抛出
+        throw bindError
+      }
+    }
+    
+    // 无论绑定是否成功（包括409冲突），都继续执行同步
+    if (!bindRes || !bindRes.success) {
+      // 如果不是409错误，才提示绑定失败
+      if (bindRes && !bindRes.success) {
+        alert('GOG绑定失败，但将继续尝试同步数据')
+      }
+    }
+
+    // 绑定成功后立即进行同步
+    const userId = getCurrentUserId()
+    if (!userId) {
+      alert('无法获取用户ID')
+      return
+    }
+
+    try {
+      await gogApi.importData({
+        userId,
+        gogUserId,
+        importGames: true
+      })
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      closeBindModal()
+      await loadBindings()
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      await refreshStats()
+      alert('GOG绑定成功并已完成数据同步！')
+    } catch (error) {
+      console.error('GOG绑定后同步失败:', error)
+      const errorMessage = error.response?.data?.message || error.message || '未知错误'
+      alert('GOG数据同步失败: ' + errorMessage + '\n请稍后手动同步')
+      closeBindModal()
+      await loadBindings()
     }
   } catch (error) {
     console.error('GOG认证后处理失败:', error)
-    alert('GOG认证成功，但数据同步失败，请稍后手动同步')
+    const errorMessage = error.response?.data?.message || error.message || '未知错误'
+    const errorStatus = error.response?.status
+    
+    // 根据错误类型给出不同的提示
+    if (errorStatus === 409) {
+      alert('GOG平台已绑定，正在同步数据...')
+      // 409错误时，仍然尝试同步
+      const gogUserId = authResponse?.data?.userId || bindForm.value.gogUserId
+      if (gogUserId) {
+        const userId = getCurrentUserId()
+        if (userId) {
+          try {
+            await gogApi.importData({
+              userId,
+              gogUserId,
+              importGames: true
+            })
+            closeBindModal()
+            await loadBindings()
+            await refreshStats()
+            alert('GOG数据同步完成！')
+          } catch (syncError) {
+            console.error('GOG数据同步失败:', syncError)
+            alert('GOG数据同步失败，请稍后手动同步')
+          }
+        }
+      }
+    } else {
+      alert('GOG认证后处理失败: ' + errorMessage)
+    }
   }
 }
 
@@ -958,7 +1020,7 @@ const handlePsnPostAuth = async (authResponse) => {
   }
 }
 
-// Xbox认证后的处理
+// Epic Games认证后的处理
 const handleEpicPostAuth = async (authResponse) => {
   try {
     if (!authResponse.success || !authResponse.data?.success) {
@@ -973,16 +1035,32 @@ const handleEpicPostAuth = async (authResponse) => {
       return
     }
 
-    // 先绑定平台
+    // 先绑定平台（如果已绑定，409错误是正常的，继续执行同步）
     const bindData = {
       platformId: 2,
       epicAccountId: epicAccountId
     }
-    const bindRes = await platformsApi.bindPlatform(bindData)
     
-    if (!bindRes.success) {
-      alert('Epic Games绑定失败')
-      return
+    let bindRes
+    try {
+      bindRes = await platformsApi.bindPlatform(bindData)
+    } catch (bindError) {
+      // 处理409冲突错误（绑定已存在）
+      if (bindError.response?.status === 409) {
+        console.log('Epic Games平台已绑定，继续执行同步...')
+        bindRes = { success: true } // 视为成功，继续执行
+      } else {
+        // 其他错误则抛出
+        throw bindError
+      }
+    }
+    
+    // 无论绑定是否成功（包括409冲突），都继续执行同步
+    if (!bindRes || !bindRes.success) {
+      // 如果不是409错误，才提示绑定失败
+      if (bindRes && !bindRes.success) {
+        alert('Epic Games绑定失败，但将继续尝试同步数据')
+      }
     }
 
     // 导入Epic Games数据
@@ -1005,16 +1083,47 @@ const handleEpicPostAuth = async (authResponse) => {
       await loadBindings()
       await new Promise(resolve => setTimeout(resolve, 2000))
       await refreshStats()
-      alert('数据同步完成！')
+      alert('Epic Games数据同步完成！')
     } catch (error) {
       console.error('Epic Games数据导入失败:', error)
-      alert('Epic Games数据同步失败，请稍后手动同步')
+      const errorMessage = error.response?.data?.message || error.message || '未知错误'
+      alert('Epic Games数据同步失败: ' + errorMessage + '\n请稍后手动同步')
       closeBindModal()
       await loadBindings()
     }
   } catch (error) {
     console.error('Epic Games认证后处理失败:', error)
-    alert('Epic Games认证后处理失败: ' + (error.message || '未知错误'))
+    const errorMessage = error.response?.data?.message || error.message || '未知错误'
+    const errorStatus = error.response?.status
+    
+    // 根据错误类型给出不同的提示
+    if (errorStatus === 409) {
+      alert('Epic Games平台已绑定，正在同步数据...')
+      // 409错误时，仍然尝试同步
+      const epicAccountId = authResponse?.data?.epicAccountId
+      if (epicAccountId) {
+        const userId = getCurrentUserId()
+        if (userId) {
+          try {
+            await epicApi.importData({
+              userId: userId,
+              epicAccountId: epicAccountId,
+              importGames: true,
+              importAchievements: true
+            })
+            closeBindModal()
+            await loadBindings()
+            await refreshStats()
+            alert('Epic Games数据同步完成！')
+          } catch (syncError) {
+            console.error('Epic Games数据同步失败:', syncError)
+            alert('Epic Games数据同步失败，请稍后手动同步')
+          }
+        }
+      }
+    } else {
+      alert('Epic Games认证后处理失败: ' + errorMessage)
+    }
   }
 }
 
@@ -1209,15 +1318,24 @@ const handleSync = async (platformId) => {
         }
         break
       
-      case 2: // Epic Games
+      case 2: // Epic Games - 每次同步都需要重新认证
         try {
-          await epicApi.importData({
-            userId,
-            epicAccountId: binding.platformUserId,
-            importGames: true,
-            importAchievements: true
-          })
-          await new Promise(resolve => setTimeout(resolve, 500))
+          // Epic Games同步需要重新走认证流程
+          const statusRes = await epicApi.checkTokenStatus()
+          if (statusRes.success && statusRes.data?.success) {
+            // 令牌有效，直接导入数据
+            await epicApi.importData({
+              userId,
+              epicAccountId: binding.platformUserId,
+              importGames: true,
+              importAchievements: true
+            })
+            await new Promise(resolve => setTimeout(resolve, 500))
+          } else {
+            // 令牌无效，需要重新认证
+            alert('Epic Games令牌已过期，请重新认证。请在绑定页面重新绑定Epic Games账号。')
+            throw new Error('Epic Games令牌已过期，需要重新认证')
+          }
         } catch (e) {
           console.error('Epic Games 数据导入失败:', e)
           throw e
