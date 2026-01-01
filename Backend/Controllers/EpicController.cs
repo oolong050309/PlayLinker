@@ -445,21 +445,12 @@ public class EpicController : ControllerBase
                             epicGame.Achievements = achievementsInfo;
                         }
 
-                        // 查找或创建游戏
-                        Game? game = null;
+                        // 先通过游戏名称查找是否已存在同名游戏（不同平台的同名游戏共享同一个game_id）
+                        Game? game = await context.Games
+                            .FirstOrDefaultAsync(g => g.Name == epicGame.Name);
 
-                        // 只通过GamePlatform的PlatformGameId匹配，不通过名称匹配
-                        // 这样可以避免不同平台的同名游戏被错误关联
-                        var existingGamePlatform = await context.GamePlatforms
-                            .FirstOrDefaultAsync(gp => gp.PlatformId == EPIC_PLATFORM_ID
-                                && gp.PlatformGameId == epicGame.GameId);
-
-                        if (existingGamePlatform != null)
-                        {
-                            game = await context.Games.FindAsync(existingGamePlatform.GameId);
-                            
-                            // 如果游戏已存在，只补充缺失的信息，不覆盖已有数据
-                            if (game != null && gameDetails != null)
+                        // 如果游戏已存在，只补充缺失的信息，不覆盖已有数据
+                        if (game != null && gameDetails != null)
                         {
                             bool hasChanges = false;
                             
@@ -530,9 +521,8 @@ public class EpicController : ControllerBase
                             }
                             await context.SaveChangesAsync();
                         }
-                        }
 
-                        // 如果游戏不存在，创建新游戏（即使名称相同，不同平台也应该创建新记录）
+                        // 如果游戏不存在，创建新游戏
                         if (game == null)
                         {
                             // 创建新游戏
@@ -597,8 +587,11 @@ public class EpicController : ControllerBase
                             }
                         }
 
-                        // 创建或更新游戏平台映射
-                        if (!await context.GamePlatforms.AnyAsync(gp => gp.GameId == game.GameId && gp.PlatformId == EPIC_PLATFORM_ID))
+                        // 创建或更新游戏平台映射（如果该平台映射不存在）
+                        var gamePlatform = await context.GamePlatforms
+                            .FirstOrDefaultAsync(gp => gp.GameId == game.GameId && gp.PlatformId == EPIC_PLATFORM_ID);
+                        
+                        if (gamePlatform == null)
                         {
                             context.GamePlatforms.Add(new GamePlatform
                             {
@@ -607,6 +600,14 @@ public class EpicController : ControllerBase
                                 PlatformGameId = epicGame.GameId,
                                 GamePlatformUrl = $"https://store.epicgames.com/zh-CN/p/{epicGame.Namespace}"
                             });
+                            await context.SaveChangesAsync();
+                        }
+                        else if (gamePlatform.PlatformGameId != epicGame.GameId)
+                        {
+                            // 更新平台游戏ID（如果不同）
+                            gamePlatform.PlatformGameId = epicGame.GameId;
+                            gamePlatform.GamePlatformUrl = $"https://store.epicgames.com/zh-CN/p/{epicGame.Namespace}";
+                            await context.SaveChangesAsync();
                         }
 
                         // 创建或更新用户平台游戏库记录

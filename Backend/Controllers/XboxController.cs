@@ -332,19 +332,11 @@ public class XboxController : ControllerBase
                     {
                         try
                         {
-                            // 查找是否已存在该Xbox平台的该游戏
-                            // 只通过GamePlatform匹配，不通过名称匹配，避免不同平台的同名游戏被错误关联
-                            Game? game = null;
-                            var existingGamePlatform = await _context.GamePlatforms
-                                .FirstOrDefaultAsync(gp => gp.PlatformId == XBOX_PLATFORM_ID
-                                    && gp.PlatformGameId == xboxGame.TitleId);
+                            // 先通过游戏名称查找是否已存在同名游戏（不同平台的同名游戏共享同一个game_id）
+                            Game? game = await _context.Games
+                                .FirstOrDefaultAsync(g => g.Name == xboxGame.Name);
 
-                            if (existingGamePlatform != null)
-                            {
-                                game = await _context.Games.FindAsync(existingGamePlatform.GameId);
-                            }
-
-                            // 如果游戏不存在，创建新游戏（即使名称相同，不同平台也应该创建新记录）
+                            // 如果游戏不存在，创建新游戏
                             if (game == null)
                             {
                                 // 创建新游戏
@@ -407,8 +399,11 @@ public class XboxController : ControllerBase
                                 }
                             }
 
-                            // 创建或更新游戏平台映射
-                            if (!await _context.GamePlatforms.AnyAsync(gp => gp.GameId == game.GameId && gp.PlatformId == XBOX_PLATFORM_ID))
+                            // 创建或更新游戏平台映射（如果该平台映射不存在）
+                            var gamePlatform = await _context.GamePlatforms
+                                .FirstOrDefaultAsync(gp => gp.GameId == game.GameId && gp.PlatformId == XBOX_PLATFORM_ID);
+                            
+                            if (gamePlatform == null)
                             {
                                 _context.GamePlatforms.Add(new GamePlatform
                                 {
@@ -417,6 +412,14 @@ public class XboxController : ControllerBase
                                     PlatformGameId = xboxGame.TitleId,
                                     GamePlatformUrl = $"https://www.xbox.com/games/store/-/{xboxGame.TitleId}"
                                 });
+                                await _context.SaveChangesAsync();
+                            }
+                            else if (gamePlatform.PlatformGameId != xboxGame.TitleId)
+                            {
+                                // 更新平台游戏ID（如果不同）
+                                gamePlatform.PlatformGameId = xboxGame.TitleId;
+                                gamePlatform.GamePlatformUrl = $"https://www.xbox.com/games/store/-/{xboxGame.TitleId}";
+                                await _context.SaveChangesAsync();
                             }
 
                             // 创建或更新用户平台游戏库记录

@@ -450,19 +450,11 @@ public class SteamController : ControllerBase
                                         // 从第三方 API 获取评论数据
                                         var (totalReviews, totalPositive) = await GetGameReviewsFromThirdPartyApiAsync(appId);
 
-                                        // 查找是否已存在该Steam平台的该游戏
-                                        // 只通过GamePlatform匹配，不通过名称匹配，避免不同平台的同名游戏被错误关联
-                                        Game? game = null;
-                                        var existingGamePlatform = await _context.GamePlatforms
-                                            .FirstOrDefaultAsync(gp => gp.PlatformId == STEAM_PLATFORM_ID
-                                                && gp.PlatformGameId == appId.ToString());
+                                        // 先通过游戏名称查找是否已存在同名游戏（不同平台的同名游戏共享同一个game_id）
+                                        Game? game = await _context.Games
+                                            .FirstOrDefaultAsync(g => g.Name == steamGame.Name);
 
-                                        if (existingGamePlatform != null)
-                                        {
-                                            game = await _context.Games.FindAsync(existingGamePlatform.GameId);
-                                        }
-
-                                        // 如果游戏不存在，创建新游戏（即使名称相同，不同平台也应该创建新记录）
+                                        // 如果游戏不存在，创建新游戏
                                         if (game == null)
                                         {
                                             // 创建新游戏
@@ -527,8 +519,11 @@ public class SteamController : ControllerBase
                                             }
                                         }
 
-                                        // 创建或更新游戏平台映射
-                                        if (!await _context.GamePlatforms.AnyAsync(gp => gp.GameId == game.GameId && gp.PlatformId == STEAM_PLATFORM_ID))
+                                        // 创建或更新游戏平台映射（如果该平台映射不存在）
+                                        var gamePlatform = await _context.GamePlatforms
+                                            .FirstOrDefaultAsync(gp => gp.GameId == game.GameId && gp.PlatformId == STEAM_PLATFORM_ID);
+                                        
+                                        if (gamePlatform == null)
                                         {
                                             _context.GamePlatforms.Add(new GamePlatform
                                             {
@@ -537,6 +532,14 @@ public class SteamController : ControllerBase
                                                 PlatformGameId = appId.ToString(),
                                                 GamePlatformUrl = $"https://store.steampowered.com/app/{appId}"
                                             });
+                                            await _context.SaveChangesAsync();
+                                        }
+                                        else if (gamePlatform.PlatformGameId != appId.ToString())
+                                        {
+                                            // 更新平台游戏ID（如果不同）
+                                            gamePlatform.PlatformGameId = appId.ToString();
+                                            gamePlatform.GamePlatformUrl = $"https://store.steampowered.com/app/{appId}";
+                                            await _context.SaveChangesAsync();
                                         }
 
                                         // 处理 categories（如果游戏的 categories 为空，则从 Steam API 获取并存储）
@@ -1528,13 +1531,13 @@ public class SteamController : ControllerBase
 
                 try
                 {
-                    // 1. 先检查数据库中是否包含该游戏（通过 Steam AppID 在 game_platform 表中查找）
+                    // 1. 先检查该Steam平台的该游戏是否已存在（通过 Steam AppID 在 game_platform 表中查找）
                     var existingGamePlatform = await _context.GamePlatforms
                         .FirstOrDefaultAsync(gp => gp.PlatformId == STEAM_PLATFORM_ID && gp.PlatformGameId == appId.ToString());
 
                     if (existingGamePlatform != null)
                     {
-                        _logger.LogInformation("游戏已存在，跳过: appId={AppId}, gameId={GameId}", appId, existingGamePlatform.GameId);
+                        _logger.LogInformation("该Steam游戏已存在，跳过: appId={AppId}, gameId={GameId}", appId, existingGamePlatform.GameId);
                         continue;
                     }
 
@@ -1592,9 +1595,11 @@ public class SteamController : ControllerBase
                             // 从第三方 API 获取评论数据
                             var (totalReviews, totalPositive) = await GetGameReviewsFromThirdPartyApiAsync(appId);
 
-                            // 注意：在第1520行已经检查过 existingGamePlatform，如果存在会 continue
-                            // 所以这里 existingGamePlatform 应该总是 null，game 也应该是 null
-                            // 直接创建新游戏（即使名称相同，不同平台也应该创建新记录）
+                            // 先通过游戏名称查找是否已存在同名游戏（不同平台的同名游戏共享同一个game_id）
+                            game = await _context.Games
+                                .FirstOrDefaultAsync(g => g.Name == steamGame.Name);
+
+                            // 如果游戏不存在，创建新游戏
                             if (game == null)
                             {
                                 // 创建新游戏
@@ -1657,8 +1662,11 @@ public class SteamController : ControllerBase
                                 }
                             }
 
-                            // 创建游戏平台映射
-                            if (!await _context.GamePlatforms.AnyAsync(gp => gp.GameId == game.GameId && gp.PlatformId == STEAM_PLATFORM_ID))
+                            // 创建游戏平台映射（如果该平台映射不存在）
+                            var gamePlatform = await _context.GamePlatforms
+                                .FirstOrDefaultAsync(gp => gp.GameId == game.GameId && gp.PlatformId == STEAM_PLATFORM_ID);
+                            
+                            if (gamePlatform == null)
                             {
                                 _context.GamePlatforms.Add(new GamePlatform
                                 {
@@ -1667,6 +1675,13 @@ public class SteamController : ControllerBase
                                     PlatformGameId = appId.ToString(),
                                     GamePlatformUrl = $"https://store.steampowered.com/app/{appId}"
                                 });
+                                await _context.SaveChangesAsync();
+                            }
+                            else if (gamePlatform.PlatformGameId != appId.ToString())
+                            {
+                                // 更新平台游戏ID（如果不同）
+                                gamePlatform.PlatformGameId = appId.ToString();
+                                gamePlatform.GamePlatformUrl = $"https://store.steampowered.com/app/{appId}";
                                 await _context.SaveChangesAsync();
                             }
 
