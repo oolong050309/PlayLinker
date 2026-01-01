@@ -179,6 +179,18 @@ public class NotificationsController : ControllerBase
             }
 
             // 先删除相关的报警日志（避免外键约束错误）
+            // 删除价格提醒日志
+            var priceAlertLogs = await _dbContext.PriceAlertLogs
+                .Where(l => l.NotificationId == id)
+                .ToListAsync();
+
+            if (priceAlertLogs.Any())
+            {
+                _dbContext.PriceAlertLogs.RemoveRange(priceAlertLogs);
+                _logger.LogInformation($"删除通知 {id} 相关的 {priceAlertLogs.Count} 条价格提醒日志");
+            }
+
+            // 删除家长控制报警日志
             var alertLogs = await _dbContext.ParentalAlertLogs
                 .Where(l => l.NotificationId == id)
                 .ToListAsync();
@@ -186,7 +198,7 @@ public class NotificationsController : ControllerBase
             if (alertLogs.Any())
             {
                 _dbContext.ParentalAlertLogs.RemoveRange(alertLogs);
-                _logger.LogInformation($"删除通知 {id} 相关的 {alertLogs.Count} 条报警日志");
+                _logger.LogInformation($"删除通知 {id} 相关的 {alertLogs.Count} 条家长控制报警日志");
             }
 
             _dbContext.NotificationCenters.Remove(notification);

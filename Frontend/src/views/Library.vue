@@ -151,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onActivated, computed, watch } from 'vue'
 import { libraryApi, achievementApi } from '../api'
 import { Gamepad2, Play, Clock, Trophy, Search } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
@@ -181,6 +181,7 @@ const totalPages = ref(1)
 
 const platforms = ref([
   { id: 1, name: 'Steam' },
+  { id: 2, name: 'Epic Games' },
   { id: 5, name: 'GOG' },
   { id: 6, name: 'PSN' },
   { id: 7, name: 'Xbox' }
@@ -330,6 +331,12 @@ watch(searchQuery, () => {
 })
 
 onMounted(() => {
+  loadOverview()
+  loadGames()
+})
+
+// 当组件被激活时（从其他页面返回时）刷新数据
+onActivated(() => {
   loadOverview()
   loadGames()
 })

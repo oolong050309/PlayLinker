@@ -88,7 +88,7 @@ public class XboxService : IXboxService
                     _logger.LogWarning("用户{UserId}存在平台{PlatformId}的绑定记录，但令牌为空", userId, platformId);
                 }
                 else
-                {
+            {
                     _logger.LogWarning("用户{UserId}未绑定平台{PlatformId}", userId, platformId);
                 }
                 return null;

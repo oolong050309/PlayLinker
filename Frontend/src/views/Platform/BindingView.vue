@@ -86,7 +86,10 @@
               <span class="badge success">已连接</span>
             </div>
             <div class="platform-actions">
-              <span class="last-synced">绑定时间：{{ formatTime(binding.bindingTime) }}</span>
+              <div class="time-info">
+                <span class="last-synced">绑定时间：{{ formatTime(binding.bindingTime) }}</span>
+                <span class="last-synced" v-if="binding.lastSyncTime">最后同步：{{ formatTime(binding.lastSyncTime) }}</span>
+              </div>
               <div class="action-buttons">
                 <button 
                   class="btn btn-secondary"
@@ -516,10 +519,27 @@ const refreshStats = async () => {
       stats.value.totalGames = totalGamesOwned
       stats.value.totalAchievements = totalAchievements
 
+      // 获取所有平台中最近的同步时间
       const platformStats = o.platformStats || o.PlatformStats || []
-      const firstPlatform = platformStats[0]
-      const lastSyncTime = firstPlatform?.lastSyncTime || firstPlatform?.LastSyncTime
-      stats.value.lastSync = lastSyncTime || '刚刚'
+      let latestSyncTime = null
+      if (platformStats.length > 0) {
+        // 找到最近的同步时间
+        const syncTimes = platformStats
+          .map(p => p.lastSyncTime || p.LastSyncTime)
+          .filter(t => t != null)
+          .map(t => new Date(t.endsWith('Z') ? t : t + 'Z'))
+        
+        if (syncTimes.length > 0) {
+          latestSyncTime = new Date(Math.max(...syncTimes.map(d => d.getTime())))
+        }
+      }
+      
+      // 如果没有找到同步时间，使用当前时间或显示"从未同步"
+      if (latestSyncTime) {
+        stats.value.lastSync = formatTime(latestSyncTime.toISOString())
+      } else {
+        stats.value.lastSync = '从未同步'
+      }
     } else {
       // 后端返回空数据时，重置为0
       stats.value.connectedCount = connectedPlatforms.value.length
@@ -1189,6 +1209,21 @@ const handleSync = async (platformId) => {
         }
         break
       
+      case 2: // Epic Games
+        try {
+          await epicApi.importData({
+            userId,
+            epicAccountId: binding.platformUserId,
+            importGames: true,
+            importAchievements: true
+          })
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } catch (e) {
+          console.error('Epic Games 数据导入失败:', e)
+          throw e
+        }
+        break
+      
       default:
         // 对于其他平台，暂时只调用占位符接口
         await platformsApi.syncPlatform(platformId)
@@ -1212,7 +1247,7 @@ const getPlatformConfig = (platformId) => {
   return platformConfig[platformId] || { name: 'Unknown', gradient: '' }
 }
 
-// 格式化时间（中国时区）
+// 格式化时间（中国时区）- 改进样式
 const formatTime = (dateString) => {
   if (!dateString) return '未知'
   
@@ -1228,8 +1263,11 @@ const formatTime = (dateString) => {
     
     const diffHours = Math.floor(diffMinutes / 60)
     if (diffHours < 24) return `${diffHours}小时前`
+    
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays < 7) return `${diffDays}天前`
 
-    // 超过1天，显示具体日期和时间（格式：YYYY-MM-DD HH:mm）
+    // 超过7天，显示具体日期和时间（格式：YYYY-MM-DD HH:mm）
     const options = {
       timeZone: 'Asia/Shanghai',
       year: 'numeric',
@@ -1241,9 +1279,11 @@ const formatTime = (dateString) => {
     }
     
     // 使用 toLocaleString 格式化为中国时区时间
-    // Intl.DateTimeFormat 在某些环境下对格式的处理不一致，toLocaleString 更可靠
     const formatter = new Intl.DateTimeFormat('zh-CN', options)
-    return formatter.format(date).replace(/\//g, '-')
+    const formatted = formatter.format(date).replace(/\//g, '-')
+    
+    // 格式化为：YYYY-MM-DD HH:mm
+    return formatted
 
   } catch (error) {
     console.error('格式化时间失败:', error, '输入:', dateString)
@@ -1549,9 +1589,16 @@ onMounted(() => {
   align-items: center;
 }
 
+.time-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .last-synced {
   font-size: 0.7rem;
   color: #71717a;
+  line-height: 1.2;
 }
 
 .action-buttons {

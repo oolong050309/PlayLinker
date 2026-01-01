@@ -306,9 +306,12 @@ public class XboxController : ControllerBase
             }
             else
             {
+                // 更新绑定时，更新绑定时间和同步时间
                 userPlatformBinding.PlatformUserId = xboxUser.Xuid;
                 userPlatformBinding.BindingStatus = true;
-                userPlatformBinding.LastSyncTime = DateTime.UtcNow;
+                userPlatformBinding.BindingTime = DateTime.UtcNow; // 更新绑定时间
+                userPlatformBinding.LastSyncTime = DateTime.UtcNow; // 更新同步时间
+                userPlatformBinding.ExpireTime = DateTime.UtcNow.AddYears(1); // 更新过期时间
             }
             await _context.SaveChangesAsync();
 
@@ -466,6 +469,14 @@ public class XboxController : ControllerBase
                     }
                     
                     _logger.LogInformation("成功导入 {Count} 个Xbox游戏", gamesCount);
+                    
+                    // 导入完成后，更新LastSyncTime
+                    if (userPlatformBinding != null)
+                    {
+                        userPlatformBinding.LastSyncTime = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("已更新LastSyncTime: {LastSyncTime}", userPlatformBinding.LastSyncTime);
+                    }
                 }
                 catch (Exception ex)
                 {

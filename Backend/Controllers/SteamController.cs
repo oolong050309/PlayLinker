@@ -390,10 +390,12 @@ public class SteamController : ControllerBase
             }
             else
             {
-                // 更新绑定信息
+                // 更新绑定时，更新绑定时间和同步时间
                 userPlatformBinding.PlatformUserId = request.SteamId;
                 userPlatformBinding.BindingStatus = true;
-                userPlatformBinding.LastSyncTime = DateTime.UtcNow;
+                userPlatformBinding.BindingTime = DateTime.UtcNow; // 更新绑定时间
+                userPlatformBinding.LastSyncTime = DateTime.UtcNow; // 更新同步时间
+                userPlatformBinding.ExpireTime = DateTime.UtcNow.AddYears(1); // 更新过期时间
             }
             await _context.SaveChangesAsync();
 

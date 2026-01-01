@@ -240,9 +240,12 @@ public class EpicController : ControllerBase
                         }
                         else
                         {
+                            // 更新绑定时，更新绑定时间和同步时间
                             userPlatformBinding.PlatformUserId = epicUser.EpicAccountId;
                             userPlatformBinding.BindingStatus = true;
-                            userPlatformBinding.LastSyncTime = DateTime.UtcNow;
+                            userPlatformBinding.BindingTime = DateTime.UtcNow; // 更新绑定时间
+                            userPlatformBinding.LastSyncTime = DateTime.UtcNow; // 更新同步时间
+                            userPlatformBinding.ExpireTime = DateTime.UtcNow.AddYears(1); // 更新过期时间
                             await _context.SaveChangesAsync();
                             _logger.LogInformation("更新UserPlatformBinding记录成功");
                         }
@@ -376,9 +379,12 @@ public class EpicController : ControllerBase
         }
         else
         {
+            // 更新绑定时，更新绑定时间和同步时间
             userPlatformBinding.PlatformUserId = epicUser.EpicAccountId;
             userPlatformBinding.BindingStatus = true;
-            userPlatformBinding.LastSyncTime = DateTime.UtcNow;
+            userPlatformBinding.BindingTime = DateTime.UtcNow; // 更新绑定时间
+            userPlatformBinding.LastSyncTime = DateTime.UtcNow; // 更新同步时间
+            userPlatformBinding.ExpireTime = DateTime.UtcNow.AddYears(1); // 更新过期时间
         }
         await context.SaveChangesAsync();
 
@@ -731,6 +737,16 @@ public class EpicController : ControllerBase
                 }
 
                 logger.LogInformation("成功导入 {Count} 个Epic Games游戏", gamesCount);
+                
+                // 导入完成后，更新LastSyncTime
+                var binding = await context.UserPlatformBindings
+                    .FirstOrDefaultAsync(upb => upb.UserId == userId && upb.PlatformId == EPIC_PLATFORM_ID);
+                if (binding != null)
+                {
+                    binding.LastSyncTime = DateTime.UtcNow;
+                    await context.SaveChangesAsync();
+                    logger.LogInformation("已更新LastSyncTime: {LastSyncTime}", binding.LastSyncTime);
+                }
             }
             catch (Exception ex)
             {

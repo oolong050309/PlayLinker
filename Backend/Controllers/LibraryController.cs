@@ -52,10 +52,13 @@ public class LibraryController : ControllerBase
             var userId = GetCurrentUserId();
             _logger.LogInformation("获取游戏库概览: userId={UserId}", userId);
 
-            var library = await _context.UserGameLibraries
-                .FirstOrDefaultAsync(ugl => ugl.UserId == userId);
+            // 获取用户绑定的所有平台账号
+            var userPlatformBindings = await _context.UserPlatformBindings
+                .Where(upb => upb.UserId == userId && upb.BindingStatus == true)
+                .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
+                .ToListAsync();
 
-            if (library == null)
+            if (!userPlatformBindings.Any())
             {
                 // 返回空数据
                 var emptyResult = new LibraryOverviewDto
@@ -73,47 +76,125 @@ public class LibraryController : ControllerBase
                 return Ok(ApiResponse<LibraryOverviewDto>.SuccessResponse(emptyResult));
             }
 
+            // 定义五个平台的ID：Steam(1), Epic Games(2), GOG(5), PSN(6), Xbox(7)
+            var platformIds = new[] { 1, 2, 5, 6, 7 };
+
+            // 获取用户绑定的平台用户ID和平台ID的组合（转换为列表以便在客户端使用）
+            var bindingKeys = userPlatformBindings
+                .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
+                .ToList();
+
+            // 获取用户在所有五个平台上的游戏库记录
+            // 先查询所有符合条件的游戏，然后在客户端过滤
+            var allPlatformGamesQuery = _context.UserPlatformLibraries
+                .Where(upl => platformIds.Contains(upl.PlatformId));
+            
+            var allPlatformGamesTemp = await allPlatformGamesQuery.ToListAsync();
+            
+            // 在客户端过滤，匹配用户绑定的平台账号
+            var allPlatformGames = allPlatformGamesTemp
+                .Where(upl => bindingKeys.Any(bk => bk.PlatformUserId == upl.PlatformUserId && bk.PlatformId == upl.PlatformId))
+                .ToList();
+
+            // 统计所有平台的游戏数量（去重，因为同一游戏可能在不同平台）
+            var uniqueGameIds = allPlatformGames.Select(g => g.GameId).Distinct().ToList();
+            var totalGamesOwned = allPlatformGames.Count(); // 所有平台的游戏记录总数
+            var gamesPlayed = uniqueGameIds.Count(); // 去重后的游戏数量
+            var totalPlaytimeMinutes = allPlatformGames.Sum(g => g.PlaytimeMinutes);
+
+            // 统计所有五个平台的成就数量
+            var unlockedAchievements = await _context.UserAchievements
+                .Where(ua => ua.UserId == userId && ua.Unlocked && platformIds.Contains(ua.PlatformId))
+                .CountAsync();
+
+            var totalAchievements = await _context.UserAchievements
+                .Where(ua => ua.UserId == userId && platformIds.Contains(ua.PlatformId))
+                .Select(ua => ua.AchievementId)
+                .Distinct()
+                .CountAsync();
+
+            // 获取最近游玩的游戏（所有平台）
+            var recentlyPlayedGames = allPlatformGames
+                .Where(g => g.LastPlayed.HasValue)
+                .OrderByDescending(g => g.LastPlayed)
+                .Take(10)
+                .ToList();
+            var recentlyPlayedCount = recentlyPlayedGames.Count;
+            var recentPlaytimeMinutes = recentlyPlayedGames.Sum(g => g.PlaytimeMinutes);
+
             // 获取平台统计(从数据库查询实际数据)
-            var platformStats = await _context.Platforms
-                .Select(p => new PlatformStatsDto
+            var platformStatsList = new List<PlatformStatsDto>();
+            foreach (var platformId in platformIds)
+            {
+                var platform = await _context.Platforms.FindAsync(platformId);
+                if (platform == null) continue;
+
+                var platformBindingUserIds = bindingKeys
+                    .Where(bk => bk.PlatformId == platformId)
+                    .Select(bk => bk.PlatformUserId)
+                    .ToList();
+
+                if (platformBindingUserIds.Count == 0)
                 {
-                    PlatformId = p.PlatformId,
-                    PlatformName = p.PlatformName,
-                    GamesOwned = _context.UserPlatformLibraries
-                        .Count(upl => upl.PlatformId == p.PlatformId && 
-                            _context.PlayerPlatforms.Any(pp => 
-                                pp.PlatformId == p.PlatformId && 
-                                pp.PlatformUserId == upl.PlatformUserId)),
-                    LastSyncTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-                })
-                .Where(ps => ps.GamesOwned > 0)
-                .ToListAsync();
+                    continue; // 该平台没有绑定账号，跳过
+                }
+
+                // 先查询该平台的所有游戏，然后在客户端过滤
+                var platformGamesQuery = _context.UserPlatformLibraries
+                    .Where(upl => upl.PlatformId == platformId);
+                
+                var platformGamesTemp = await platformGamesQuery.ToListAsync();
+                var gamesOwned = platformGamesTemp
+                    .Count(upl => platformBindingUserIds.Contains(upl.PlatformUserId));
+
+                if (gamesOwned > 0)
+                {
+                    var binding = await _context.UserPlatformBindings
+                        .FirstOrDefaultAsync(upb => upb.UserId == userId && upb.PlatformId == platformId && upb.BindingStatus == true);
+                    
+                    var lastSyncTime = binding?.LastSyncTime?.ToString("yyyy-MM-ddTHH:mm:ssZ") 
+                        ?? DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+                    platformStatsList.Add(new PlatformStatsDto
+                    {
+                        PlatformId = platform.PlatformId,
+                        PlatformName = platform.PlatformName,
+                        GamesOwned = gamesOwned,
+                        LastSyncTime = lastSyncTime
+                    });
+                }
+            }
+            var platformStats = platformStatsList;
 
             // 获取题材分布(从数据库查询实际数据)
-            var genreDistribution = await _context.GameGenres
-                .Where(gg => _context.UserPlatformLibraries.Any(upl => upl.GameId == gg.GameId))
-                .GroupBy(gg => gg.Genre!.Name)
+            var gameGenres = await _context.GameGenres
+                .Where(gg => uniqueGameIds.Contains(gg.GameId))
+                .Include(gg => gg.Genre)
+                .ToListAsync();
+
+            var genreDistribution = gameGenres
+                .GroupBy(gg => gg.Genre?.Name ?? "")
                 .Select(g => new GenreDistributionDto
                 {
-                    Genre = g.Key ?? "",
+                    Genre = g.Key,
                     Count = g.Count(),
-                    PlaytimeMinutes = _context.UserPlatformLibraries
+                    PlaytimeMinutes = allPlatformGames
                         .Where(upl => g.Any(gg => gg.GameId == upl.GameId))
-                        .Sum(upl => (int?)upl.PlaytimeMinutes) ?? 0
+                        .Sum(upl => upl.PlaytimeMinutes)
                 })
                 .OrderByDescending(gd => gd.PlaytimeMinutes)
                 .Take(10)
-                .ToListAsync();
+                .ToList();
 
             var result = new LibraryOverviewDto
             {
-                TotalGamesOwned = library.TotalGamesOwned,
-                GamesPlayed = library.GamesPlayed,
-                TotalPlaytimeMinutes = library.TotalPlaytimeMinutes,
-                TotalAchievements = library.TotalAchievements ?? 0,
-                UnlockedAchievements = library.UnlockedAchievements ?? 0,
-                RecentlyPlayedCount = library.RecentlyPlayedCount,
-                RecentPlaytimeMinutes = library.RecentPlaytimeMinutes,
+                TotalGamesOwned = totalGamesOwned,
+                GamesPlayed = gamesPlayed,
+                TotalPlaytimeMinutes = totalPlaytimeMinutes,
+                TotalAchievements = totalAchievements,
+                UnlockedAchievements = unlockedAchievements,
+                RecentlyPlayedCount = recentlyPlayedCount,
+                RecentPlaytimeMinutes = recentPlaytimeMinutes,
                 PlatformStats = platformStats,
                 GenreDistribution = genreDistribution
             };

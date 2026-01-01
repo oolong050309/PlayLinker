@@ -298,17 +298,17 @@ public class ParentalMonitoringService : BackgroundService
                 {
                     // 创建新通知
                     notification = new NotificationCenter
-                    {
-                        UserId = parentUser.UserId,
-                        SourceModule = "parental_control",
-                        Title = notificationTitle,
-                        Content = notificationContent,
-                        NotificationType = "warning",
-                        IsRead = false,
-                        RelatedId = rule.RuleId,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    context.NotificationCenters.Add(notification);
+                {
+                    UserId = parentUser.UserId,
+                    SourceModule = "parental_control",
+                    Title = notificationTitle,
+                    Content = notificationContent,
+                    NotificationType = "warning",
+                    IsRead = false,
+                    RelatedId = rule.RuleId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                context.NotificationCenters.Add(notification);
                 }
 
                 await context.SaveChangesAsync(cancellationToken);
