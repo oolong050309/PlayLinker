@@ -29,6 +29,11 @@ public interface IXboxService
     Task<List<XboxUserAchievementDto>> GetXboxUserAchievements(string xuid, int userId);
 
     /// <summary>
+    /// 获取Xbox游戏成就列表和玩家解锁状态（需要用户ID以获取令牌）
+    /// </summary>
+    Task<List<XboxGameAchievementDto>> GetXboxGameAchievements(string xuid, int userId, string titleId);
+
+    /// <summary>
     /// 获取Xbox用户的游戏列表（用于导入）（需要用户ID以获取令牌）
     /// </summary>
     Task<List<XboxGameDto>> GetXboxUserGames(string xuid, int userId);

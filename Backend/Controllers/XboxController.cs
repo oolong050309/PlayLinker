@@ -469,18 +469,189 @@ public class XboxController : ControllerBase
                     }
                     
                     _logger.LogInformation("成功导入 {Count} 个Xbox游戏", gamesCount);
-                    
-                    // 导入完成后，更新LastSyncTime
-                    if (userPlatformBinding != null)
-                    {
-                        userPlatformBinding.LastSyncTime = DateTime.UtcNow;
-                        await _context.SaveChangesAsync();
-                        _logger.LogInformation("已更新LastSyncTime: {LastSyncTime}", userPlatformBinding.LastSyncTime);
-                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "导入游戏库数据失败");
+                }
+            }
+
+            // 导入成就数据
+            if (request.ImportAchievements)
+            {
+                try
+                {
+                    _logger.LogInformation("开始导入Xbox游戏成就数据...");
+                    
+                    // 获取用户游戏列表（只获取已导入的游戏）
+                    var userGames = await _context.UserPlatformLibraries
+                        .Where(upl => upl.PlatformUserId == request.XboxUserId && upl.PlatformId == XBOX_PLATFORM_ID)
+                        .Include(upl => upl.Game)
+                        .ToListAsync();
+                    
+                    if (userGames.Count == 0)
+                    {
+                        _logger.LogWarning("用户没有已导入的游戏，无法导入成就数据");
+                    }
+                    else
+                    {
+                        int achievementsImported = 0;
+                        int userAchievementsUpdated = 0;
+                        
+                        foreach (var userGame in userGames)
+                        {
+                            try
+                            {
+                                // 获取游戏的 Xbox TitleId
+                                var gamePlatform = await _context.GamePlatforms
+                                    .FirstOrDefaultAsync(gp => gp.GameId == userGame.GameId && gp.PlatformId == XBOX_PLATFORM_ID);
+                                
+                                if (gamePlatform == null || string.IsNullOrEmpty(gamePlatform.PlatformGameId))
+                                {
+                                    _logger.LogWarning("游戏 {GameId} 没有Xbox平台映射，跳过成就导入", userGame.GameId);
+                                    continue;
+                                }
+                                
+                                var titleId = gamePlatform.PlatformGameId;
+                                _logger.LogInformation("开始导入游戏成就: gameId={GameId}, titleId={TitleId}, gameName={GameName}", 
+                                    userGame.GameId, titleId, userGame.Game.Name);
+                                
+                                // 调用服务获取游戏成就
+                                var achievementsData = await _xboxService.GetXboxGameAchievements(request.XboxUserId, userId, titleId);
+                                
+                                if (achievementsData == null || achievementsData.Count == 0)
+                                {
+                                    _logger.LogWarning("游戏 {GameId} (titleId={TitleId}) 没有获取到成就数据", userGame.GameId, titleId);
+                                    continue;
+                                }
+                                
+                                // 处理每个成就
+                                foreach (var achData in achievementsData)
+                                {
+                                    try
+                                    {
+                                        // 查找或创建成就记录（成就是游戏级别的，不区分平台）
+                                        var achievement = await _context.Achievements
+                                            .FirstOrDefaultAsync(a => a.GameId == userGame.GameId && a.AchievementName == achData.Id);
+                                        
+                                        if (achievement == null)
+                                        {
+                                            // 创建新成就记录
+                                            achievement = new Achievement
+                                            {
+                                                GameId = userGame.GameId,
+                                                AchievementName = achData.Id,
+                                                DisplayName = achData.Name,
+                                                Description = achData.Description,
+                                                Hidden = achData.IsSecret,
+                                                IconUnlocked = achData.IconUnlocked ?? "",
+                                                IconLocked = achData.IconLocked ?? ""
+                                            };
+                                            _context.Achievements.Add(achievement);
+                                            await _context.SaveChangesAsync(); // 保存以获取 AchievementId
+                                            achievementsImported++;
+                                            _logger.LogInformation("创建新成就: gameId={GameId}, achievementId={AchievementId}, name={Name}", 
+                                                userGame.GameId, achievement.AchievementId, achData.Name);
+                                        }
+                                        else
+                                        {
+                                            // 更新已有成就的缺失字段
+                                            bool needsUpdate = false;
+                                            
+                                            if (string.IsNullOrEmpty(achievement.DisplayName) && !string.IsNullOrEmpty(achData.Name))
+                                            {
+                                                achievement.DisplayName = achData.Name;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            if (string.IsNullOrEmpty(achievement.Description) && !string.IsNullOrEmpty(achData.Description))
+                                            {
+                                                achievement.Description = achData.Description;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            if (string.IsNullOrEmpty(achievement.IconUnlocked) && !string.IsNullOrEmpty(achData.IconUnlocked))
+                                            {
+                                                achievement.IconUnlocked = achData.IconUnlocked;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            if (string.IsNullOrEmpty(achievement.IconLocked) && !string.IsNullOrEmpty(achData.IconLocked))
+                                            {
+                                                achievement.IconLocked = achData.IconLocked;
+                                                needsUpdate = true;
+                                            }
+                                            
+                                            if (needsUpdate)
+                                            {
+                                                await _context.SaveChangesAsync();
+                                            }
+                                        }
+                                        
+                                        // 创建或更新用户成就解锁记录
+                                        var userAchievement = await _context.UserAchievements
+                                            .FirstOrDefaultAsync(ua => ua.UserId == userId 
+                                                && ua.AchievementId == achievement.AchievementId 
+                                                && ua.PlatformId == XBOX_PLATFORM_ID);
+                                        
+                                        var unlockTime = achData.IsUnlocked && !string.IsNullOrEmpty(achData.UnlockTime)
+                                            ? DateTime.TryParse(achData.UnlockTime, out var dt) ? dt : (DateTime?)null
+                                            : null;
+                                        
+                                        if (userAchievement == null)
+                                        {
+                                            // 创建新用户成就记录
+                                            userAchievement = new UserAchievement
+                                            {
+                                                UserId = userId,
+                                                AchievementId = achievement.AchievementId,
+                                                PlatformId = XBOX_PLATFORM_ID,
+                                                Unlocked = achData.IsUnlocked,
+                                                UnlockTime = unlockTime
+                                            };
+                                            _context.UserAchievements.Add(userAchievement);
+                                            userAchievementsUpdated++;
+                                        }
+                                        else
+                                        {
+                                            // 更新现有记录
+                                            bool wasUnlocked = userAchievement.Unlocked;
+                                            userAchievement.Unlocked = achData.IsUnlocked;
+                                            userAchievement.UnlockTime = unlockTime;
+                                            
+                                            // 如果状态发生变化，记录更新
+                                            if (wasUnlocked != achData.IsUnlocked)
+                                            {
+                                                userAchievementsUpdated++;
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex, "处理成就失败: gameId={GameId}, achievementId={AchievementId}", 
+                                            userGame.GameId, achData.Id);
+                                    }
+                                }
+                                
+                                // 批量保存用户成就记录
+                                await _context.SaveChangesAsync();
+                                _logger.LogInformation("游戏 {GameId} 成就导入完成: 成就数={AchievementsCount}, 用户成就更新数={UserAchievementsCount}", 
+                                    userGame.GameId, achievementsData.Count, userAchievementsUpdated);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "导入游戏成就失败: gameId={GameId}", userGame.GameId);
+                            }
+                        }
+                        
+                        achievementsCount = achievementsImported;
+                        _logger.LogInformation("成功导入 {Count} 个成就和 {UserAchievementsCount} 条用户成就记录", 
+                            achievementsImported, userAchievementsUpdated);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "导入成就数据失败");
                 }
             }
 

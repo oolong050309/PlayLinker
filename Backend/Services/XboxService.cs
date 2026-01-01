@@ -88,7 +88,7 @@ public class XboxService : IXboxService
                     _logger.LogWarning("用户{UserId}存在平台{PlatformId}的绑定记录，但令牌为空", userId, platformId);
                 }
                 else
-            {
+                {
                     _logger.LogWarning("用户{UserId}未绑定平台{PlatformId}", userId, platformId);
                 }
                 return null;
@@ -914,6 +914,161 @@ public class XboxService : IXboxService
     }
 
     /// <summary>
+    /// 获取Xbox游戏成就数据
+    /// </summary>
+    private async Task<JsonDocument?> GetXboxGameAchievementsFromPython(int userId, string xuid, string titleId)
+    {
+        string? tempFilePath = null;
+        try
+        {
+            // 从数据库加载令牌到临时文件
+            tempFilePath = await LoadTokenFromDatabase(userId, 7);
+            
+            if (tempFilePath == null)
+            {
+                _logger.LogWarning("无法加载用户{UserId}的令牌", userId);
+                return null;
+            }
+
+            var arguments = $"--tokens \"{tempFilePath}\" --xuid {xuid} --title-id {titleId}";
+            var (exitCode, output, error) = await RunPythonScript("xbox_get_achievements.py", arguments);
+
+            _logger.LogInformation("Python脚本执行完成: ExitCode={ExitCode}", exitCode);
+            
+            if (!string.IsNullOrEmpty(output))
+            {
+                _logger.LogInformation("Python输出长度: {Length} 字符", output.Length);
+            }
+            else
+            {
+                _logger.LogWarning("Python输出为空");
+            }
+            
+            if (!string.IsNullOrEmpty(error))
+            {
+                _logger.LogWarning("Python错误输出: {Error}", error);
+            }
+
+            // 解析JSON输出
+            try
+            {
+                if (string.IsNullOrWhiteSpace(output))
+                {
+                    _logger.LogError("Python脚本没有输出任何内容，ExitCode={ExitCode}, Error={Error}", exitCode, error);
+                    return null;
+                }
+                
+                // 方法1：直接查找第一个 { 和最后一个 }，提取完整的 JSON
+                var firstBraceIdx = output.IndexOf('{');
+                var lastBraceIdx = output.LastIndexOf('}');
+                
+                if (firstBraceIdx >= 0 && lastBraceIdx > firstBraceIdx)
+                {
+                    var jsonContent = output.Substring(firstBraceIdx, lastBraceIdx - firstBraceIdx + 1);
+                    _logger.LogInformation("从输出中提取 JSON: 起始位置={Start}, 结束位置={End}, 长度={Length}", 
+                        firstBraceIdx, lastBraceIdx, jsonContent.Length);
+                    
+                    try
+                    {
+                        return JsonDocument.Parse(jsonContent);
+                    }
+                    catch (JsonException jsonEx)
+                    {
+                        _logger.LogWarning(jsonEx, "直接提取的 JSON 解析失败，尝试清理后重新解析");
+                        
+                        // 方法2：清理可能的日志行后重新提取
+                        var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                        var jsonLines = new List<string>();
+                        bool inJson = false;
+                        
+                        foreach (var line in lines)
+                        {
+                            var trimmedLine = line.Trim();
+                            
+                            // 跳过日志行
+                            if (trimmedLine.StartsWith("INFO:") || 
+                                trimmedLine.StartsWith("WARNING:") || 
+                                trimmedLine.StartsWith("ERROR:") ||
+                                trimmedLine.StartsWith("DEBUG:"))
+                            {
+                                continue;
+                            }
+                            
+                            // 检测 JSON 开始
+                            if (!inJson && trimmedLine.StartsWith("{"))
+                            {
+                                inJson = true;
+                            }
+                            
+                            if (inJson)
+                            {
+                                jsonLines.Add(line);
+                                
+                                // 如果行以 } 结尾，可能是 JSON 结束
+                                if (trimmedLine.EndsWith("}"))
+                                {
+                                    // 检查是否所有括号都闭合
+                                    var testContent = string.Join("\n", jsonLines);
+                                    int testBraces = 0;
+                                    foreach (var ch in testContent)
+                                    {
+                                        if (ch == '{') testBraces++;
+                                        if (ch == '}') testBraces--;
+                                    }
+                                    if (testBraces == 0)
+                                    {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        var cleanedJson = string.Join("\n", jsonLines);
+                        if (!string.IsNullOrWhiteSpace(cleanedJson))
+                        {
+                            _logger.LogInformation("使用清理后的 JSON: 长度={Length}", cleanedJson.Length);
+                            return JsonDocument.Parse(cleanedJson);
+                        }
+                        
+                        // 如果还是失败，记录错误并返回 null
+                        _logger.LogError("无法从Python输出中提取有效的JSON内容");
+                        _logger.LogDebug("原始输出前1000字符: {Output}", output.Length > 1000 ? output.Substring(0, 1000) : output);
+                        _logger.LogDebug("原始输出后1000字符: {Output}", output.Length > 1000 ? output.Substring(output.Length - 1000) : output);
+                        return null;
+                    }
+                }
+                else
+                {
+                    _logger.LogError("无法在Python输出中找到JSON内容（未找到 { 或 }）");
+                    _logger.LogDebug("原始输出前500字符: {Output}", output.Length > 500 ? output.Substring(0, 500) : output);
+                    return null;
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "解析Xbox成就数据JSON失败: ExitCode={ExitCode}", exitCode);
+                _logger.LogDebug("输出的后1000字符: {Output}", output.Length > 1000 ? output.Substring(output.Length - 1000) : output);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "解析Xbox成就数据时发生未预期的错误: ExitCode={ExitCode}", exitCode);
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取Xbox游戏成就数据时发生错误");
+            return null;
+        }
+        finally
+        {
+            // 清理临时文件
+            CleanupTempTokenFile(tempFilePath);
+        }
+    }
+
+    /// <summary>
     /// 获取Xbox数据（支持用户级令牌）
     /// </summary>
     private async Task<JsonDocument?> GetXboxDataFromPython(int userId, int platformId = 7)
@@ -1541,6 +1696,78 @@ public class XboxService : IXboxService
         {
             _logger.LogError(ex, "获取Xbox用户游戏列表时发生错误");
             return new List<XboxGameDto>();
+        }
+    }
+
+    /// <summary>
+    /// 获取Xbox游戏成就列表和玩家解锁状态
+    /// </summary>
+    public async Task<List<XboxGameAchievementDto>> GetXboxGameAchievements(string xuid, int userId, string titleId)
+    {
+        try
+        {
+            _logger.LogInformation("获取Xbox游戏成就: xuid={Xuid}, userId={UserId}, titleId={TitleId}", xuid, userId, titleId);
+
+            var achievementsData = await GetXboxGameAchievementsFromPython(userId, xuid, titleId);
+            
+            if (achievementsData == null)
+            {
+                _logger.LogWarning("无法获取游戏成就数据: titleId={TitleId}", titleId);
+                return new List<XboxGameAchievementDto>();
+            }
+
+            // 检查是否成功
+            if (achievementsData.RootElement.TryGetProperty("success", out var success) && !success.GetBoolean())
+            {
+                var errorMsg = achievementsData.RootElement.TryGetProperty("message", out var msg) 
+                    ? msg.GetString() ?? "未知错误" 
+                    : "未知错误";
+                _logger.LogWarning("获取游戏成就失败: titleId={TitleId}, error={Error}", titleId, errorMsg);
+                return new List<XboxGameAchievementDto>();
+            }
+
+            var achievements = new List<XboxGameAchievementDto>();
+
+            if (achievementsData.RootElement.TryGetProperty("achievements", out var achievementsArray))
+            {
+                foreach (var achElement in achievementsArray.EnumerateArray())
+                {
+                    try
+                    {
+                        var ach = new XboxGameAchievementDto
+                        {
+                            Id = achElement.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "",
+                            Name = achElement.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "",
+                            Description = achElement.TryGetProperty("description", out var descProp) ? descProp.GetString() ?? "" : "",
+                            LockedDescription = achElement.TryGetProperty("locked_description", out var lockedDescProp) ? lockedDescProp.GetString() ?? "" : "",
+                            ProgressState = achElement.TryGetProperty("progress_state", out var stateProp) ? stateProp.GetString() ?? "" : "",
+                            IsSecret = achElement.TryGetProperty("is_secret", out var secretProp) && secretProp.GetBoolean(),
+                            IsUnlocked = achElement.TryGetProperty("is_unlocked", out var unlockedProp) && unlockedProp.GetBoolean(),
+                            UnlockTime = achElement.TryGetProperty("unlock_time", out var timeProp) ? timeProp.GetString() : null,
+                            Gamerscore = achElement.TryGetProperty("gamerscore", out var scoreProp) ? SafeGetInt32(scoreProp) : 0,
+                            IconUnlocked = achElement.TryGetProperty("icon_unlocked", out var iconUnlockedProp) ? iconUnlockedProp.GetString() : null,
+                            IconLocked = achElement.TryGetProperty("icon_locked", out var iconLockedProp) ? iconLockedProp.GetString() : null
+                        };
+
+                        if (!string.IsNullOrEmpty(ach.Id))
+                        {
+                            achievements.Add(ach);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "解析成就数据失败: titleId={TitleId}", titleId);
+                    }
+                }
+            }
+
+            _logger.LogInformation("成功获取 {Count} 个游戏成就: titleId={TitleId}", achievements.Count, titleId);
+            return achievements;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取Xbox游戏成就时发生错误: titleId={TitleId}", titleId);
+            return new List<XboxGameAchievementDto>();
         }
     }
 

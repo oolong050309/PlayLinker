@@ -321,6 +321,78 @@ public class XboxAchievementsInfoDto
 }
 
 /// <summary>
+/// Xbox游戏成就DTO（用于从API获取的原始数据）
+/// </summary>
+public class XboxGameAchievementDto
+{
+    /// <summary>
+    /// 成就ID（Xbox API返回的成就唯一标识）
+    /// </summary>
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 成就名称
+    /// </summary>
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 成就描述
+    /// </summary>
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 锁定状态下的描述
+    /// </summary>
+    [JsonPropertyName("locked_description")]
+    public string LockedDescription { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 进度状态（Achieved, NotStarted, InProgress）
+    /// </summary>
+    [JsonPropertyName("progress_state")]
+    public string ProgressState { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 是否隐藏成就
+    /// </summary>
+    [JsonPropertyName("is_secret")]
+    public bool IsSecret { get; set; }
+
+    /// <summary>
+    /// 是否已解锁
+    /// </summary>
+    [JsonPropertyName("is_unlocked")]
+    public bool IsUnlocked { get; set; }
+
+    /// <summary>
+    /// 解锁时间（ISO格式字符串）
+    /// </summary>
+    [JsonPropertyName("unlock_time")]
+    public string? UnlockTime { get; set; }
+
+    /// <summary>
+    /// Gamerscore分数
+    /// </summary>
+    [JsonPropertyName("gamerscore")]
+    public int Gamerscore { get; set; }
+
+    /// <summary>
+    /// 解锁图标URL
+    /// </summary>
+    [JsonPropertyName("icon_unlocked")]
+    public string? IconUnlocked { get; set; }
+
+    /// <summary>
+    /// 锁定图标URL
+    /// </summary>
+    [JsonPropertyName("icon_locked")]
+    public string? IconLocked { get; set; }
+}
+
+/// <summary>
 /// Xbox用户成就DTO
 /// </summary>
 public class XboxUserAchievementDto

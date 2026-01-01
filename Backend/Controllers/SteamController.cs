@@ -775,8 +775,16 @@ public class SteamController : ControllerBase
                 try
                 {
                     // 获取用户游戏列表
+                    // 通过 user_platform_binding 验证，确保只查询当前用户绑定的平台账号的游戏
+                    // 这样可以避免查询到其他用户的游戏，即使他们使用了相同的 SteamId
                     var userGames = await _context.UserPlatformLibraries
-                        .Where(upl => upl.PlatformUserId == request.SteamId && upl.PlatformId == STEAM_PLATFORM_ID)
+                        .Where(upl => upl.PlatformUserId == request.SteamId && 
+                                     upl.PlatformId == STEAM_PLATFORM_ID &&
+                                     _context.UserPlatformBindings.Any(upb => 
+                                         upb.UserId == userId && 
+                                         upb.PlatformId == STEAM_PLATFORM_ID && 
+                                         upb.PlatformUserId == upl.PlatformUserId && 
+                                         upb.BindingStatus == true))
                         .ToListAsync();
 
                     // 使用已获取的apiKey
