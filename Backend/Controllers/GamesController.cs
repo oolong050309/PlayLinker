@@ -54,7 +54,8 @@ public class GamesController : ControllerBase
         [FromQuery] string? sortBy = null,
         [FromQuery] string? platform = null,
         [FromQuery] string? genre = null,
-        [FromQuery] bool? isFree = null)
+        [FromQuery] bool? isFree = null,
+        [FromQuery] string? q = null) // [修改] 新增搜索参数
     {
         try
         {
@@ -62,6 +63,13 @@ public class GamesController : ControllerBase
             pageSize = Math.Clamp(pageSize, 1, 100);
 
             var query = _context.Games.AsQueryable();
+
+            // [修改] 增加搜索逻辑
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                // 使用 Contains 进行模糊匹配
+                query = query.Where(g => g.Name.Contains(q));
+            }
 
             if (!string.IsNullOrEmpty(genre))
             {
