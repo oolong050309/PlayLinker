@@ -369,6 +369,12 @@ public class AchievementsController : ControllerBase
             // 组装带有个人解锁状态的成就列表（不再请求 Steam，全局解锁率统一为 0）
             var achievements = new List<AchievementDto>();
 
+            // 获取平台信息字典
+            var platformIds = achievementsList.Select(a => a.PlatformId).Distinct().ToList();
+            var platforms = await _context.Platforms
+                .Where(p => platformIds.Contains(p.PlatformId))
+                .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
             foreach (var achievement in achievementsList)
             {
                 userAchievementDict.TryGetValue(achievement.AchievementId, out var ua);
@@ -378,6 +384,8 @@ public class AchievementsController : ControllerBase
                 {
                     unlockTimeStr = ua.UnlockTime.Value.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 }
+
+                platforms.TryGetValue(achievement.PlatformId, out var platformName);
 
                 achievements.Add(new AchievementDto
                 {
@@ -390,7 +398,9 @@ public class AchievementsController : ControllerBase
                     IconLocked = achievement.IconLocked,
                     GlobalUnlockRate = 0.0,
                     Unlocked = unlocked,
-                    UnlockTime = unlockTimeStr
+                    UnlockTime = unlockTimeStr,
+                    PlatformId = achievement.PlatformId,
+                    PlatformName = platformName
                 });
             }
 

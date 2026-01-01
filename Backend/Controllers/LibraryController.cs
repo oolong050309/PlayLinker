@@ -408,18 +408,73 @@ public class LibraryController : ControllerBase
                     }
                 );
 
-            // 获取所有游戏的成就总数
-            var gameAchievementCounts = await _context.Achievements
+            // 获取所有游戏的成就总数（按平台分组）
+            var gamePlatformAchievements = await _context.Achievements
                 .Where(a => gameIds.Contains(a.GameId))
+                .GroupBy(a => new { a.GameId, a.PlatformId })
+                .Select(g => new { 
+                    GameId = g.Key.GameId, 
+                    PlatformId = g.Key.PlatformId, 
+                    TotalCount = g.Count() 
+                })
+                .ToListAsync();
+            
+            // 获取平台信息字典
+            var platformIds = gamePlatformAchievements.Select(a => a.PlatformId).Distinct().ToList();
+            var platforms = await _context.Platforms
+                .Where(p => platformIds.Contains(p.PlatformId))
+                .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+            
+            // 获取用户已解锁的成就（按平台分组）
+            var userUnlockedAchievementsByPlatform = await _context.UserAchievements
+                .Where(ua => ua.UserId == userId && ua.Unlocked && achievementIds.Contains(ua.AchievementId))
+                .Join(_context.Achievements, ua => ua.AchievementId, a => a.AchievementId, (ua, a) => new { 
+                    AchievementId = ua.AchievementId, 
+                    GameId = a.GameId, 
+                    PlatformId = a.PlatformId 
+                })
+                .GroupBy(x => new { x.GameId, x.PlatformId })
+                .Select(g => new { 
+                    GameId = g.Key.GameId, 
+                    PlatformId = g.Key.PlatformId, 
+                    UnlockedCount = g.Count() 
+                })
+                .ToListAsync();
+            
+            // 构建游戏-平台成就统计字典
+            var platformAchievementStatsDict = gamePlatformAchievements
                 .GroupBy(a => a.GameId)
-                .Select(g => new { GameId = g.Key, TotalCount = g.Count() })
-                .ToDictionaryAsync(x => (long)x.GameId, x => x.TotalCount);
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(a => {
+                        var unlockedCount = userUnlockedAchievementsByPlatform
+                            .FirstOrDefault(u => u.GameId == a.GameId && u.PlatformId == a.PlatformId)?.UnlockedCount ?? 0;
+                        var unlockRate = a.TotalCount > 0 ? (double)unlockedCount / a.TotalCount * 100 : 0;
+                        platforms.TryGetValue(a.PlatformId, out var platformName);
+                        return new PlatformAchievementStatsDto
+                        {
+                            PlatformId = a.PlatformId,
+                            PlatformName = platformName ?? $"平台 {a.PlatformId}",
+                            AchievementsUnlocked = unlockedCount,
+                            AchievementsTotal = a.TotalCount,
+                            UnlockRate = unlockRate
+                        };
+                    }).ToList()
+                );
+            
+            // 获取所有游戏的成就总数（用于向后兼容）
+            var gameAchievementCounts = gamePlatformAchievements
+                .GroupBy(a => a.GameId)
+                .ToDictionary(g => g.Key, g => g.Sum(a => a.TotalCount));
             
             // 构建返回数据
             var items = games.Select(g => {
                 var totalCount = gameAchievementCounts.GetValueOrDefault(g.GameId, 0);
                 var progress = achievementDict.GetValueOrDefault(g.GameId, 0);
                 var unlockedCount = totalCount > 0 ? (int)(progress / 100.0 * totalCount) : 0;
+                
+                // 获取该游戏的平台成就统计
+                var platformStats = platformAchievementStatsDict.GetValueOrDefault(g.GameId, new List<PlatformAchievementStatsDto>());
                 
                 return new UserGameItemDto
                 {
@@ -436,7 +491,8 @@ public class LibraryController : ControllerBase
                         PlatformId = upl.PlatformId,
                         PlatformName = upl.PlayerPlatform?.Platform?.PlatformName ?? "",
                         PlaytimeMinutes = upl.PlaytimeMinutes
-                    }).ToList()
+                    }).ToList(),
+                    PlatformAchievements = platformStats
                 };
             }).ToList();
 

@@ -64,6 +64,19 @@ public class UserGameItemDto
     public int AchievementsUnlocked { get; set; }
     public int AchievementsTotal { get; set; }
     public List<OwnedPlatformDto> OwnedPlatforms { get; set; } = new();
+    public List<PlatformAchievementStatsDto> PlatformAchievements { get; set; } = new();
+}
+
+/// <summary>
+/// 平台成就统计DTO
+/// </summary>
+public class PlatformAchievementStatsDto
+{
+    public int PlatformId { get; set; }
+    public string PlatformName { get; set; } = string.Empty;
+    public int AchievementsUnlocked { get; set; }
+    public int AchievementsTotal { get; set; }
+    public double UnlockRate { get; set; }
 }
 
 /// <summary>

@@ -26,6 +26,8 @@ public class AchievementDto
     public double GlobalUnlockRate { get; set; }
     public bool? Unlocked { get; set; }
     public string? UnlockTime { get; set; }
+    public int PlatformId { get; set; }
+    public string? PlatformName { get; set; }
 }
 
 /// <summary>

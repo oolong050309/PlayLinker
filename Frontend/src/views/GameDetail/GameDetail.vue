@@ -178,6 +178,27 @@
               </div>
             </div>
 
+            <!-- 平台筛选器 -->
+            <div v-if="!achievementsLoading && achievements.length > 0" class="platform-filter">
+              <button
+                @click="selectedPlatformId = null"
+                :class="['platform-filter-btn', { active: selectedPlatformId === null }]"
+              >
+                全部
+              </button>
+              <button
+                v-for="group in groupedAchievements"
+                :key="group.platformId"
+                @click="selectedPlatformId = group.platformId"
+                :class="['platform-filter-btn', { active: selectedPlatformId === group.platformId }]"
+              >
+                {{ group.platformName }}
+                <span class="platform-badge" v-if="platformStats[group.platformId]">
+                  {{ platformStats[group.platformId].unlocked }}/{{ platformStats[group.platformId].total }}
+                </span>
+              </button>
+            </div>
+
             <div v-if="achievementsLoading" class="loading-small">
               <div class="loading-spinner-small"></div>
               <span>加载成就中...</span>
@@ -188,9 +209,14 @@
               <p>暂无成就数据</p>
             </div>
 
+            <div v-else-if="displayedAchievements.length === 0" class="empty-state">
+              <Trophy class="empty-icon" size="48" />
+              <p>该平台暂无成就数据</p>
+            </div>
+
             <div v-else class="achievements-grid">
               <div 
-                v-for="(achievement, index) in achievements" 
+                v-for="(achievement, index) in displayedAchievements" 
                 :key="achievement.id || achievement.achievementId"
                 class="achievement-card"
                 :class="{ 
@@ -645,6 +671,10 @@ const revealedHiddenAchievements = ref(new Set()) // 已点击显示剧透的隐
 const hoveredAchievementId = ref(null) // 当前鼠标悬停的成就ID
 const newlyRevealedAchievements = ref(new Set()) // 刚刚被点击显示的成就ID集合（用于触发动画）
 
+// 平台筛选相关状态
+const selectedPlatformId = ref(null) // 当前选中的平台ID，null表示显示所有平台
+const platformGroups = ref([]) // 按平台分组的成就数据
+
 // 游戏介绍展开状态
 const showDetailedDescription = ref(false) // 是否显示详细描述
 
@@ -669,16 +699,71 @@ const targetPrice = ref(null)
 const targetDiscount = ref(null)
 const savingAlert = ref(false)
 
-// 计算属性
+// 平台ID到平台名称的映射
+const platformNameMap = {
+  1: 'Steam',
+  2: 'Epic Games',
+  3: 'Origin',
+  4: 'Uplay',
+  5: 'GOG',
+  6: 'PSN',
+  7: 'Xbox',
+  8: 'Nintendo Switch'
+}
+
+// 计算属性 - 按平台分组的成就
+const groupedAchievements = computed(() => {
+  const groups = {}
+  achievements.value.forEach(achievement => {
+    const platformId = achievement.platformId || 1
+    const platformName = achievement.platformName || platformNameMap[platformId] || `平台 ${platformId}`
+    
+    if (!groups[platformId]) {
+      groups[platformId] = {
+        platformId,
+        platformName,
+        achievements: []
+      }
+    }
+    groups[platformId].achievements.push(achievement)
+  })
+  return Object.values(groups)
+})
+
+// 当前显示的成就列表（根据平台筛选）
+const displayedAchievements = computed(() => {
+  if (selectedPlatformId.value === null) {
+    // 显示所有成就
+    return achievements.value
+  } else {
+    // 只显示选中平台的成就
+    return achievements.value.filter(a => (a.platformId || 1) === selectedPlatformId.value)
+  }
+})
+
+// 计算属性 - 成就统计（根据当前筛选的平台）
 const achievementStats = computed(() => {
-  const total = achievements.value.length
-  const unlocked = achievements.value.filter(a => a.isUnlocked).length
+  const achievementsToCount = displayedAchievements.value
+  const total = achievementsToCount.length
+  const unlocked = achievementsToCount.filter(a => a.isUnlocked).length
   return { total, unlocked }
 })
 
 const achievementProgress = computed(() => {
   if (achievementStats.value.total === 0) return 0
   return ((achievementStats.value.unlocked / achievementStats.value.total) * 100).toFixed(1)
+})
+
+// 按平台计算的成就统计
+const platformStats = computed(() => {
+  const stats = {}
+  groupedAchievements.value.forEach(group => {
+    const total = group.achievements.length
+    const unlocked = group.achievements.filter(a => a.isUnlocked).length
+    const progress = total > 0 ? ((unlocked / total) * 100).toFixed(1) : 0
+    stats[group.platformId] = { total, unlocked, progress }
+  })
+  return stats
 })
 
 // 加载游戏详情
@@ -853,6 +938,8 @@ const loadAchievements = async () => {
         const unlocked = a.unlocked ?? a.Unlocked
         const unlockTime = a.unlockTime ?? a.UnlockTime
         const hidden = a.hidden ?? a.Hidden ?? false
+        const platformId = a.platformId ?? a.PlatformId ?? 1
+        const platformName = a.platformName ?? a.PlatformName
 
         return {
           id: a.id || a.achievementId || a.AchievementId,
@@ -862,7 +949,9 @@ const loadAchievements = async () => {
           iconLocked: a.iconLocked || a.IconLocked,
           isUnlocked: unlocked !== undefined ? unlocked : (unlockTime != null),
           unlockTime,
-          hidden
+          hidden,
+          platformId,
+          platformName
         }
       })
       console.log('处理后的成就数据:', achievements.value.length, achievements.value)
@@ -1672,6 +1761,56 @@ onMounted(() => {
 .achievement-progress {
   font-size: 14px;
   color: #94a3b8;
+}
+
+/* 平台筛选器 */
+.platform-filter {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.platform-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(20, 20, 23, 0.75);
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(20px);
+}
+
+.platform-filter-btn:hover {
+  background: rgba(30, 30, 35, 0.9);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+}
+
+.platform-filter-btn.active {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+}
+
+.platform-filter .platform-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 2px 8px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c4b5fd;
 }
 
 /* 游戏介绍 */

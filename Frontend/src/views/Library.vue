@@ -94,11 +94,21 @@
               :alt="game.name"
               @error="handleImageError"
             />
+            <!-- 右上角平台信息 -->
+            <div class="platform-badges-top">
+              <span 
+                v-for="platform in game.allPlatforms" 
+                :key="platform.platformId"
+                class="platform-badge-top"
+                :class="{ 'owned': platform.isOwned, 'not-owned': !platform.isOwned }"
+              >
+                {{ platform.platformName }}
+              </span>
+            </div>
             <!-- 图片上的文字叠加 -->
             <div class="game-overlay">
               <h3 class="game-name-overlay">{{ game.name }}</h3>
               <div class="game-meta-overlay">
-                <span v-if="game.platformName" class="platform-badge-overlay">{{ game.platformName }}</span>
                 <span v-if="game.playtimeMinutes > 0" class="playtime-overlay">
                   {{ formatPlaytime(game.playtimeMinutes) }}
                 </span>
@@ -241,8 +251,94 @@ const loadGames = async () => {
       games.value = items.map(game => {
         const ownedPlatforms = game.ownedPlatforms ?? game.OwnedPlatforms ?? []
         const platformName = ownedPlatforms.map(p => p.platformName ?? p.PlatformName).join(', ') || '未知平台'
-        const unlocked = game.achievementsUnlocked ?? game.AchievementsUnlocked ?? 0
-        const total = game.achievementsTotal ?? game.AchievementsTotal ?? 0
+        
+        // 获取按平台分组的成就数据
+        const platformAchievements = game.platformAchievements ?? game.PlatformAchievements ?? []
+        
+        // 获取用户拥有的平台ID集合
+        const ownedPlatformIds = new Set(ownedPlatforms.map(p => p.platformId ?? p.PlatformId))
+        
+        // 平台ID到平台名称的映射
+        const platformNameMap = {
+          1: 'Steam',
+          2: 'Epic Games',
+          3: 'Origin',
+          4: 'Uplay',
+          5: 'GOG',
+          6: 'PSN',
+          7: 'Xbox',
+          8: 'Nintendo Switch'
+        }
+        
+        // 构建所有平台列表
+        const allPlatformsMap = new Map()
+        
+        // 先从成就数据中获取所有平台（包含平台名称）
+        platformAchievements.forEach(pa => {
+          const platformId = pa.platformId ?? pa.PlatformId
+          const platformName = pa.platformName ?? pa.PlatformName
+          if (platformId) {
+            allPlatformsMap.set(platformId, {
+              platformId,
+              platformName: platformName || platformNameMap[platformId] || `平台 ${platformId}`,
+              isOwned: ownedPlatformIds.has(platformId)
+            })
+          }
+        })
+        
+        // 从游戏支持的平台列表中添加（如果成就数据中没有）
+        const gamePlatforms = game.platforms ?? game.Platforms ?? []
+        gamePlatforms.forEach(platformId => {
+          if (!allPlatformsMap.has(platformId)) {
+            allPlatformsMap.set(platformId, {
+              platformId,
+              platformName: platformNameMap[platformId] || `平台 ${platformId}`,
+              isOwned: ownedPlatformIds.has(platformId)
+            })
+          }
+        })
+        
+        // 如果还是没有平台信息，则从拥有的平台中获取
+        if (allPlatformsMap.size === 0) {
+          ownedPlatforms.forEach(p => {
+            const platformId = p.platformId ?? p.PlatformId
+            const platformName = p.platformName ?? p.PlatformName
+            if (platformId) {
+              allPlatformsMap.set(platformId, {
+                platformId,
+                platformName: platformName || platformNameMap[platformId] || `平台 ${platformId}`,
+                isOwned: true
+              })
+            }
+          })
+        }
+        
+        const allPlatforms = Array.from(allPlatformsMap.values())
+        
+        // 找到解锁率最高的平台
+        let bestPlatform = null
+        if (platformAchievements.length > 0) {
+          bestPlatform = platformAchievements.reduce((best, current) => {
+            if (!best) return current
+            // 优先选择解锁率更高的平台
+            if (current.unlockRate > best.unlockRate) {
+              return current
+            }
+            // 如果解锁率相同，选择成就总数更多的平台
+            if (current.unlockRate === best.unlockRate && current.achievementsTotal > best.achievementsTotal) {
+              return current
+            }
+            return best
+          }, null)
+        }
+        
+        // 使用最佳平台的成就数据，如果没有则使用总数据
+        const unlocked = bestPlatform 
+          ? (bestPlatform.achievementsUnlocked ?? bestPlatform.AchievementsUnlocked ?? 0)
+          : (game.achievementsUnlocked ?? game.AchievementsUnlocked ?? 0)
+        const total = bestPlatform
+          ? (bestPlatform.achievementsTotal ?? bestPlatform.AchievementsTotal ?? 0)
+          : (game.achievementsTotal ?? game.AchievementsTotal ?? 0)
         const achievementProgress = total > 0 ? (unlocked / total * 100) : 0
         
         return {
@@ -252,10 +348,13 @@ const loadGames = async () => {
           platformName: platformName,
           playtimeMinutes: game.playtimeMinutes ?? game.PlaytimeMinutes ?? 0,
           lastPlayed: game.lastPlayed ?? game.LastPlayed,
-          // 成就相关：总数和已解锁数都保留，方便展示
+          // 成就相关：使用最佳平台的数据
           achievementsUnlocked: unlocked,
           achievementsTotal: total,
-          achievementProgress: achievementProgress
+          achievementProgress: achievementProgress,
+          bestPlatformName: bestPlatform ? (bestPlatform.platformName ?? bestPlatform.PlatformName) : null,
+          // 所有平台列表
+          allPlatforms: allPlatforms
         }
       })
       
@@ -546,6 +645,46 @@ onActivated(() => {
   position: relative;
 }
 
+/* 右上角平台徽章 */
+.platform-badges-top {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 2;
+  max-width: calc(100% - 16px);
+  justify-content: flex-end;
+}
+
+.platform-badge-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #cbd5e1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+
+.platform-badge-top.owned {
+  background: rgba(139, 92, 246, 0.3);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+}
+
+.platform-badge-top.not-owned {
+  color: #64748b;
+  opacity: 0.7;
+}
+
 .game-image img {
   width: 100%;
   height: 100%;
@@ -588,16 +727,6 @@ onActivated(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.platform-badge-overlay {
-  background: rgba(139, 92, 246, 0.2);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #c4b5fd;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .playtime-overlay {
