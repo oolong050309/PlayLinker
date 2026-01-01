@@ -342,13 +342,39 @@ public class GogController : ControllerBase
                     
                     var gogGames = await _gogService.GetGogUserGames(request.GogUserId, userId);
                     
+                    _logger.LogInformation("开始处理 {Count} 个GOG游戏", gogGames.Count);
+                    
                     foreach (var gogGame in gogGames)
                     {
                         try
                         {
-                            // 查找或创建游戏
-                            var game = await _context.Games
-                                .FirstOrDefaultAsync(g => g.Name == gogGame.Name);
+                            if (string.IsNullOrEmpty(gogGame.Name))
+                            {
+                                _logger.LogWarning("跳过游戏：名称为空，GameId={GameId}", gogGame.GogGameId);
+                                continue;
+                            }
+                            
+                            // 查找或创建游戏（优先通过GamePlatform的PlatformGameId匹配，避免名称重复）
+                            Game? game = null;
+                            
+                            // 先尝试通过PlatformGameId查找
+                            var existingGamePlatform = await _context.GamePlatforms
+                                .FirstOrDefaultAsync(gp => gp.PlatformId == GOG_PLATFORM_ID 
+                                    && gp.PlatformGameId == gogGame.GogGameId);
+                            
+                            if (existingGamePlatform != null)
+                            {
+                                game = await _context.Games.FindAsync(existingGamePlatform.GameId);
+                                _logger.LogDebug("通过PlatformGameId找到游戏: {GameId}, Name={Name}", game?.GameId, game?.Name);
+                            }
+                            
+                            // 如果没找到，再通过名称查找
+                            if (game == null)
+                            {
+                                game = await _context.Games
+                                    .FirstOrDefaultAsync(g => g.Name == gogGame.Name);
+                                _logger.LogDebug("通过名称查找游戏: Name={Name}, Found={Found}", gogGame.Name, game != null);
+                            }
 
                             if (game == null)
                             {

@@ -59,6 +59,7 @@ builder.Services.AddHttpClient<ISteamService, SteamService>();
 builder.Services.AddScoped<IXboxService, XboxService>();
 builder.Services.AddScoped<IPsnService, PsnService>();
 builder.Services.AddScoped<IGogService, GogService>();
+builder.Services.AddScoped<IEpicService, EpicService>();
 builder.Services.AddScoped<ReportGenerationService>();
 
 // --- 认证和用户管理服务 (来自 HEAD) ---
@@ -71,12 +72,6 @@ builder.Services.AddMemoryCache();
 // --- 阿里云 OSS 存储服务 ---
 builder.Services.Configure<AliyunOssOptions>(builder.Configuration.GetSection("AliyunOss"));
 builder.Services.AddScoped<IAliyunOssService, AliyunOssService>();
-
-// --- Mod 浏览服务 ---
-builder.Services.AddHttpClient<IModExploreService, ModExploreService>();
-
-// --- 用户报表服务 ---
-builder.Services.AddScoped<IUserReportService, UserReportService>();
 
 // --- AI 服务 (来自 Incoming) ---
 builder.Services.AddHttpClient(); // 通用 HttpClient

@@ -26,7 +26,7 @@
           </div>
           <div class="stat-info">
             <div class="stat-label">已连接平台</div>
-            <div class="stat-value">{{ stats.connectedCount }} / 7</div>
+            <div class="stat-value">{{ stats.connectedCount }} / 5</div>
           </div>
         </div>
         
@@ -145,85 +145,7 @@
         </div>
       </div>
 
-      <!-- 同步设置 -->
-      <div class="section">
-        <div class="settings-card">
-        <h2 class="section-title">
-            <Settings class="icon" size="20" />
-            同步设置
-        </h2>
-          <div class="settings-list">
-            <div class="setting-item">
-              <div class="setting-info">
-                <h3>自动同步游戏库</h3>
-                <p>每小时自动同步你的游戏库</p>
-                </div>
-              <div 
-                class="toggle-switch" 
-                :class="{ active: syncSettings.autoSync }"
-                @click="toggleSwitch('autoSync')"
-              >
-                <span class="toggle-thumb"></span>
-                </div>
-              </div>
-            
-            <div class="setting-item">
-              <div class="setting-info">
-                <h3>同步成就</h3>
-                <p>从已连接平台导入成就和奖杯</p>
-            </div>
-              <div 
-                class="toggle-switch" 
-                :class="{ active: syncSettings.achievements }"
-                @click="toggleSwitch('achievements')"
-              >
-                <span class="toggle-thumb"></span>
-            </div>
-          </div>
 
-            <div class="setting-item">
-              <div class="setting-info">
-                <h3>同步游玩时长</h3>
-                <p>追踪并汇总所有平台的游玩时长</p>
-                </div>
-              <div 
-                class="toggle-switch" 
-                :class="{ active: syncSettings.playtime }"
-                @click="toggleSwitch('playtime')"
-              >
-                <span class="toggle-thumb"></span>
-                </div>
-              </div>
-            
-            <div class="setting-item">
-              <div class="setting-info">
-                <h3>同步通知</h3>
-                <p>同步完成或失败时收到通知</p>
-            </div>
-              <div 
-                class="toggle-switch" 
-                :class="{ active: syncSettings.notify }"
-                @click="toggleSwitch('notify')"
-              >
-                <span class="toggle-thumb"></span>
-            </div>
-            </div>
-          </div>
-
-          <div class="settings-actions">
-            <button 
-              class="btn btn-primary"
-              @click="handleSyncAll"
-              :disabled="loading || connectedPlatforms.length === 0"
-            >
-              <RefreshCw class="icon" size="16" /> 立即同步全部
-            </button>
-            <button class="btn btn-tertiary">
-              查看同步历史
-            </button>
-                </div>
-                </div>
-              </div>
     </main>
 
     <!-- 绑定模态框 -->
@@ -260,14 +182,10 @@
           <!-- Xbox认证流程 -->
           <div v-if="selectedPlatform?.id === 7">
             <div class="form-group">
-              <label>Xbox用户ID *</label>
-              <input 
-                v-model="bindForm.xboxUserId" 
-                type="text" 
-                class="form-input"
-                placeholder="请输入Xbox用户ID"
-              />
-              <p class="form-hint">认证成功后会自动获取</p>
+              <div class="alert alert-info">
+                <p><strong>Xbox绑定</strong></p>
+                <p>无需填写用户ID，认证成功后会自动获取并完成绑定。</p>
+              </div>
             </div>
             <div class="form-group">
               <label>
@@ -294,14 +212,10 @@
           <!-- PSN认证流程 -->
           <div v-if="selectedPlatform?.id === 6">
             <div class="form-group">
-              <label>PSN在线ID *</label>
-              <input 
-                v-model="bindForm.psnOnlineId" 
-                type="text" 
-                class="form-input"
-                placeholder="请输入PSN在线ID"
-              />
-              <p class="form-hint">认证成功后会自动获取</p>
+              <div class="alert alert-info">
+                <p><strong>PlayStation 绑定</strong></p>
+                <p>无需填写在线ID，认证成功后会自动获取并完成绑定。</p>
+              </div>
             </div>
             <div class="form-group">
               <label>NPSSO *</label>
@@ -327,33 +241,31 @@
               <div class="form-group">
                 <div class="alert alert-info">
                   <p><strong>步骤1: 获取认证URL</strong></p>
-                  <p>点击下方按钮获取认证URL，然后在浏览器中打开并完成登录</p>
+                  <p v-if="!gogAuthUrl">点击下方按钮获取认证URL，然后在浏览器中打开并完成登录</p>
+                  <p v-else>已获取认证URL，请按照下方说明完成登录</p>
                 </div>
               </div>
               <div v-if="gogAuthUrl" class="form-group">
-                <label>认证URL</label>
-                <div style="display: flex; gap: 0.5rem;">
-                  <input 
-                    :value="gogAuthUrl" 
-                    type="text" 
-                    class="form-input"
-                    readonly
-                    style="flex: 1;"
-                  />
-                  <button 
-                    class="btn btn-secondary"
-                    @click="copyToClipboard(gogAuthUrl)"
-                  >
-                    复制
-                  </button>
-                  <button 
-                    class="btn btn-primary"
-                    @click="openUrl(gogAuthUrl)"
-                  >
-                    打开
-                  </button>
+                <label>认证URL（步骤1）</label>
+                <textarea
+                  :value="gogAuthUrl"
+                  class="form-input"
+                  readonly
+                  rows="3"
+                  style="resize: vertical;"
+                  @focus="$event.target.select()"
+                ></textarea>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                  <button class="btn btn-secondary" @click="copyToClipboard(gogAuthUrl)">复制认证URL</button>
+                  <button class="btn btn-primary" @click="openUrl(gogAuthUrl)">在新标签页打开</button>
                 </div>
-                <p class="form-hint">登录成功后，浏览器会跳转到类似这样的URL: https://embed.gog.com/on_login_success?origin=client&code=xxxxx</p>
+                <p class="form-hint">
+                  <strong>操作步骤：</strong><br>
+                  1) 点击“复制认证URL”或“在新标签页打开”<br>
+                  2) 在浏览器中完成GOG登录<br>
+                  3) 登录成功后会跳转到类似这样的URL：<code>https://embed.gog.com/on_login_success?origin=client&amp;code=xxxxx</code><br>
+                  4) 复制浏览器地址栏的<strong>完整URL</strong>，然后点击下方“进入下一步”按钮粘贴
+                </p>
               </div>
             </div>
             <!-- 步骤2: 提供重定向URL -->
@@ -365,14 +277,17 @@
                 </div>
               </div>
               <div class="form-group">
-                <label>重定向URL *</label>
-                <input 
-                  v-model="bindForm.redirectUrl" 
-                  type="text" 
+                <label>登录成功后的跳转URL（步骤2）*</label>
+                <textarea
+                  v-model="bindForm.redirectUrl"
                   class="form-input"
-                  placeholder="https://embed.gog.com/on_login_success?origin=client&code=xxxxx"
-                />
-                <p class="form-hint">只需复制完整URL，不需要手动提取授权码</p>
+                  rows="3"
+                  style="resize: vertical;"
+                  placeholder="把浏览器地址栏里的完整URL粘贴到这里，例如：https://embed.gog.com/on_login_success?origin=client&code=xxxxx"
+                ></textarea>
+                <p class="form-hint">
+                  只需要复制浏览器地址栏<strong>完整URL</strong>，不需要你手动提取 code。
+                </p>
               </div>
             </div>
             <!-- 刷新令牌提示 -->
@@ -385,16 +300,58 @@
               </div>
             </div>
           </div>
+
+          <!-- Epic Games认证流程 -->
+          <div v-if="selectedPlatform?.id === 2">
+            <div class="form-group">
+              <div class="alert alert-info">
+                <p><strong>Epic Games 绑定</strong></p>
+                <p>Epic Games需要通过Legendary CLI进行认证。</p>
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="alert alert-warning">
+                <p><strong>方式1: 使用授权码（推荐）</strong></p>
+                <p>1. 访问以下链接并登录Epic账户：</p>
+                <p style="word-break: break-all; margin: 0.5rem 0;">
+                  <a href="https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code" target="_blank" style="color: #4f46e5;">
+                    https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code
+                  </a>
+                </p>
+                <p>2. 登录后，从URL中复制 <code>code</code> 参数的值</p>
+                <p>3. 将授权码粘贴到下方输入框</p>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>授权码（可选）</label>
+              <input 
+                v-model="bindForm.epicCode" 
+                type="text" 
+                class="form-input"
+                placeholder="如果已在服务器上运行 legendary auth，可留空"
+              />
+              <p class="form-hint">
+                如果已在服务器上通过命令行运行 <code>legendary auth</code> 完成认证，可留空此字段，系统会自动检测登录状态。
+              </p>
+            </div>
+          </div>
             </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeBindModal">取消</button>
           <button 
-            v-if="selectedPlatform?.id === 5 && gogAuthStep === 'step1'"
+            v-if="selectedPlatform?.id === 5 && gogAuthStep === 'step1' && !gogAuthUrl"
             class="btn btn-primary" 
             @click="handleBind"
             :disabled="loading"
           >
             {{ loading ? '获取认证URL中...' : '获取认证URL' }}
+          </button>
+          <button 
+            v-if="selectedPlatform?.id === 5 && gogAuthStep === 'step1' && gogAuthUrl"
+            class="btn btn-primary" 
+            @click="gogAuthStep = 'step2'"
+          >
+            进入下一步（已获取URL）
           </button>
           <button 
             v-else-if="selectedPlatform?.id === 5 && gogAuthStep === 'step2'"
@@ -433,18 +390,18 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { CheckCircle, Link, Gamepad2, Trophy, Clock, PlusCircle, Settings, RefreshCw, X } from 'lucide-vue-next'
+import { CheckCircle, Link, Gamepad2, Trophy, Clock, PlusCircle, RefreshCw, X } from 'lucide-vue-next'
 import { platformsApi } from '@/api/platforms'
-import { libraryApi, steamApi, xboxApi, psnApi, gogApi } from '@/api/index'
+import { libraryApi, steamApi, xboxApi, psnApi, gogApi, epicApi } from '@/api/index'
 
 // 平台配置
 const platformConfig = {
   1: { name: 'Steam', id: 1, icon: 'steam', gradient: 'steam-gradient', requires: ['steamId', 'apiKey'] },
   2: { name: 'Epic Games', id: 2, icon: 'epic', gradient: 'epic-gradient', requires: [] },
   5: { name: 'GOG Galaxy', id: 5, icon: 'gog', gradient: 'gog-gradient', requires: ['gogUserId'] },
-  6: { name: 'PlayStation', id: 6, icon: 'playstation', gradient: 'playstation-gradient', requires: ['psnOnlineId'] },
-  7: { name: 'Xbox', id: 7, icon: 'xbox', gradient: 'xbox-gradient', requires: ['xboxUserId'] },
-  8: { name: 'Nintendo Switch', id: 8, icon: 'nintendo', gradient: 'nintendo-gradient', requires: [] }
+  6: { name: 'PlayStation', id: 6, icon: 'playstation', gradient: 'playstation-gradient', requires: [] },
+  7: { name: 'Xbox', id: 7, icon: 'xbox', gradient: 'xbox-gradient', requires: [] },
+  // 8: { name: 'Nintendo Switch', id: 8, icon: 'nintendo', gradient: 'nintendo-gradient', requires: [] } // 暂时隐藏
 }
 
 // 响应式数据
@@ -457,12 +414,7 @@ const stats = ref({
   lastSync: '从未同步'
 })
 
-const syncSettings = ref({
-  autoSync: true,
-  achievements: true,
-  playtime: true,
-  notify: false
-})
+
 
 // 获取当前登录用户ID（从 sessionStorage 的 user 中解析）
 const getCurrentUserId = () => {
@@ -484,12 +436,13 @@ const bindForm = ref({
   platformId: null,
   steamId: '',
   apiKey: '',
-  xboxUserId: '',
-  psnOnlineId: '',
+  xboxUserId: '', // 已废弃：Xbox绑定不需要手动输入
+  psnOnlineId: '', // 已废弃：PSN绑定不需要手动输入
   npsso: '',
   gogUserId: '',
   redirectUrl: '',
   accessToken: '',
+  epicCode: '', // Epic Games授权码
   refreshToken: '',
   openBrowser: true // Xbox认证选项
 })
@@ -592,8 +545,8 @@ const openBindModal = async (platform) => {
     platformId: platform.id,
     steamId: '',
     apiKey: '',
-    xboxUserId: '',
-    psnOnlineId: '',
+    xboxUserId: '', // 已废弃：Xbox绑定不需要手动输入
+    psnOnlineId: '', // 已废弃：PSN绑定不需要手动输入
     npsso: '',
     gogUserId: '',
     redirectUrl: '',
@@ -666,9 +619,10 @@ const handleBind = async () => {
           
           if (authRes.success && authRes.data) {
             if (authRes.data.needsBrowserAuth && authRes.data.authUrl) {
+              // 获取到认证URL，保持在步骤1显示URL，不立即跳转到步骤2
               gogAuthUrl.value = authRes.data.authUrl
-              gogAuthStep.value = 'step2'
-              alert('请复制认证URL并在浏览器中打开完成登录，然后将跳转后的完整URL粘贴到下方')
+              // 不立即跳转到step2，让用户先看到URL并完成登录
+              // gogAuthStep.value = 'step2' // 注释掉，让用户手动点击"进入下一步"
             } else if (authRes.data.success) {
               // 已有有效令牌，直接刷新
               alert('GOG认证成功！正在同步数据...')
@@ -800,6 +754,31 @@ const handleBind = async () => {
       return
     }
     
+    // Epic Games认证流程
+    if (platform.id === 2) {
+      try {
+        const authRes = await epicApi.authenticate({
+          code: bindForm.value.epicCode || null,
+          forceReauth: false
+        })
+        
+        if (authRes.success && authRes.data) {
+          if (authRes.data.success) {
+            alert('Epic Games认证成功！正在同步数据...')
+            await handleEpicPostAuth(authRes)
+          } else {
+            alert(authRes.data.message || 'Epic Games认证失败')
+          }
+        }
+      } catch (error) {
+        console.error('Epic Games认证失败:', error)
+        alert('Epic Games认证失败: ' + (error.message || '未知错误'))
+      } finally {
+        loading.value = false
+      }
+      return
+    }
+    
     // Steam等其他平台的原有逻辑
     const requiredFields = platform.requires || []
     
@@ -904,7 +883,7 @@ const handleGogPostAuth = async (authResponse) => {
 const handlePsnPostAuth = async (authResponse) => {
   try {
     // 从认证响应中获取onlineId，如果没有则使用表单中的值
-    const psnOnlineId = authResponse?.data?.onlineId || bindForm.value.psnOnlineId
+    const psnOnlineId = authResponse?.data?.onlineId || bindForm.value.psnOnlineId // 优先使用认证返回
     
     if (psnOnlineId) {
       // 绑定平台
@@ -941,10 +920,53 @@ const handlePsnPostAuth = async (authResponse) => {
 }
 
 // Xbox认证后的处理
+const handleEpicPostAuth = async (authResponse) => {
+  try {
+    if (!authResponse.success || !authResponse.data?.success) {
+      alert('Epic Games认证失败')
+      return
+    }
+
+    const epicAccountId = authResponse.data.data?.epicAccountId
+    if (!epicAccountId) {
+      alert('无法获取Epic账户ID')
+      return
+    }
+
+    // 导入Epic Games数据
+    const userId = getCurrentUserId()
+    if (!userId) {
+      alert('无法获取用户ID')
+      return
+    }
+
+    try {
+      await epicApi.importData({
+        userId: userId,
+        epicAccountId: epicAccountId,
+        importGames: true,
+        importAchievements: true
+      })
+      
+      alert('Epic Games数据同步成功！')
+      closeBindModal()
+      await loadBindings()
+    } catch (error) {
+      console.error('Epic Games数据导入失败:', error)
+      alert('Epic Games数据同步失败，请稍后手动同步')
+      closeBindModal()
+      await loadBindings()
+    }
+  } catch (error) {
+    console.error('Epic Games认证后处理失败:', error)
+    alert('Epic Games认证后处理失败: ' + (error.message || '未知错误'))
+  }
+}
+
 const handleXboxPostAuth = async (authResponse) => {
   try {
     // 从认证响应中获取xuid，如果没有则使用表单中的值
-    const xboxUserId = authResponse?.data?.xuid || bindForm.value.xboxUserId
+    const xboxUserId = authResponse?.data?.xuid || bindForm.value.xboxUserId // 优先使用认证返回
     
     if (xboxUserId) {
       // 绑定平台
@@ -1149,10 +1171,6 @@ const handleSync = async (platformId) => {
   }
 }
 
-// 切换开关
-const toggleSwitch = (type) => {
-  syncSettings.value[type] = !syncSettings.value[type]
-}
 
 // 获取平台配置
 const getPlatformConfig = (platformId) => {
@@ -1164,23 +1182,20 @@ const formatTime = (dateString) => {
   if (!dateString) return '未知'
   
   try {
-    // 创建日期对象（假设后端返回的是 UTC 时间字符串）
-  const date = new Date(dateString)
+    // 确保传入的字符串被解析为UTC时间
+    const date = new Date(dateString.endsWith('Z') ? dateString : dateString + 'Z')
     
-    // 计算时间差（直接使用 UTC 时间戳）
-  const now = new Date()
-  const diff = Math.floor((now - date) / 1000 / 60) // 分钟差
-  
-  if (diff < 1) return '刚刚'
-  if (diff < 60) return `${diff}分钟前`
-    if (diff < 1440) {
-      const hours = Math.floor(diff / 60)
-      return `${hours}小时前`
-    }
+    const now = new Date()
+    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / 60000)
+
+    if (diffMinutes < 1) return '刚刚'
+    if (diffMinutes < 60) return `${diffMinutes}分钟前`
     
+    const diffHours = Math.floor(diffMinutes / 60)
+    if (diffHours < 24) return `${diffHours}小时前`
+
     // 超过1天，显示具体日期和时间（格式：YYYY-MM-DD HH:mm）
-    // 使用 Intl.DateTimeFormat 直接格式化为中国时区
-    const formatter = new Intl.DateTimeFormat('en-US', {
+    const options = {
       timeZone: 'Asia/Shanghai',
       year: 'numeric',
       month: '2-digit',
@@ -1188,18 +1203,15 @@ const formatTime = (dateString) => {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
-    })
+    }
     
-    const parts = formatter.formatToParts(date)
-    const year = parts.find(p => p.type === 'year').value
-    const month = parts.find(p => p.type === 'month').value
-    const day = parts.find(p => p.type === 'day').value
-    const hour = parts.find(p => p.type === 'hour').value
-    const minute = parts.find(p => p.type === 'minute').value
-    
-    return `${year}-${month}-${day} ${hour}:${minute}`
+    // 使用 toLocaleString 格式化为中国时区时间
+    // Intl.DateTimeFormat 在某些环境下对格式的处理不一致，toLocaleString 更可靠
+    const formatter = new Intl.DateTimeFormat('zh-CN', options)
+    return formatter.format(date).replace(/\//g, '-')
+
   } catch (error) {
-    console.error('格式化时间失败:', error)
+    console.error('格式化时间失败:', error, '输入:', dateString)
     return '未知'
   }
 }
@@ -1212,7 +1224,7 @@ const getPlatformLogo = (platformId) => {
     5: 'https://w7.pngwing.com/pngs/403/46/png-transparent-gog-galaxy-alt-macos-bigsur-icon-thumbnail.png',
     6: 'https://images.seeklogo.com/logo-png/49/1/playstation-logo-png_seeklogo-494440.png',
     7: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Xbox_one_logo.svg/2048px-Xbox_one_logo.svg.png',
-    8: 'https://images.seeklogo.com/logo-png/31/1/nintendo-switch-logo-png_seeklogo-315901.png'
+    // 8: 'https://images.seeklogo.com/logo-png/31/1/nintendo-switch-logo-png_seeklogo-315901.png' // 暂时隐藏
   }
   return logos[platformId] || ''
 }
@@ -1224,104 +1236,12 @@ const getPlatformDescription = (platformId) => {
     2: '同步Epic Games商店的游戏',
     5: '无DRM保护的游戏和经典游戏作品',
     6: '同步你的PlayStation奖杯和游戏库',
-    7: '同步Xbox游戏和成就',
-    8: '连接你的任天堂账号以同步Switch游戏'
+    7: '同步Xbox游戏和成就'
+    // 8: '连接你的任天堂账号以同步Switch游戏' // 暂时隐藏
   }
   return descriptions[platformId] || '连接平台以同步游戏库'
 }
 
-// 同步全部平台
-const handleSyncAll = async () => {
-  if (connectedPlatforms.value.length === 0) {
-    alert('没有已连接的平台')
-    return
-  }
-  
-  loading.value = true
-  try {
-    const userId = getCurrentUserId()
-    
-    for (const binding of connectedPlatforms.value) {
-      if (!userId || !binding.platformUserId) continue
-
-      // 根据平台ID调用对应的导入接口
-      switch (binding.platformId) {
-        case 1: // Steam
-          try {
-            await steamApi.importData({
-              userId,
-              steamId: binding.platformUserId,
-              importGames: true,
-              importAchievements: true,
-              importFriends: false
-            })
-            await new Promise(resolve => setTimeout(resolve, 500))
-          } catch (e) {
-            console.error('Steam 数据导入失败:', e)
-          }
-          break
-        
-        case 7: // Xbox
-          try {
-            await xboxApi.importData({
-              userId,
-              xboxUserId: binding.platformUserId,
-              importGames: true,
-              importAchievements: true
-            })
-            await new Promise(resolve => setTimeout(resolve, 500))
-          } catch (e) {
-            console.error('Xbox 数据导入失败:', e)
-          }
-          break
-        
-        case 6: // PSN
-          try {
-            await psnApi.importData({
-              userId,
-              psnOnlineId: binding.platformUserId,
-              importGames: true,
-              importTrophies: true
-            })
-            await new Promise(resolve => setTimeout(resolve, 500))
-          } catch (e) {
-            console.error('PSN 数据导入失败:', e)
-          }
-          break
-        
-        case 5: // GOG
-          try {
-            await gogApi.importData({
-              userId,
-              gogUserId: binding.platformUserId,
-              importGames: true
-            })
-            await new Promise(resolve => setTimeout(resolve, 500))
-          } catch (e) {
-            console.error('GOG 数据导入失败:', e)
-          }
-          break
-        
-        default:
-          // 对于其他平台，暂时只调用占位符接口
-          try {
-            await platformsApi.syncPlatform(binding.platformId)
-          } catch (e) {
-            console.error(`平台 ${binding.platformId} 同步失败:`, e)
-          }
-      }
-    }
-    alert('全部平台同步成功！')
-    await loadBindings()
-    // 刷新统计数据，确保显示最新的成就数量
-    await refreshStats()
-  } catch (error) {
-    console.error('同步全部平台失败:', error)
-    alert('同步失败: ' + (error.message || '未知错误'))
-  } finally {
-    loading.value = false
-  }
-}
 
 onMounted(() => {
   loadBindings()
@@ -1689,78 +1609,6 @@ onMounted(() => {
   width: 100%;
 }
 
-/* 设置卡片 */
-.settings-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  border-radius: 1.25rem;
-  padding: 1.5rem;
-}
-
-.settings-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.setting-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 1rem;
-}
-
-.setting-info h3 {
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin: 0 0 0.25rem 0;
-}
-
-.setting-info p {
-  font-size: 0.75rem;
-  color: #a1a1aa;
-  margin: 0;
-}
-
-/* 开关样式 */
-.toggle-switch {
-  width: 3rem;
-  height: 1.75rem;
-  border-radius: 9999px;
-  background: #3f3f46;
-  position: relative;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.toggle-switch.active {
-  background: #4f46e5;
-}
-
-.toggle-thumb {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
-  background: #ffffff;
-  position: absolute;
-  top: 0.25rem;
-  left: 0.25rem;
-  transition: all 0.2s ease;
-}
-
-.toggle-switch.active .toggle-thumb {
-  left: calc(100% - 1.25rem - 0.25rem);
-}
-
-.settings-actions {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1.5rem;
-}
 
 /* 图标样式 */
 .icon {
