@@ -28,7 +28,7 @@
           class="game-card"
           @click="goToDetail(game.gameId)"
         >
-          <img :src="game.headerImage" :alt="game.name" />
+          <img :src="game.headerImage || noCoverImage" :alt="game.name" @error="handleImageError" />
           <div class="game-card-body">
             <h3 class="game-title">{{ game.name }}</h3>
             <p class="game-info">发布日期: {{ game.releaseDate }}</p>
@@ -65,6 +65,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { gameApi } from '../api'
+import noCoverImage from '@/assets/no_cover.png'
 
 const router = useRouter()
 const games = ref([])
@@ -131,6 +132,10 @@ const changePage = (newPage) => {
 const goToDetail = (id) => {
   // 与应用内其它地方（例如我的游戏库）保持一致，使用 /app/game/:id 路由
   router.push(`/app/game/${id}`)
+}
+
+const handleImageError = (e) => {
+  e.target.src = noCoverImage
 }
 
 onMounted(() => {

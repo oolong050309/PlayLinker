@@ -90,13 +90,10 @@
         >
           <div class="game-image">
             <img 
-              v-if="game.headerImage" 
-              :src="game.headerImage" 
+              :src="game.headerImage || noCoverImage" 
               :alt="game.name"
+              @error="handleImageError"
             />
-            <div v-else class="image-placeholder">
-              <Gamepad2 size="32" />
-            </div>
             <!-- 图片上的文字叠加 -->
             <div class="game-overlay">
               <h3 class="game-name-overlay">{{ game.name }}</h3>
@@ -155,6 +152,7 @@ import { ref, onMounted, onActivated, computed, watch } from 'vue'
 import { libraryApi, achievementApi } from '../api'
 import { Gamepad2, Play, Clock, Trophy, Search } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import noCoverImage from '@/assets/no_cover.png'
 
 const router = useRouter()
 
@@ -295,6 +293,11 @@ const formatPlaytime = (minutes) => {
   } else {
     return `${mins}分钟`
   }
+}
+
+// 处理图片加载错误
+const handleImageError = (e) => {
+  e.target.src = noCoverImage
 }
 
 const changePage = (page) => {

@@ -30,7 +30,7 @@
             </td>
             <td>
               <div class="game-name-col">
-                <img :src="item.headerImage" :alt="item.gameName" />
+                <img :src="item.headerImage || noCoverImage" :alt="item.gameName" @error="handleImageError" />
                 <span :title="item.gameName">{{ item.gameName }}</span>
               </div>
             </td>
@@ -46,6 +46,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { gameApi } from '../api'
+import noCoverImage from '@/assets/no_cover.png'
 
 const router = useRouter()
 const rankings = ref([])
@@ -83,6 +84,10 @@ const formatNumber = (num) => {
 // [修复] 使用命名路由跳转，确保匹配 /game/:id
 const goToDetail = (id) => {
   router.push({ name: 'GameDetail', params: { id } })
+}
+
+const handleImageError = (e) => {
+  e.target.src = noCoverImage
 }
 
 onMounted(() => {

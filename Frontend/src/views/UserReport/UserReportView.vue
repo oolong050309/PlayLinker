@@ -173,7 +173,7 @@
             <div v-if="gameLibrary.topPlayedGames?.length" class="games-list">
               <div v-for="(game, index) in gameLibrary.topPlayedGames" :key="game.gameId" class="game-item">
                 <div class="game-rank" :class="getRankClass(index)">{{ index + 1 }}</div>
-                <img v-if="game.headerImage" :src="game.headerImage" class="game-image" />
+                <img :src="game.headerImage || noCoverImage" class="game-image" @error="handleImageError" />
                 <div class="game-info">
                   <h4 class="game-name">{{ game.gameName }}</h4>
                   <p class="game-meta">
@@ -246,7 +246,7 @@
             <h3 class="chart-title">最近游玩</h3>
             <div v-if="recentPlayed.length" class="recent-list">
               <div v-for="game in recentPlayed.slice(0, 5)" :key="game.gameId" class="recent-item">
-                <img v-if="game.headerImage" :src="game.headerImage" class="recent-image" />
+                <img :src="game.headerImage || noCoverImage" class="recent-image" @error="handleImageError" />
                 <div class="recent-info">
                   <h4 class="recent-name">{{ game.gameName }}</h4>
                   <p class="recent-time">{{ formatMinutes(game.recentPlaytimeMinutes) }} (2周内)</p>
@@ -286,7 +286,7 @@
         </div>
         <div v-if="wishlist.items?.length" class="wishlist-grid">
           <div v-for="item in wishlist.items.slice(0, 8)" :key="item.steamAppId" class="wishlist-item" :class="{ 'on-sale': item.isOnSale }">
-            <img v-if="item.headerImage" :src="item.headerImage" class="wishlist-image" />
+            <img :src="item.headerImage || noCoverImage" class="wishlist-image" @error="handleImageError" />
             <div class="wishlist-info">
               <h4 class="wishlist-name">{{ item.gameName }}</h4>
               <div class="wishlist-price" v-if="item.currentPrice">
@@ -493,6 +493,7 @@ import {
   Calendar, Award, Package, FileText, FileSpreadsheet, Globe, Download, Trash2
 } from 'lucide-vue-next'
 import Chart from 'chart.js/auto'
+import noCoverImage from '@/assets/no_cover.png'
 import { 
   getUserReportOverview, 
   syncFromSteam,
@@ -639,6 +640,11 @@ const formatCacheTime = (timestamp) => {
   if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
   return date.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+// 处理图片加载错误
+const handleImageError = (e) => {
+  e.target.src = noCoverImage
 }
 
 const applyData = (data) => {

@@ -22,17 +22,18 @@
 
       <!-- Hero 区域 -->
       <div class="hero-section">
-        <div class="hero-background" v-if="game.headerImage">
-          <img :src="game.headerImage" :alt="game.name" class="hero-bg-img" />
+        <div class="hero-background">
+          <img :src="game.headerImage || noCoverImage" :alt="game.name" class="hero-bg-img" @error="handleImageError" />
           <div class="hero-gradient"></div>
         </div>
 
         <div class="hero-content">
           <div class="game-cover-wrapper">
             <img 
-              :src="game.coverImage || game.headerImage || '/placeholder-game.png'" 
+              :src="game.coverImage || game.headerImage || noCoverImage" 
               :alt="game.name" 
               class="game-cover"
+              @error="handleImageError"
             />
           </div>
 
@@ -417,7 +418,7 @@
               </div>
               <div class="dialog-body">
                 <div class="game-info-preview">
-                  <img v-if="game.headerImage" :src="game.headerImage" class="preview-image" />
+                  <img :src="game.headerImage || noCoverImage" class="preview-image" @error="handleImageError" />
                   <div class="preview-info">
                     <h4>{{ game.name }}</h4>
                     <p class="preview-price">
@@ -612,6 +613,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { gameApi, achievementApi, libraryApi, newsApi } from '@/api'
 import { priceApi } from '@/api/price'
 import { ArrowLeft, Clock, Trophy, Calendar, Play, Settings, Bell, Package, Lock, X } from 'lucide-vue-next'
+import noCoverImage from '@/assets/no_cover.png'
 
 const route = useRoute()
 const router = useRouter()
@@ -1110,7 +1112,7 @@ const formatDate = (date) => {
 
 // 图片加载错误处理
 const handleImageError = (event) => {
-  event.target.style.display = 'none'
+  event.target.src = noCoverImage
 }
 
 // 处理隐藏成就点击

@@ -29,7 +29,7 @@
             <!-- 游戏封面图 -->
             <div class="game-cover-wrapper">
               <img 
-                :src="item.headerImage || item.gameImage || '/placeholder-game.png'" 
+                :src="item.headerImage || item.gameImage || noCoverImage" 
                 class="game-cover"
                 @error="handleImageError"
                 alt="游戏封面"
@@ -127,8 +127,7 @@
         <div class="dialog-body" v-if="editingGame">
           <div class="game-info-preview">
             <img 
-              v-if="editingGame.headerImage || editingGame.gameImage" 
-              :src="editingGame.headerImage || editingGame.gameImage" 
+              :src="editingGame.headerImage || editingGame.gameImage || noCoverImage" 
               class="preview-image"
               @error="handleImageError"
             />
@@ -221,6 +220,7 @@ import { usePriceStore } from '@/stores/price'
 import { priceApi } from '@/api/price'
 import { wishlistApi } from '@/api/wishlist'
 import { createIcons, icons } from 'lucide'
+import noCoverImage from '@/assets/no_cover.png'
 
 const router = useRouter()
 const priceStore = usePriceStore()
@@ -433,7 +433,7 @@ const removeFromWishlist = async (gameId) => {
 
 // 图片加载错误处理保留
 const handleImageError = (event) => {
-  event.target.src = '/placeholder-game.png'
+  event.target.src = noCoverImage
 }
 
 // 刷新数据函数
