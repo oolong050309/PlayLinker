@@ -483,26 +483,76 @@ public class AchievementsController : ControllerBase
             var beforeUnlocked = await beforeUnlockedQuery.CountAsync();
 
             // 5. 根据 userId 和 platformId 查找用户绑定的平台账号
-            // 直接从 user_platform_library 表查找用户在该平台上的游戏
-            var platformLibraryQuery = _context.UserPlatformLibraries.AsQueryable();
+            // 先通过 user_platform_binding 表获取该用户绑定的所有 platform_user_id 和 platform_id 组合
+            var userPlatformBindings = await _context.UserPlatformBindings
+                .Where(upb => upb.UserId == userId && upb.BindingStatus == true)
+                .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
+                .ToListAsync();
 
+            if (userPlatformBindings.Count == 0)
+            {
+                _logger.LogWarning("用户 {UserId} 没有绑定的平台账号", userId);
+                var emptyResult = new SyncAchievementsResponseDto
+                {
+                    SyncedGames = 0,
+                    NewUnlocks = 0,
+                    TotalUnlocked = beforeUnlocked,
+                    SyncTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                };
+                return Ok(ApiResponse<SyncAchievementsResponseDto>.SuccessResponse(emptyResult, "未找到用户绑定的平台账号"));
+            }
+
+            // 根据 platformId 过滤绑定（如果指定了平台）
             if (platformId.HasValue)
             {
-                platformLibraryQuery = platformLibraryQuery.Where(upl => upl.PlatformId == platformId.Value);
+                userPlatformBindings = userPlatformBindings
+                    .Where(b => b.PlatformId == platformId.Value)
+                    .ToList();
             }
 
-            if (gameId.HasValue)
+            if (userPlatformBindings.Count == 0)
             {
-                platformLibraryQuery = platformLibraryQuery.Where(upl => upl.GameId == gameId.Value);
+                _logger.LogWarning("用户 {UserId} 在平台 {PlatformId} 上没有绑定的平台账号", userId, platformId);
+                var emptyResult = new SyncAchievementsResponseDto
+                {
+                    SyncedGames = 0,
+                    NewUnlocks = 0,
+                    TotalUnlocked = beforeUnlocked,
+                    SyncTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                };
+                return Ok(ApiResponse<SyncAchievementsResponseDto>.SuccessResponse(emptyResult, $"用户在平台 {platformId} 上没有绑定的平台账号"));
             }
 
-            // 获取用户在该平台上的游戏列表（通过 platform_user_id 关联）
-            // 注意：这里需要找到该用户对应的 platform_user_id
-            // 可以通过 player_platform 表查找，或者通过 user_platform_library 表查找
-            var userPlatformGames = await platformLibraryQuery
-                .Select(upl => new { upl.PlatformId, upl.GameId, upl.PlatformUserId })
-                .Distinct()
-                .ToListAsync();
+            // 只查询该用户绑定的平台账号对应的游戏记录
+            // 为每个绑定组合单独查询，确保精确匹配，避免查询到其他用户的游戏
+            var userPlatformGamesList = new List<(int PlatformId, long GameId, string PlatformUserId)>();
+            
+            foreach (var binding in userPlatformBindings)
+            {
+                var gamesQuery = _context.UserPlatformLibraries
+                    .Where(upl => upl.PlatformUserId == binding.PlatformUserId && 
+                                 upl.PlatformId == binding.PlatformId);
+
+                if (gameId.HasValue)
+                {
+                    gamesQuery = gamesQuery.Where(upl => upl.GameId == gameId.Value);
+                }
+
+                var gamesForBinding = await gamesQuery
+                    .Select(upl => new { upl.PlatformId, upl.GameId, upl.PlatformUserId })
+                    .Distinct()
+                    .ToListAsync();
+
+                foreach (var game in gamesForBinding)
+                {
+                    userPlatformGamesList.Add((game.PlatformId, game.GameId, game.PlatformUserId));
+                }
+            }
+
+            // 转换为匿名类型列表以保持与后续代码的兼容性
+            var userPlatformGames = userPlatformGamesList
+                .Select(x => new { PlatformId = x.PlatformId, GameId = x.GameId, PlatformUserId = x.PlatformUserId })
+                .ToList();
 
             if (userPlatformGames.Count == 0)
             {
