@@ -354,10 +354,9 @@ public class GogController : ControllerBase
                                 continue;
                             }
                             
-                            // 查找或创建游戏（优先通过GamePlatform的PlatformGameId匹配，避免名称重复）
+                            // 查找是否已存在该GOG平台的该游戏
+                            // 只通过GamePlatform匹配，不通过名称匹配，避免不同平台的同名游戏被错误关联
                             Game? game = null;
-                            
-                            // 先尝试通过PlatformGameId查找
                             var existingGamePlatform = await _context.GamePlatforms
                                 .FirstOrDefaultAsync(gp => gp.PlatformId == GOG_PLATFORM_ID 
                                     && gp.PlatformGameId == gogGame.GogGameId);
@@ -365,20 +364,148 @@ public class GogController : ControllerBase
                             if (existingGamePlatform != null)
                             {
                                 game = await _context.Games.FindAsync(existingGamePlatform.GameId);
-                                _logger.LogDebug("通过PlatformGameId找到游戏: {GameId}, Name={Name}", game?.GameId, game?.Name);
-                            }
-                            
-                            // 如果没找到，再通过名称查找
-                            if (game == null)
-                            {
-                                game = await _context.Games
-                                    .FirstOrDefaultAsync(g => g.Name == gogGame.Name);
-                                _logger.LogDebug("通过名称查找游戏: Name={Name}, Found={Found}", gogGame.Name, game != null);
+                                _logger.LogInformation("找到已存在的游戏: GameId={GameId}, Name={Name}，将更新游戏信息", game?.GameId, game?.Name);
                             }
 
+                            // 如果游戏已存在，更新游戏信息（只补充缺失的字段，不覆盖已有数据）
+                            if (game != null)
+                            {
+                                bool hasChanges = false;
+                                
+                                // 更新游戏名称（如果当前名称为空或使用默认名称）
+                                if (string.IsNullOrEmpty(game.Name) || game.Name.StartsWith("GOG Game "))
+                                {
+                                    game.Name = gogGame.Name;
+                                    hasChanges = true;
+                                }
+                                
+                                // 只有当字段为空时才更新，避免覆盖其他平台的数据
+                                if (string.IsNullOrEmpty(game.ShortDescription) && !string.IsNullOrEmpty(gogGame.ShortDescription))
+                                {
+                                    game.ShortDescription = gogGame.ShortDescription;
+                                    hasChanges = true;
+                                }
+                                
+                                if (string.IsNullOrEmpty(game.DetailedDescription) && !string.IsNullOrEmpty(gogGame.DetailedDescription))
+                                {
+                                    game.DetailedDescription = gogGame.DetailedDescription;
+                                    hasChanges = true;
+                                }
+                                
+                                if (string.IsNullOrEmpty(game.HeaderImage) && !string.IsNullOrEmpty(gogGame.HeaderImage))
+                                {
+                                    // 确保图片URL是完整的（处理 // 开头的相对路径）
+                                    var headerImage = gogGame.HeaderImage;
+                                    if (headerImage.StartsWith("//"))
+                                    {
+                                        headerImage = "https:" + headerImage;
+                                    }
+                                    else if (!headerImage.StartsWith("http"))
+                                    {
+                                        headerImage = "https://" + headerImage;
+                                    }
+                                    
+                                    // 如果URL没有扩展名，添加 .jpg
+                                    if (!headerImage.Contains(".") || (!headerImage.EndsWith(".jpg") && !headerImage.EndsWith(".jpeg") && !headerImage.EndsWith(".png") && !headerImage.EndsWith(".webp")))
+                                    {
+                                        headerImage = headerImage.TrimEnd('/') + ".jpg";
+                                    }
+                                    
+                                    game.HeaderImage = headerImage;
+                                    game.CapsuleImage = headerImage;
+                                    game.Background = headerImage;
+                                    hasChanges = true;
+                                }
+                                
+                                if (game.ReleaseDate == default(DateTime) && !string.IsNullOrEmpty(gogGame.ReleaseDate) 
+                                    && DateTime.TryParse(gogGame.ReleaseDate, out var releaseDate))
+                                {
+                                    game.ReleaseDate = releaseDate;
+                                    hasChanges = true;
+                                }
+                                
+                                // 更新平台支持信息（如果当前没有设置）
+                                if (!game.Windows && !game.Mac && !game.Linux)
+                                {
+                                    game.Windows = gogGame.Platforms?.Windows ?? false;
+                                    game.Mac = gogGame.Platforms?.Mac ?? false;
+                                    game.Linux = gogGame.Platforms?.Linux ?? false;
+                                    hasChanges = true;
+                                }
+                                
+                                if (hasChanges)
+                                {
+                                    await _context.SaveChangesAsync();
+                                    _logger.LogInformation("已更新游戏信息: GameId={GameId}, Name={Name}", game.GameId, game.Name);
+                                }
+
+                                // 只添加新的开发商和发行商关联，不删除已有的
+                                if (gogGame.Developers.Count > 0)
+                                {
+                                    foreach (var devName in gogGame.Developers)
+                                    {
+                                        if (string.IsNullOrEmpty(devName)) continue;
+                                        var truncatedName = devName.Length > 20 ? devName.Substring(0, 20) : devName;
+                                        var developer = await _context.Developers.FirstOrDefaultAsync(d => d.Name == truncatedName);
+                                        if (developer == null)
+                                        {
+                                            developer = new Developer { Name = truncatedName };
+                                            _context.Developers.Add(developer);
+                                            await _context.SaveChangesAsync();
+                                        }
+                                        if (!await _context.GameDevelopers.AnyAsync(gd => gd.GameId == game.GameId && gd.DeveloperId == developer.DeveloperId))
+                                        {
+                                            _context.GameDevelopers.Add(new GameDeveloper { GameId = game.GameId, DeveloperId = developer.DeveloperId });
+                                        }
+                                    }
+                                }
+
+                                if (gogGame.Publishers.Count > 0)
+                                {
+                                    foreach (var pubName in gogGame.Publishers)
+                                    {
+                                        if (string.IsNullOrEmpty(pubName)) continue;
+                                        var truncatedName = pubName.Length > 20 ? pubName.Substring(0, 20) : pubName;
+                                        var publisher = await _context.Publishers.FirstOrDefaultAsync(p => p.Name == truncatedName);
+                                        if (publisher == null)
+                                        {
+                                            publisher = new Publisher { Name = truncatedName };
+                                            _context.Publishers.Add(publisher);
+                                            await _context.SaveChangesAsync();
+                                        }
+                                        if (!await _context.GamePublishers.AnyAsync(gp => gp.GameId == game.GameId && gp.PublisherId == publisher.PublisherId))
+                                        {
+                                            _context.GamePublishers.Add(new GamePublisher { GameId = game.GameId, PublisherId = publisher.PublisherId });
+                                        }
+                                    }
+                                }
+                                await _context.SaveChangesAsync();
+                            }
+
+                            // 如果游戏不存在，创建新游戏（即使名称相同，不同平台也应该创建新记录）
                             if (game == null)
                             {
                                 // 创建新游戏
+                                // 确保图片URL是完整的（处理 // 开头的相对路径）
+                                var headerImage = gogGame.HeaderImage ?? "";
+                                if (!string.IsNullOrEmpty(headerImage))
+                                {
+                                    if (headerImage.StartsWith("//"))
+                                    {
+                                        headerImage = "https:" + headerImage;
+                                    }
+                                    else if (!headerImage.StartsWith("http"))
+                                    {
+                                        headerImage = "https://" + headerImage;
+                                    }
+                                    
+                                    // 如果URL没有扩展名，添加 .jpg
+                                    if (!headerImage.Contains(".") || (!headerImage.EndsWith(".jpg") && !headerImage.EndsWith(".jpeg") && !headerImage.EndsWith(".png") && !headerImage.EndsWith(".webp")))
+                                    {
+                                        headerImage = headerImage.TrimEnd('/') + ".jpg";
+                                    }
+                                }
+                                
                                 game = new Game
                                 {
                                     Name = gogGame.Name,
@@ -386,9 +513,9 @@ public class GogController : ControllerBase
                                     RequireAge = (byte?)gogGame.RequiredAge,
                                     ShortDescription = gogGame.ShortDescription,
                                     DetailedDescription = gogGame.DetailedDescription,
-                                    HeaderImage = gogGame.HeaderImage,
-                                    CapsuleImage = gogGame.HeaderImage,
-                                    Background = gogGame.HeaderImage,
+                                    HeaderImage = headerImage,
+                                    CapsuleImage = headerImage,
+                                    Background = headerImage,
                                     Windows = gogGame.Platforms.Windows,
                                     Mac = gogGame.Platforms.Mac,
                                     Linux = gogGame.Platforms.Linux,

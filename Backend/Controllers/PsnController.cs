@@ -328,10 +328,19 @@ public class PsnController : ControllerBase
                     {
                         try
                         {
-                            // 查找或创建游戏
-                            var game = await _context.Games
-                                .FirstOrDefaultAsync(g => g.Name == psnGame.Name);
+                            // 查找是否已存在该PSN平台的该游戏
+                            // 只通过GamePlatform匹配，不通过名称匹配，避免不同平台的同名游戏被错误关联
+                            Game? game = null;
+                            var existingGamePlatform = await _context.GamePlatforms
+                                .FirstOrDefaultAsync(gp => gp.PlatformId == PSN_PLATFORM_ID
+                                    && gp.PlatformGameId == psnGame.TitleId);
 
+                            if (existingGamePlatform != null)
+                            {
+                                game = await _context.Games.FindAsync(existingGamePlatform.GameId);
+                            }
+
+                            // 如果游戏不存在，创建新游戏（即使名称相同，不同平台也应该创建新记录）
                             if (game == null)
                             {
                                 // 创建新游戏

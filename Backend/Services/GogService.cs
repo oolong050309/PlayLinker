@@ -856,6 +856,12 @@ public class GogService : IGogService
                 }
             }
 
+            // 打印原始数据
+            var rawJson = gogData.RootElement.GetRawText();
+            _logger.LogInformation("========== GOG原始数据开始 ==========");
+            _logger.LogInformation("{RawJson}", rawJson);
+            _logger.LogInformation("========== GOG原始数据结束 ==========");
+
             // 解析数据并统计
             int gamesCount = 0;
             int achievementsCount = 0;
@@ -1038,6 +1044,12 @@ public class GogService : IGogService
                 return new List<GogGameDto>();
             }
 
+            // 打印原始数据
+            var rawJson = gogData.RootElement.GetRawText();
+            _logger.LogInformation("========== GOG游戏列表原始数据开始 ==========");
+            _logger.LogInformation("{RawJson}", rawJson);
+            _logger.LogInformation("========== GOG游戏列表原始数据结束 ==========");
+
             var gamesList = new List<GogGameDto>();
 
             // 从games数组中提取游戏信息
@@ -1045,6 +1057,17 @@ public class GogService : IGogService
             {
                 var totalGames = games.GetArrayLength();
                 _logger.LogInformation("开始解析 {Count} 个GOG游戏", totalGames);
+                
+                // 打印每个游戏的原始JSON
+                int gameIndex = 0;
+                foreach (var game in games.EnumerateArray())
+                {
+                    gameIndex++;
+                    var gameRawJson = game.GetRawText();
+                    _logger.LogInformation("========== 游戏 {Index}/{Total} 原始数据开始 ==========", gameIndex, totalGames);
+                    _logger.LogInformation("{GameRawJson}", gameRawJson);
+                    _logger.LogInformation("========== 游戏 {Index}/{Total} 原始数据结束 ==========", gameIndex, totalGames);
+                }
                 
                 int parsedCount = 0;
                 int skippedCount = 0;
@@ -1060,6 +1083,8 @@ public class GogService : IGogService
                         continue;
                     }
 
+                    _logger.LogInformation("正在解析游戏: GameId={GameId}", gogGameId);
+
                     var gameDto = new GogGameDto
                     {
                         GogGameId = gogGameId,
@@ -1070,10 +1095,53 @@ public class GogService : IGogService
                     if (game.TryGetProperty("details", out var details) && details.ValueKind != JsonValueKind.Null)
                     {
                         gameDto.Name = details.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "";
-                        gameDto.HeaderImage = details.TryGetProperty("backgroundImage", out var bgImg) ? bgImg.GetString() ?? "" : "";
+                        
+                        // 处理背景图片：如果是相对路径，添加 https: 前缀
+                        if (details.TryGetProperty("backgroundImage", out var bgImg))
+                        {
+                            var bgImgStr = bgImg.GetString() ?? "";
+                            if (!string.IsNullOrEmpty(bgImgStr))
+                            {
+                                if (bgImgStr.StartsWith("//"))
+                                {
+                                    gameDto.HeaderImage = "https:" + bgImgStr;
+                                }
+                                else if (!bgImgStr.StartsWith("http"))
+                                {
+                                    gameDto.HeaderImage = "https://" + bgImgStr;
+                                }
+                                else
+                                {
+                                    gameDto.HeaderImage = bgImgStr;
+                                }
+                            }
+                        }
+                        
                         gameDto.ShortDescription = details.TryGetProperty("shortDescription", out var shortDesc) ? shortDesc.GetString() : null;
                         gameDto.DetailedDescription = details.TryGetProperty("description", out var desc) ? desc.GetString() : null;
-                        gameDto.ReleaseDate = details.TryGetProperty("releaseDate", out var releaseDate) ? releaseDate.GetString() ?? "" : "";
+                        
+                        // 解析发布日期：从 releaseTimestamp 转换
+                        if (details.TryGetProperty("releaseTimestamp", out var releaseTimestamp))
+                        {
+                            if (releaseTimestamp.ValueKind == JsonValueKind.Number && releaseTimestamp.TryGetInt64(out var timestamp))
+                            {
+                                // Unix时间戳转换为日期字符串
+                                var dateTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).DateTime;
+                                gameDto.ReleaseDate = dateTime.ToString("yyyy-MM-dd");
+                            }
+                            else if (releaseTimestamp.ValueKind == JsonValueKind.String)
+                            {
+                                gameDto.ReleaseDate = releaseTimestamp.GetString() ?? "";
+                            }
+                        }
+                        // 如果没有 releaseTimestamp，尝试 releaseDate
+                        else if (details.TryGetProperty("releaseDate", out var releaseDate))
+                        {
+                            gameDto.ReleaseDate = releaseDate.GetString() ?? "";
+                        }
+                        
+                        _logger.LogInformation("游戏详情: GameId={GameId}, Name={Name}, ReleaseDate={ReleaseDate}", 
+                            gogGameId, gameDto.Name, gameDto.ReleaseDate);
                         
                         // 解析年龄限制
                         if (details.TryGetProperty("ageLimit", out var ageLimit))
@@ -1081,7 +1149,7 @@ public class GogService : IGogService
                             gameDto.RequiredAge = SafeGetInt32(ageLimit);
                         }
                         
-                        // 解析开发商
+                        // 解析开发商（如果存在）
                         if (details.TryGetProperty("developers", out var developers) && developers.ValueKind == JsonValueKind.Array)
                         {
                             foreach (var dev in developers.EnumerateArray())
@@ -1092,9 +1160,14 @@ public class GogService : IGogService
                                     gameDto.Developers.Add(devName);
                                 }
                             }
+                            if (gameDto.Developers.Count > 0)
+                            {
+                                _logger.LogInformation("游戏开发商: GameId={GameId}, Developers=[{Developers}]", 
+                                    gogGameId, string.Join(", ", gameDto.Developers));
+                            }
                         }
                         
-                        // 解析发行商
+                        // 解析发行商（如果存在）
                         if (details.TryGetProperty("publishers", out var publishers) && publishers.ValueKind == JsonValueKind.Array)
                         {
                             foreach (var pub in publishers.EnumerateArray())
@@ -1105,30 +1178,59 @@ public class GogService : IGogService
                                     gameDto.Publishers.Add(pubName);
                                 }
                             }
+                            if (gameDto.Publishers.Count > 0)
+                            {
+                                _logger.LogInformation("游戏发行商: GameId={GameId}, Publishers=[{Publishers}]", 
+                                    gogGameId, string.Join(", ", gameDto.Publishers));
+                            }
                         }
                         
-                        // 解析平台支持
-                        if (details.TryGetProperty("worksOn", out var worksOn))
+                        // 解析平台支持：从 simpleGalaxyInstallers 或 downloads 推断
+                        bool hasWindows = false;
+                        bool hasMac = false;
+                        bool hasLinux = false;
+                        
+                        // 从 simpleGalaxyInstallers 推断
+                        if (details.TryGetProperty("simpleGalaxyInstallers", out var installers) && installers.ValueKind == JsonValueKind.Array)
                         {
-                            gameDto.Platforms = new PlatformSupportDto
+                            foreach (var installer in installers.EnumerateArray())
                             {
-                                Windows = worksOn.TryGetProperty("Windows", out var win) && win.GetBoolean(),
-                                Mac = worksOn.TryGetProperty("Mac", out var mac) && mac.GetBoolean(),
-                                Linux = worksOn.TryGetProperty("Linux", out var linux) && linux.GetBoolean()
-                            };
-                        }
-                        else
-                        {
-                            // 如果没有worksOn，尝试从其他字段推断
-                            gameDto.Platforms = new PlatformSupportDto
-                            {
-                                Windows = true, // 默认假设支持Windows
-                                Mac = false,
-                                Linux = false
-                            };
+                                if (installer.TryGetProperty("os", out var os))
+                                {
+                                    var osStr = os.GetString()?.ToLower() ?? "";
+                                    if (osStr == "windows") hasWindows = true;
+                                    else if (osStr == "mac") hasMac = true;
+                                    else if (osStr == "linux") hasLinux = true;
+                                }
+                            }
                         }
                         
-                        // 解析题材（genres）
+                        // 从 downloads 推断（如果 simpleGalaxyInstallers 没有信息）
+                        if (!hasWindows && !hasMac && !hasLinux && details.TryGetProperty("downloads", out var downloads) && downloads.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var langDownload in downloads.EnumerateArray())
+                            {
+                                if (langDownload.ValueKind == JsonValueKind.Array && langDownload.GetArrayLength() >= 2)
+                                {
+                                    var downloadObj = langDownload[1];
+                                    if (downloadObj.TryGetProperty("windows", out _)) hasWindows = true;
+                                    if (downloadObj.TryGetProperty("mac", out _)) hasMac = true;
+                                    if (downloadObj.TryGetProperty("linux", out _)) hasLinux = true;
+                                }
+                            }
+                        }
+                        
+                        gameDto.Platforms = new PlatformSupportDto
+                        {
+                            Windows = hasWindows,
+                            Mac = hasMac,
+                            Linux = hasLinux
+                        };
+                        
+                        _logger.LogInformation("游戏平台支持: GameId={GameId}, Windows={Windows}, Mac={Mac}, Linux={Linux}", 
+                            gogGameId, hasWindows, hasMac, hasLinux);
+                        
+                        // 解析题材（genres，如果存在）
                         if (details.TryGetProperty("genres", out var genres) && genres.ValueKind == JsonValueKind.Array)
                         {
                             foreach (var genre in genres.EnumerateArray())
@@ -1161,12 +1263,16 @@ public class GogService : IGogService
                             Total = totalCount,
                             CurrentAchievements = 0
                         };
+                        _logger.LogInformation("游戏成就: GameId={GameId}, TotalAchievements={Total}", 
+                            gogGameId, totalCount);
                     }
 
                     // 解析游玩时长
                     if (game.TryGetProperty("playTimeMinutes", out var playTime))
                     {
                         gameDto.PlayTimeMinutes = SafeGetInt32(playTime);
+                        _logger.LogInformation("游戏时长: GameId={GameId}, PlayTimeMinutes={PlayTime}", 
+                            gogGameId, gameDto.PlayTimeMinutes);
                     }
 
                     // 检查游戏名称是否为空
@@ -1179,8 +1285,9 @@ public class GogService : IGogService
                     
                     gamesList.Add(gameDto);
                     parsedCount++;
-                    _logger.LogDebug("解析游戏: GameId={GameId}, Name={Name}, Developers={DevCount}, Publishers={PubCount}", 
-                        gogGameId, gameDto.Name, gameDto.Developers.Count, gameDto.Publishers.Count);
+                    _logger.LogInformation("游戏解析完成: GameId={GameId}, Name={Name}, Developers={DevCount}, Publishers={PubCount}, Achievements={Achievements}, PlayTime={PlayTime}分钟", 
+                        gogGameId, gameDto.Name, gameDto.Developers.Count, gameDto.Publishers.Count, 
+                        gameDto.Achievements?.Total ?? 0, gameDto.PlayTimeMinutes);
                 }
                 
                 _logger.LogInformation("游戏解析完成: 总计={Total}, 已解析={Parsed}, 已跳过={Skipped}", 

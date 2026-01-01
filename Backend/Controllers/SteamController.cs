@@ -448,10 +448,19 @@ public class SteamController : ControllerBase
                                         // 从第三方 API 获取评论数据
                                         var (totalReviews, totalPositive) = await GetGameReviewsFromThirdPartyApiAsync(appId);
 
-                                        // 查找或创建游戏
-                                        var game = await _context.Games
-                                            .FirstOrDefaultAsync(g => g.Name == steamGame.Name);
+                                        // 查找是否已存在该Steam平台的该游戏
+                                        // 只通过GamePlatform匹配，不通过名称匹配，避免不同平台的同名游戏被错误关联
+                                        Game? game = null;
+                                        var existingGamePlatform = await _context.GamePlatforms
+                                            .FirstOrDefaultAsync(gp => gp.PlatformId == STEAM_PLATFORM_ID
+                                                && gp.PlatformGameId == appId.ToString());
 
+                                        if (existingGamePlatform != null)
+                                        {
+                                            game = await _context.Games.FindAsync(existingGamePlatform.GameId);
+                                        }
+
+                                        // 如果游戏不存在，创建新游戏（即使名称相同，不同平台也应该创建新记录）
                                         if (game == null)
                                         {
                                             // 创建新游戏
@@ -1571,10 +1580,9 @@ public class SteamController : ControllerBase
                             // 从第三方 API 获取评论数据
                             var (totalReviews, totalPositive) = await GetGameReviewsFromThirdPartyApiAsync(appId);
 
-                            // 查找或创建游戏
-                            game = await _context.Games
-                                .FirstOrDefaultAsync(g => g.Name == steamGame.Name);
-
+                            // 注意：在第1520行已经检查过 existingGamePlatform，如果存在会 continue
+                            // 所以这里 existingGamePlatform 应该总是 null，game 也应该是 null
+                            // 直接创建新游戏（即使名称相同，不同平台也应该创建新记录）
                             if (game == null)
                             {
                                 // 创建新游戏

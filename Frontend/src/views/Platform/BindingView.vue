@@ -756,9 +756,28 @@ const handleBind = async () => {
     
     // Epic Games认证流程
     if (platform.id === 2) {
+      if (!bindForm.value.epicCode || bindForm.value.epicCode.trim() === '') {
+        // 如果没有提供授权码，尝试检查令牌状态
+        try {
+          const statusRes = await epicApi.checkTokenStatus()
+          if (statusRes.success && statusRes.data?.success) {
+            alert('Epic Games已登录，正在同步数据...')
+            await handleEpicPostAuth(statusRes)
+          } else {
+            alert(statusRes.data?.message || '请提供Epic Games授权码或先通过命令行登录')
+          }
+        } catch (error) {
+          console.error('Epic Games令牌状态检查失败:', error)
+          alert('Epic Games令牌状态检查失败: ' + (error.message || '未知错误'))
+        } finally {
+          loading.value = false
+        }
+        return
+      }
+      
       try {
         const authRes = await epicApi.authenticate({
-          code: bindForm.value.epicCode || null,
+          code: bindForm.value.epicCode,
           forceReauth: false
         })
         
@@ -927,9 +946,22 @@ const handleEpicPostAuth = async (authResponse) => {
       return
     }
 
-    const epicAccountId = authResponse.data.data?.epicAccountId
+    // 修复：从正确的路径获取epicAccountId
+    const epicAccountId = authResponse.data?.epicAccountId
     if (!epicAccountId) {
       alert('无法获取Epic账户ID')
+      return
+    }
+
+    // 先绑定平台
+    const bindData = {
+      platformId: 2,
+      epicAccountId: epicAccountId
+    }
+    const bindRes = await platformsApi.bindPlatform(bindData)
+    
+    if (!bindRes.success) {
+      alert('Epic Games绑定失败')
       return
     }
 
@@ -947,10 +979,13 @@ const handleEpicPostAuth = async (authResponse) => {
         importGames: true,
         importAchievements: true
       })
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
-      alert('Epic Games数据同步成功！')
       closeBindModal()
       await loadBindings()
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      await refreshStats()
+      alert('数据同步完成！')
     } catch (error) {
       console.error('Epic Games数据导入失败:', error)
       alert('Epic Games数据同步失败，请稍后手动同步')

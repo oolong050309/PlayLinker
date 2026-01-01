@@ -442,7 +442,8 @@ public class EpicController : ControllerBase
                         // 查找或创建游戏
                         Game? game = null;
 
-                        // 先尝试通过GamePlatform的PlatformGameId匹配
+                        // 只通过GamePlatform的PlatformGameId匹配，不通过名称匹配
+                        // 这样可以避免不同平台的同名游戏被错误关联
                         var existingGamePlatform = await context.GamePlatforms
                             .FirstOrDefaultAsync(gp => gp.PlatformId == EPIC_PLATFORM_ID
                                 && gp.PlatformGameId == epicGame.GameId);
@@ -450,36 +451,38 @@ public class EpicController : ControllerBase
                         if (existingGamePlatform != null)
                         {
                             game = await context.Games.FindAsync(existingGamePlatform.GameId);
-                        }
-
-                        // 如果没找到，再通过名称查找
-                        if (game == null)
+                            
+                            // 如果游戏已存在，只补充缺失的信息，不覆盖已有数据
+                            if (game != null && gameDetails != null)
                         {
-                            game = await context.Games
-                                .FirstOrDefaultAsync(g => g.Name == epicGame.Name);
-                        }
-
-                        // 如果游戏已存在，更新详细信息（如果有）
-                        if (game != null && gameDetails != null)
-                        {
-                            if (!string.IsNullOrEmpty(gameDetails.ShortDescription))
+                            bool hasChanges = false;
+                            
+                            // 只有当字段为空时才更新，避免覆盖其他平台的数据
+                            if (string.IsNullOrEmpty(game.ShortDescription) && !string.IsNullOrEmpty(gameDetails.ShortDescription))
                             {
                                 game.ShortDescription = gameDetails.ShortDescription;
+                                hasChanges = true;
                             }
-                            if (!string.IsNullOrEmpty(gameDetails.HeaderImage))
+                            if (string.IsNullOrEmpty(game.HeaderImage) && !string.IsNullOrEmpty(gameDetails.HeaderImage))
                             {
                                 game.HeaderImage = gameDetails.HeaderImage;
                                 game.CapsuleImage = gameDetails.HeaderImage;
                                 game.Background = gameDetails.HeaderImage;
+                                hasChanges = true;
                             }
-                            if (!string.IsNullOrEmpty(gameDetails.ReleaseDate) 
+                            if (game.ReleaseDate == default(DateTime) && !string.IsNullOrEmpty(gameDetails.ReleaseDate) 
                                 && DateTime.TryParse(gameDetails.ReleaseDate, out var releaseDate))
                             {
                                 game.ReleaseDate = releaseDate;
+                                hasChanges = true;
                             }
-                            await context.SaveChangesAsync();
+                            
+                            if (hasChanges)
+                            {
+                                await context.SaveChangesAsync();
+                            }
 
-                            // 更新开发商和发行商（如果游戏已存在但缺少这些信息）
+                            // 只添加新的开发商和发行商关联，不删除已有的
                             if (gameDetails.Developers.Count > 0)
                             {
                                 foreach (var devName in gameDetails.Developers)
@@ -521,7 +524,9 @@ public class EpicController : ControllerBase
                             }
                             await context.SaveChangesAsync();
                         }
+                        }
 
+                        // 如果游戏不存在，创建新游戏（即使名称相同，不同平台也应该创建新记录）
                         if (game == null)
                         {
                             // 创建新游戏
