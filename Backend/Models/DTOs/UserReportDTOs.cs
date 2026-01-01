@@ -92,6 +92,11 @@ public class GameLibrarySummaryDto
     /// TOP 10 最常玩游戏
     /// </summary>
     public List<TopPlayedGameDto> TopPlayedGames { get; set; } = new();
+    
+    /// <summary>
+    /// 各平台统计
+    /// </summary>
+    public List<PlatformStatsDto> PlatformStats { get; set; } = new();
 }
 
 /// <summary>
@@ -118,6 +123,7 @@ public class TopPlayedGameDto
     public string? LastPlayed { get; set; }
     public int? AchievementsUnlocked { get; set; }
     public int? AchievementsTotal { get; set; }
+    public string Platform { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -216,6 +222,7 @@ public class RecentPlayedGameDto
     public int PlaytimeMinutes { get; set; }
     public int RecentPlaytimeMinutes { get; set; }
     public string? LastPlayed { get; set; }
+    public string Platform { get; set; } = string.Empty;
 }
 
 /// <summary>

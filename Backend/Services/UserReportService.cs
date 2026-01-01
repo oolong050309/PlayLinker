@@ -97,21 +97,30 @@ public class UserReportService : IUserReportService
     {
         var result = new GameLibrarySummaryDto();
 
-        // 获取Steam绑定
-        var steamBinding = await _context.UserPlatformBindings
-            .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == STEAM_PLATFORM_ID && b.BindingStatus == true);
+        // 获取用户所有平台的绑定
+        var userBindings = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .ToListAsync();
 
-        if (steamBinding == null)
+        if (!userBindings.Any())
         {
             return result;
         }
 
-        // 从数据库获取游戏库数据
+        // 获取所有绑定平台的 PlatformUserId 列表
+        var platformUserIds = userBindings
+            .Where(b => !string.IsNullOrEmpty(b.PlatformUserId))
+            .Select(b => b.PlatformUserId)
+            .ToList();
+
+        // 从数据库获取所有平台的游戏库数据
         var libraryGames = await _context.UserPlatformLibraries
             .Include(l => l.Game)
                 .ThenInclude(g => g.GameGenres)
                     .ThenInclude(gg => gg.Genre)
-            .Where(l => l.PlatformUserId == steamBinding.PlatformUserId && l.PlatformId == STEAM_PLATFORM_ID)
+            .Include(l => l.PlayerPlatform)
+                .ThenInclude(pp => pp.Platform)
+            .Where(l => platformUserIds.Contains(l.PlatformUserId))
             .ToListAsync();
 
         result.TotalGames = libraryGames.Count;
@@ -120,12 +129,34 @@ public class UserReportService : IUserReportService
         result.PlayedGames = libraryGames.Count(g => g.PlaytimeMinutes > 0);
         result.NeverPlayedGames = libraryGames.Count(g => g.PlaytimeMinutes == 0);
 
-        // 最近2周游玩时长（暂时跳过Steam API调用，需要同步时获取）
-        // result.RecentPlaytimeMinutes = 0;
+        // 按平台统计
+        var platformStats = libraryGames
+            .GroupBy(l => new { l.PlatformId, PlatformName = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown" })
+            .Select(g => new PlatformStatsDto
+            {
+                PlatformId = g.Key.PlatformId,
+                PlatformName = g.Key.PlatformName,
+                GameCount = g.Count(),
+                PlaytimeMinutes = g.Sum(x => x.PlaytimeMinutes),
+                PlaytimeFormatted = FormatPlaytime(g.Sum(x => x.PlaytimeMinutes))
+            })
+            .OrderByDescending(x => x.PlaytimeMinutes)
+            .ToList();
+
+        // 计算各平台占比
+        var totalPlatformPlaytime = platformStats.Sum(x => x.PlaytimeMinutes);
+        foreach (var platform in platformStats)
+        {
+            platform.Percentage = totalPlatformPlaytime > 0 
+                ? Math.Round((double)platform.PlaytimeMinutes / totalPlatformPlaytime * 100, 1) 
+                : 0;
+        }
+        result.PlatformStats = platformStats;
 
         // 按类型统计游戏时长
         var genrePlaytime = libraryGames
-            .SelectMany(l => l.Game.GameGenres.Select(gg => new { Genre = gg.Genre.Name, l.PlaytimeMinutes }))
+            .Where(l => l.Game?.GameGenres != null)
+            .SelectMany(l => l.Game.GameGenres.Select(gg => new { Genre = gg.Genre?.Name ?? "Unknown", l.PlaytimeMinutes }))
             .GroupBy(x => x.Genre)
             .Select(g => new PlaytimeByGenreDto
             {
@@ -144,20 +175,21 @@ public class UserReportService : IUserReportService
         }
         result.PlaytimeByGenre = genrePlaytime;
 
-        // TOP 10 最常玩游戏
+        // TOP 10 最常玩游戏（包含平台信息）
         result.TopPlayedGames = libraryGames
             .OrderByDescending(l => l.PlaytimeMinutes)
             .Take(10)
             .Select(l => new TopPlayedGameDto
             {
                 GameId = l.GameId,
-                GameName = l.Game.Name,
-                HeaderImage = l.Game.HeaderImage,
+                GameName = l.Game?.Name ?? "Unknown",
+                HeaderImage = l.Game?.HeaderImage,
                 PlaytimeMinutes = l.PlaytimeMinutes,
                 PlaytimeFormatted = FormatPlaytime(l.PlaytimeMinutes),
                 LastPlayed = l.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
                 AchievementsUnlocked = l.AchievementsUnlocked,
-                AchievementsTotal = l.AchievementsTotal
+                AchievementsTotal = l.AchievementsTotal,
+                Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
             })
             .ToList();
 
@@ -238,22 +270,31 @@ public class UserReportService : IUserReportService
     }
 
     /// <summary>
-    /// 获取最近游玩记录（优先从数据库获取）
+    /// 获取最近游玩记录（支持多平台）
     /// </summary>
     public async Task<List<RecentPlayedGameDto>> GetRecentPlayedGamesAsync(int userId, int count = 10)
     {
-        var steamBinding = await _context.UserPlatformBindings
-            .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == STEAM_PLATFORM_ID && b.BindingStatus == true);
+        // 获取用户所有平台的绑定
+        var userBindings = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .ToListAsync();
 
-        if (steamBinding == null)
+        if (!userBindings.Any())
         {
             return new List<RecentPlayedGameDto>();
         }
 
-        // 优先从数据库获取（避免API超时）
+        var platformUserIds = userBindings
+            .Where(b => !string.IsNullOrEmpty(b.PlatformUserId))
+            .Select(b => b.PlatformUserId)
+            .ToList();
+
+        // 从数据库获取所有平台的最近游玩记录
         var dbGames = await _context.UserPlatformLibraries
             .Include(l => l.Game)
-            .Where(l => l.PlatformUserId == steamBinding.PlatformUserId && l.PlatformId == STEAM_PLATFORM_ID && l.LastPlayed.HasValue)
+            .Include(l => l.PlayerPlatform)
+                .ThenInclude(pp => pp.Platform)
+            .Where(l => platformUserIds.Contains(l.PlatformUserId) && l.LastPlayed.HasValue)
             .OrderByDescending(l => l.LastPlayed)
             .Take(count)
             .ToListAsync();
@@ -264,7 +305,8 @@ public class UserReportService : IUserReportService
                 GameName = l.Game.Name,
                 HeaderImage = l.Game.HeaderImage,
                 PlaytimeMinutes = l.PlaytimeMinutes,
-                LastPlayed = l.LastPlayed?.ToString("yyyy-MM-dd HH:mm")
+                LastPlayed = l.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
+                Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
             })
             .ToList();
     }
