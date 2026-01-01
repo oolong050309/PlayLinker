@@ -103,6 +103,9 @@ public partial class PlayLinkerDbContext : DbContext
 
     public virtual DbSet<UserPreference> UserPreferences { get; set; }
 
+    // 用户游戏时长历史记录表 - 用于趋势分析
+    public virtual DbSet<UserPlaytimeHistory> UserPlaytimeHistories { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder

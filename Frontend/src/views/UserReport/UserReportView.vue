@@ -25,10 +25,6 @@
           <Download class="icon" />
           导出报表
         </button>
-        <button class="btn-sync" @click="handleSync" :disabled="syncing">
-          <RefreshCw class="icon" :class="{ spinning: syncing }" />
-          {{ syncing ? '同步中...' : '同步数据' }}
-        </button>
       </div>
     </div>
 
@@ -119,6 +115,36 @@
           </div>
           <div class="stat-value">{{ wishlist.totalItems }}</div>
           <div class="stat-desc">{{ wishlist.onSaleCount }} 款在打折</div>
+        </div>
+      </div>
+
+      <!-- Platform Stats -->
+      <div v-if="gameLibrary.platformStats?.length" class="platform-stats-section">
+        <h3 class="section-title">📊 平台统计</h3>
+        <div class="platform-stats-grid">
+          <div v-for="platform in gameLibrary.platformStats" :key="platform.platformId" class="platform-stat-card">
+            <div class="platform-header">
+              <span class="platform-icon">{{ getPlatformIcon(platform.platformName) }}</span>
+              <span class="platform-name">{{ platform.platformName }}</span>
+            </div>
+            <div class="platform-stats">
+              <div class="platform-stat">
+                <span class="platform-stat-value">{{ platform.gameCount }}</span>
+                <span class="platform-stat-label">游戏</span>
+              </div>
+              <div class="platform-stat">
+                <span class="platform-stat-value">{{ platform.playtimeFormatted }}</span>
+                <span class="platform-stat-label">时长</span>
+              </div>
+              <div class="platform-stat">
+                <span class="platform-stat-value">{{ platform.percentage }}%</span>
+                <span class="platform-stat-label">占比</span>
+              </div>
+            </div>
+            <div class="platform-bar">
+              <div class="platform-bar-fill" :style="{ width: platform.percentage + '%' }"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -648,6 +674,22 @@ const getRankClass = (index) => {
   if (index === 1) return 'silver'
   if (index === 2) return 'bronze'
   return ''
+}
+
+const getPlatformIcon = (platformName) => {
+  const icons = {
+    'Steam': '🎮',
+    'Xbox': '🎯',
+    'PlayStation': '🎲',
+    'PSN': '🎲',
+    'GOG': '🌟',
+    'Epic': '⚡',
+    'Nintendo': '🍄',
+    'Origin': '🔶',
+    'Ubisoft': '🔷',
+    'Battle.net': '💠'
+  }
+  return icons[platformName] || '🎮'
 }
 
 const loadData = async (forceRefresh = false) => {
@@ -1262,6 +1304,85 @@ onUnmounted(() => {
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+/* Platform Stats Section */
+.platform-stats-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.platform-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.platform-stat-card {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.platform-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.platform-icon {
+  font-size: 20px;
+}
+
+.platform-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.platform-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.platform-stat {
+  text-align: center;
+}
+
+.platform-stat-value {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.platform-stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.platform-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.platform-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #818cf8, #6366f1);
+  border-radius: 2px;
+  transition: width 0.3s ease;
 }
 
 .stat-card {

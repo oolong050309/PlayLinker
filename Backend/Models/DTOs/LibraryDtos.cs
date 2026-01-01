@@ -24,6 +24,10 @@ public class PlatformStatsDto
     public int PlatformId { get; set; }
     public string PlatformName { get; set; } = string.Empty;
     public int GamesOwned { get; set; }
+    public int GameCount { get; set; }
+    public long PlaytimeMinutes { get; set; }
+    public string PlaytimeFormatted { get; set; } = "0小时";
+    public double Percentage { get; set; }
     public string LastSyncTime { get; set; } = string.Empty;
 }
 
