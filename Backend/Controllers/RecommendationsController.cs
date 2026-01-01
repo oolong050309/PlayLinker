@@ -111,9 +111,9 @@ public class RecommendationsController : ControllerBase
                 {
                     var hasAi = aiRecs.Any();
                     return Ok(ApiResponse<object>.SuccessResponse(new { 
-                        aiCategory = "AI 深度探索 (缓存)", 
+                        aiCategory = "AI 深度探索", 
                         aiItems = MapToDto(aiRecs),
-                        ruleCategory = "热门精选 (缓存)",
+                        ruleCategory = "热门精选",
                         ruleItems = MapToDto(ruleRecs)
                     }));
                 }
