@@ -19,18 +19,58 @@ public class ReportGenerationService
     }
 
     /// <summary>
+    /// 生成空报告 HTML（当没有数据时）
+    /// </summary>
+    private string GenerateEmptyReportHtml(DateTime startDate, DateTime endDate, string message)
+    {
+        return $@"
+<!DOCTYPE html>
+<html lang='zh-CN'>
+<head>
+    <meta charset='UTF-8'>
+    <title>游戏报告</title>
+    <style>
+        body {{ font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f5f5f5; padding: 40px; }}
+        .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 60px; border-radius: 10px; text-align: center; }}
+        h1 {{ color: #666; margin-bottom: 20px; }}
+        p {{ color: #999; font-size: 1.2em; }}
+        .period {{ color: #aaa; margin-top: 20px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>📊 游戏报告</h1>
+        <p>{message}</p>
+        <p class='period'>{startDate:yyyy-MM-dd} - {endDate:yyyy-MM-dd}</p>
+        <p style='margin-top: 40px; color: #ccc;'>请先绑定 Steam 或其他游戏平台账号</p>
+    </div>
+</body>
+</html>";
+    }
+
+    /// <summary>
     /// 生成HTML格式的月度游戏报告
     /// </summary>
     public async Task<string> GenerateMonthlyReportHtml(int userId, DateTime startDate, DateTime endDate)
     {
-        // 查询数据
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
+        if (!platformUserIds.Any())
+        {
+            return GenerateEmptyReportHtml(startDate, endDate, "未绑定任何游戏平台");
+        }
+
+        // 查询游戏数据
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .ToListAsync();
 
         var achievements = await _context.UserAchievements
@@ -251,14 +291,19 @@ public class ReportGenerationService
     /// </summary>
     public async Task<byte[]> GenerateMonthlyReportCsv(int userId, DateTime startDate, DateTime endDate)
     {
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
         // 查询数据
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .OrderByDescending(r => r.PlaytimeMinutes)
             .ToListAsync();
 
@@ -303,14 +348,19 @@ public class ReportGenerationService
         // 设置QuestPDF许可证（社区版免费）
         QuestPDF.Settings.License = LicenseType.Community;
 
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
         // 查询数据
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .ToListAsync();
 
         var achievements = await _context.UserAchievements
@@ -494,19 +544,31 @@ public class ReportGenerationService
         var startDate = new DateTime(year, 1, 1);
         var endDate = new DateTime(year, 12, 31);
 
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
+        if (!platformUserIds.Any())
+        {
+            return GenerateEmptyReportHtml(startDate, endDate, "未绑定任何游戏平台");
+        }
+
         // 查询数据
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
-            .ThenInclude(g => g.GameGenres)
-            .ThenInclude(gg => gg.Genre)
+                .ThenInclude(g => g.GameGenres)
+                    .ThenInclude(gg => gg.Genre)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .ToListAsync();
 
         var achievements = await _context.UserAchievements
             .Include(a => a.Achievement)
-            .ThenInclude(a => a.Game)
+                .ThenInclude(a => a.Game)
             .Where(a => a.UserId == userId && a.Unlocked)
             .ToListAsync();
 
@@ -647,11 +709,18 @@ public class ReportGenerationService
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .ToListAsync();
 
         var achievements = await _context.UserAchievements
@@ -747,13 +816,18 @@ public class ReportGenerationService
     /// </summary>
     public async Task<string> GenerateInventoryReportHtml(int userId)
     {
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .ToListAsync();
 
         var localGames = await _context.LocalGameInstalls
@@ -763,7 +837,7 @@ public class ReportGenerationService
 
         var saves = await _context.LocalSaveFiles
             .Include(s => s.Install)
-            .ThenInclude(i => i.Game)
+                .ThenInclude(i => i.Game)
             .Where(s => s.Install.UserId == userId)
             .ToListAsync();
 
@@ -897,13 +971,18 @@ public class ReportGenerationService
     /// </summary>
     public async Task<byte[]> GenerateInventoryReportCsv(int userId)
     {
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .OrderBy(r => r.Game.Name)
             .ToListAsync();
 
@@ -947,13 +1026,18 @@ public class ReportGenerationService
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .ToListAsync();
 
         var localGames = await _context.LocalGameInstalls

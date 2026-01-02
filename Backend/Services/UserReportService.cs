@@ -896,33 +896,39 @@ public class UserReportService : IUserReportService
     private async Task CalculatePlaytimeTrendsAsync(int userId, GameLibrarySummaryDto result)
     {
         var today = DateTime.UtcNow.Date;
-        var thirtyDaysAgo = today.AddDays(-30);
         
-        // 获取最近30天的所有历史记录
+        // 首先查询用户最早的历史记录日期，动态确定数据范围
+        var earliestRecord = await _context.UserPlaytimeHistories
+            .Where(h => h.UserId == userId)
+            .OrderBy(h => h.RecordDate)
+            .FirstOrDefaultAsync();
+
+        if (earliestRecord == null)
+        {
+            _logger.LogInformation("用户 {UserId} 没有任何历史记录", userId);
+            return;
+        }
+
+        var dataStartDate = earliestRecord.RecordDate.Date;
+        _logger.LogInformation("用户 {UserId} 数据起始日期: {StartDate}", userId, dataStartDate);
+        
+        // 获取所有历史记录（从最早记录开始）
         var allHistory = await _context.UserPlaytimeHistories
-            .Where(h => h.UserId == userId && h.RecordDate >= thirtyDaysAgo && h.RecordDate <= today)
+            .Where(h => h.UserId == userId && h.RecordDate >= dataStartDate && h.RecordDate <= today)
             .OrderBy(h => h.RecordDate)
             .ToListAsync();
 
         if (!allHistory.Any())
         {
-            _logger.LogInformation("用户 {UserId} 没有最近30天的历史记录", userId);
+            _logger.LogInformation("用户 {UserId} 没有历史记录", userId);
             return;
         }
 
         // 按日期分组，计算每天的游戏时长增量
         var dailyData = new Dictionary<DateTime, (int playtimeChange, HashSet<long> gamesPlayed)>();
         
-        // 获取30天前的基准数据
-        var baselineHistory = await _context.UserPlaytimeHistories
-            .Where(h => h.UserId == userId && h.RecordDate < thirtyDaysAgo)
-            .GroupBy(h => new { h.GameId, h.PlatformId })
-            .Select(g => new { 
-                g.Key.GameId, 
-                g.Key.PlatformId, 
-                PlaytimeForever = g.OrderByDescending(x => x.RecordDate).First().PlaytimeForever 
-            })
-            .ToListAsync();
+        // 从最早记录开始计算，用空字典初始化
+        // 第一天的数据会被跳过（因为没有前一天的基准，避免把历史总时长当作当天增量）
 
         // 构建每个游戏每天的时长记录
         var gamesByDate = allHistory
@@ -930,11 +936,8 @@ public class UserReportService : IUserReportService
             .OrderBy(g => g.Key)
             .ToList();
 
-        // 用于追踪每个游戏的前一天时长
-        var previousDayPlaytime = baselineHistory.ToDictionary(
-            b => (b.GameId, b.PlatformId), 
-            b => b.PlaytimeForever
-        );
+        // 用于追踪每个游戏的前一天时长（从空开始，第一天自然被跳过）
+        var previousDayPlaytime = new Dictionary<(long GameId, int PlatformId), int>();
 
         foreach (var dayGroup in gamesByDate)
         {
