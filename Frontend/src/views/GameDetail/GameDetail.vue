@@ -45,13 +45,6 @@
             <h1 class="game-title">{{ game.name || game.gameName }}</h1>
             
             <div class="game-stats">
-              <div class="stat-item" v-if="game.releaseDate">
-                <Calendar class="stat-icon" size="16" />
-                <span>发行日期：{{ game.releaseDate }}</span>
-              </div>
-              <div class="stat-item" v-if="game.isFree !== undefined && game.isFree !== null">
-                <span>{{ game.isFree ? '免费游戏' : '付费游戏' }}</span>
-              </div>
               <div class="stat-item" v-if="gamePlaytime">
                 <Clock class="stat-icon" size="16" />
                 <span>{{ formatPlaytime(gamePlaytime) }}</span>
@@ -65,14 +58,12 @@
                 <span>{{ formatDate(game.lastPlayed) }}</span>
               </div>
             </div>
-
+            
+            <!-- 跳转到游戏商店详情页的按钮 -->
             <div class="game-actions">
-              <button class="btn-primary">
-                <Play class="icon" size="18" />
-                开始游戏
-              </button>
-              <button class="btn-secondary">
-                <Settings class="icon" size="18" />
+              <button class="btn-secondary" @click="goToStoreDetail">
+                <Package class="icon" size="18" />
+                查看游戏商店详情
               </button>
             </div>
           </div>
@@ -83,86 +74,61 @@
       <div class="content-grid">
         <!-- 左侧主要内容 -->
         <div class="main-content">
-          <!-- 游戏介绍 -->
-          <section class="section-card">
-            <h2 class="section-title">游戏介绍</h2>
-            <div class="game-description" :class="{ expanded: showDetailedDescription }">
-              <div class="description-content">
-                <!-- 展开状态：优先显示详细描述（HTML格式） -->
-                <template v-if="showDetailedDescription">
-                  <div v-if="game.detailedDescription" class="description-text description-html" v-html="game.detailedDescription"></div>
-                  <p v-else-if="game.description" class="description-text">{{ game.description }}</p>
-                  <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
-                  <p v-else class="description-text text-muted">暂无游戏介绍</p>
-                </template>
-                <!-- 收起状态：显示简短描述 -->
-                <template v-else>
-                  <p v-if="game.description" class="description-text">{{ game.description }}</p>
-                  <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
-                  <p v-else class="description-text text-muted">暂无游戏介绍</p>
-                </template>
+          <!-- 时间栏目 -->
+          <section class="section-card playtime-section">
+            <div class="playtime-content">
+              <!-- 背景趋势图 -->
+              <div class="playtime-chart-background">
+                <svg class="playtime-chart" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <polyline
+                    :points="playtimeChartPoints"
+                    fill="none"
+                    stroke="rgba(139, 92, 246, 0.3)"
+                    stroke-width="2"
+                    vector-effect="non-scaling-stroke"
+                  />
+                  <polygon
+                    :points="playtimeChartArea"
+                    fill="url(#playtimeGradient)"
+                    opacity="0.2"
+                  />
+                  <defs>
+                    <linearGradient id="playtimeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" style="stop-color:rgba(139, 92, 246, 0.4);stop-opacity:1" />
+                      <stop offset="100%" style="stop-color:rgba(139, 92, 246, 0);stop-opacity:1" />
+                    </linearGradient>
+                  </defs>
+                </svg>
               </div>
-              <!-- 显示详情按钮（仅在未展开且有详细描述时显示） -->
-              <button 
-                v-if="game.detailedDescription && !showDetailedDescription" 
-                @click="showDetailedDescription = true"
-                class="show-details-btn"
-              >
-                显示详情
-              </button>
-              <!-- 收起详情按钮（仅在展开时显示） -->
-              <button 
-                v-if="showDetailedDescription" 
-                @click="showDetailedDescription = false"
-                class="show-details-btn"
-              >
-                收起详情
-              </button>
-            </div>
-          </section>
-
-          <!-- 基本信息：发行日期 / 开发商 / 发行商 / 分类 / 类型 / 语言 / 年龄要求 -->
-          <section class="section-card">
-            <h2 class="section-title">基本信息</h2>
-            <div class="basic-info-grid">
-              <div class="basic-info-item" v-if="game.releaseDate">
-                <div class="basic-label">发行日期</div>
-                <div class="basic-value">{{ game.releaseDate }}</div>
-              </div>
-              <div class="basic-info-item" v-if="game.requireAge !== null && game.requireAge !== undefined">
-                <div class="basic-label">年龄要求</div>
-                <div class="basic-value">
-                  {{ game.requireAge === 0 ? '全年龄' : `${game.requireAge}+` }}
+              
+              <!-- 时间显示和平台统计 -->
+              <div class="playtime-layout">
+                <!-- 左侧：时间显示 -->
+                <div class="playtime-display">
+                  <h2 class="section-title">时间</h2>
+                  <div class="playtime-value">{{ formatPlaytime(gamePlaytime) }}</div>
                 </div>
-              </div>
-              <div class="basic-info-item" v-if="game.developers && game.developers.length">
-                <div class="basic-label">开发商</div>
-                <div class="basic-value">
-                  {{ game.developers.map(d => d.name || d.Name).join('，') }}
-                </div>
-              </div>
-              <div class="basic-info-item" v-if="game.publishers && game.publishers.length">
-                <div class="basic-label">发行商</div>
-                <div class="basic-value">
-                  {{ game.publishers.map(p => p.name || p.Name).join('，') }}
-                </div>
-              </div>
-              <div class="basic-info-item" v-if="game.categories && game.categories.length">
-                <div class="basic-label">分类</div>
-                <div class="basic-value">
-                  {{ formatGameCategories(game.categories) }}
-                </div>
-              </div>
-              <div class="basic-info-item" v-if="game.genres && game.genres.length">
-                <div class="basic-label">类型</div>
-                <div class="basic-value">
-                  {{ formatGameGenres(game.genres) }}
-                </div>
-              </div>
-              <div class="basic-info-item" v-if="game.languages && game.languages.length">
-                <div class="basic-label">支持语言</div>
-                <div class="basic-value">
-                  {{ formatGameLanguages(game.languages) }}
+                
+                <!-- 右侧：平台时长条形图 -->
+                <div class="platform-playtime-chart" v-if="platformPlaytimes.length > 0">
+                  <div class="chart-title">平台时长</div>
+                  <div class="bar-chart">
+                    <div 
+                      v-for="(item, index) in platformPlaytimes" 
+                      :key="item.platformId"
+                      class="bar-item"
+                    >
+                      <div class="bar-label">{{ item.platformName }}</div>
+                      <div class="bar-container">
+                        <div 
+                          class="bar-fill" 
+                          :style="{ width: `${item.percentage}%` }"
+                          :class="`bar-color-${index % 4}`"
+                        ></div>
+                        <div class="bar-value">{{ formatPlaytime(item.playtimeHours) }}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -307,240 +273,10 @@
               </div>
             </div>
           </section>
-
-          <!-- 游戏新闻 -->
-          <section class="section-card">
-            <h2 class="section-title">新闻</h2>
-            <div v-if="newsLoading" class="loading-small">
-              <div class="loading-spinner-small"></div>
-              <span>加载新闻中...</span>
-            </div>
-            <div v-else-if="gameNews.length === 0" class="empty-state">
-              <p>暂无新闻</p>
-            </div>
-            <div v-else class="news-list">
-              <div 
-                v-for="news in gameNews" 
-                :key="news.newsId || news.NewsId"
-                class="news-item"
-              >
-                <div class="news-header">
-                  <h3 class="news-title">
-                    <a 
-                      href="javascript:void(0)"
-                      @click="openNewsModal(news)"
-                      class="news-link"
-                    >
-                      {{ news.title || news.Title }}
-                    </a>
-                  </h3>
-                  <div class="news-meta">
-                    <span v-if="news.author || news.Author" class="news-author">
-                      作者: {{ news.author || news.Author }}
-                    </span>
-                    <span v-if="news.date || news.Date" class="news-date">
-                      日期: {{ formatNewsDate(news.date || news.Date) }}
-                    </span>
-                  </div>
-                </div>
-                <div 
-                  v-if="news.contents || news.Contents" 
-                  class="news-content"
-                >
-                  {{ formatNewsContent(news.contents || news.Contents) }}
-                </div>
-                <div v-if="news.relatedGames && news.relatedGames.length > 0" class="related-games">
-                  <span>相关游戏: </span>
-                  <span v-for="game in news.relatedGames" :key="game.gameId || game.GameId" class="game-tag">
-                    {{ game.gameName || game.GameName }}
-                  </span>
-                </div>
-              </div>
-              <button 
-                v-if="hasMoreNews" 
-                @click="loadMoreNews"
-                class="show-more-news-btn"
-              >
-                显示更多
-              </button>
-            </div>
-          </section>
         </div>
 
         <!-- 右侧边栏 -->
         <div class="sidebar">
-          <!-- 价格监控（免费游戏不显示） -->
-          <section v-if="game.isFree !== true" class="section-card">
-            <h3 class="sidebar-title">价格监控</h3>
-            <div class="price-monitor">
-              <div v-if="priceLoading" class="price-loading">
-                <div class="loading-spinner-small"></div>
-                <span>加载价格中...</span>
-              </div>
-              <div v-else-if="priceError" class="price-error">
-                <span>{{ priceError }}</span>
-              </div>
-              <div v-else>
-                <div class="price-current">
-                  <span class="price-label">当前价格</span>
-                  <div class="price-display">
-                    <span class="price-value" v-if="priceInfo.currentPrice !== null && priceInfo.currentPrice > 0">
-                      ¥{{ priceInfo.currentPrice.toFixed(2) }}
-                    </span>
-                    <span class="price-value" v-else-if="priceInfo.currentPrice === 0">未知</span>
-                    <span class="price-value" v-else>暂无数据</span>
-                    <span v-if="priceInfo.isDiscount && priceInfo.discountRate > 0" class="discount-badge">
-                      -{{ priceInfo.discountRate }}%
-                    </span>
-                  </div>
-                  <div v-if="priceInfo.originalPrice && priceInfo.currentPrice && priceInfo.originalPrice > priceInfo.currentPrice" class="price-original">
-                    <span class="original-price">原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}</span>
-                    <span class="savings">节省: ¥{{ (priceInfo.originalPrice - priceInfo.currentPrice).toFixed(2) }}</span>
-                  </div>
-                  <div v-else-if="priceInfo.originalPrice && priceInfo.originalPrice > 0 && (!priceInfo.currentPrice || priceInfo.currentPrice === 0)" class="price-original">
-                    <span class="original-price">原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}</span>
-                  </div>
-                  <div v-if="priceInfo.lowestPrice && priceInfo.currentPrice && priceInfo.lowestPrice < priceInfo.currentPrice" class="price-lowest">
-                    <span class="lowest-label">历史最低: ¥{{ priceInfo.lowestPrice.toFixed(2) }}</span>
-                  </div>
-                </div>
-                <div v-if="priceHistory.length > 0" class="price-chart-container">
-                  <div class="chart-bars">
-                    <div 
-                      v-for="(item, index) in priceHistory.slice(0, 7).reverse()" 
-                      :key="index"
-                      class="chart-bar-wrapper"
-                      :title="`${item.date}: ¥${item.currentPrice.toFixed(2)}`"
-                    >
-                      <div 
-                        class="chart-bar"
-                        :style="{ height: `${getChartBarHeight(item.currentPrice)}%` }"
-                      ></div>
-                      <span class="chart-label">{{ formatChartDate(item.date) }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="price-chart-empty">
-                  <span>暂无价格历史数据</span>
-                </div>
-                <div class="price-actions">
-                  <button class="btn-outline" @click="showPriceAlertDialog">
-                    <Bell class="icon" size="16" />
-                    {{ hasPriceAlert ? '管理提醒' : '设置价格提醒' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- 价格提醒设置对话框 -->
-          <div v-if="showAlertDialog" class="dialog-overlay" @click.self="closeAlertDialog">
-            <div class="dialog-content">
-              <div class="dialog-header">
-                <h3>{{ currentSubscription ? '管理价格提醒' : '设置价格提醒' }}</h3>
-                <button class="dialog-close" @click="closeAlertDialog">
-                  <X class="icon" size="20" />
-                </button>
-              </div>
-              <div class="dialog-body">
-                <div class="game-info-preview">
-                  <img :src="game.headerImage || noCoverImage" class="preview-image" @error="handleImageError" />
-                  <div class="preview-info">
-                    <h4>{{ game.name }}</h4>
-                    <p class="preview-price">
-                      当前价格: ¥{{ priceInfo.currentPrice?.toFixed(2) || '0.00' }}
-                      <span v-if="priceInfo.isDiscount && priceInfo.discountRate > 0" class="discount-badge-small">
-                        -{{ priceInfo.discountRate }}%
-                      </span>
-                    </p>
-                    <p v-if="priceInfo.originalPrice && priceInfo.originalPrice > 0" class="preview-original">
-                      原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}
-                    </p>
-                  </div>
-                </div>
-                <div v-if="currentSubscription && !currentSubscription.isActive" class="subscription-inactive-notice">
-                  <span>⚠️ 此提醒已触发，当前为非活跃状态</span>
-                </div>
-                <div class="alert-options">
-                  <div class="option-group">
-                    <label class="option-label">
-                      <input 
-                        type="radio" 
-                        v-model="alertType" 
-                        value="price"
-                        class="radio-input"
-                      />
-                      <span>目标价格提醒</span>
-                    </label>
-                    <div v-if="alertType === 'price'" class="option-input">
-                      <input 
-                        type="number" 
-                        v-model.number="targetPrice" 
-                        placeholder="输入目标价格"
-                        class="input-field"
-                        step="0.01"
-                        min="0"
-                      />
-                      <span class="input-hint">当价格降至或低于此价格时提醒</span>
-                    </div>
-                  </div>
-                  <div class="option-group">
-                    <label class="option-label">
-                      <input 
-                        type="radio" 
-                        v-model="alertType" 
-                        value="discount"
-                        class="radio-input"
-                      />
-                      <span>目标折扣提醒</span>
-                    </label>
-                    <div v-if="alertType === 'discount'" class="option-input">
-                      <input 
-                        type="number" 
-                        v-model.number="targetDiscount" 
-                        placeholder="输入目标折扣百分比"
-                        class="input-field"
-                        min="0"
-                        max="100"
-                      />
-                      <span class="input-hint">当折扣达到或超过此百分比时提醒</span>
-                    </div>
-                  </div>
-                  <div class="option-group">
-                    <label class="option-label">
-                      <input 
-                        type="radio" 
-                        v-model="alertType" 
-                        value="none"
-                        class="radio-input"
-                      />
-                      <span>取消提醒</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div class="dialog-footer">
-                <button class="btn-secondary" @click="closeAlertDialog">取消</button>
-                <button 
-                  v-if="currentSubscription && alertType === 'none'" 
-                  class="btn-danger" 
-                  @click="deletePriceAlert" 
-                  :disabled="savingAlert"
-                >
-                  {{ savingAlert ? '删除中...' : '删除提醒' }}
-                </button>
-                <button 
-                  v-else-if="alertType !== 'none'" 
-                  class="btn-primary" 
-                  @click="savePriceAlert" 
-                  :disabled="savingAlert"
-                >
-                  {{ savingAlert ? '保存中...' : (currentSubscription ? '更新' : '保存') }}
-                </button>
-              </div>
-            </div>
-          </div>
-
           <!-- Mod 管理 -->
           <section class="section-card">
             <h3 class="sidebar-title">已安装 Mod</h3>
@@ -598,63 +334,16 @@
       </div>
     </div>
 
-    <!-- 新闻详情弹窗 -->
-    <div v-if="showNewsModal" class="news-modal-overlay" @click.self="closeNewsModal">
-      <div class="news-modal">
-        <div class="news-modal-header">
-          <h2 class="news-modal-title">{{ currentNews?.title || currentNews?.Title || '新闻详情' }}</h2>
-          <button @click="closeNewsModal" class="news-modal-close">
-            <X size="24" />
-          </button>
-        </div>
-        <div class="news-modal-content">
-          <div v-if="newsDetailLoading" class="loading-small">
-            <div class="loading-spinner-small"></div>
-            <span>加载中...</span>
-          </div>
-          <div v-else class="news-detail">
-            <div class="news-detail-meta">
-              <span v-if="currentNews?.author || currentNews?.Author" class="news-detail-author">
-                作者: {{ currentNews.author || currentNews.Author }}
-              </span>
-              <span v-if="currentNews?.date || currentNews?.Date" class="news-detail-date">
-                日期: {{ formatNewsDate(currentNews.date || currentNews.Date) }}
-              </span>
-            </div>
-            <div class="news-detail-body" v-html="newsDetailContent || (currentNews?.contents || currentNews?.Contents || '暂无内容')"></div>
-            <div v-if="currentNews?.relatedGames && currentNews.relatedGames.length > 0" class="news-detail-related">
-              <span>相关游戏: </span>
-              <span v-for="game in currentNews.relatedGames" :key="game.gameId || game.GameId" class="game-tag">
-                {{ game.gameName || game.GameName }}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="news-modal-footer">
-          <button 
-            v-if="currentNews?.newsUrl || currentNews?.NewsUrl"
-            @click="openOriginalNews"
-            class="btn-primary"
-          >
-            显示原文
-          </button>
-          <button @click="closeNewsModal" class="btn-secondary">
-            关闭
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { gameApi, achievementApi, libraryApi, newsApi } from '@/api'
-import { priceApi } from '@/api/price'
+import { gameApi, achievementApi, libraryApi } from '@/api'
 import modExploreApi from '@/api/modExplore'
 import { getLocalGames } from '@/api/localGame'
-import { ArrowLeft, Clock, Trophy, Calendar, Play, Settings, Bell, Package, Lock, X } from 'lucide-vue-next'
+import { ArrowLeft, Clock, Trophy, Calendar, Package, Lock } from 'lucide-vue-next'
 import noCoverImage from '@/assets/no_cover.png'
 
 const route = useRoute()
@@ -667,22 +356,9 @@ const game = ref(null)
 const achievements = ref([])
 const achievementsLoading = ref(false)
 const gamePlaytime = ref(0)
-const priceInfo = ref({
-  currentPrice: null,
-  originalPrice: null,
-  discountRate: 0,
-  isDiscount: false,
-  lowestPrice: null,
-  lowestDate: null
-})
-const priceHistory = ref([])
-const priceLoading = ref(false)
-const priceError = ref(null)
-const hasPriceAlert = ref(false)
-const currentSubscription = ref(null) // 当前游戏的订阅信息
-const mods = ref([]) // 用户已安装的本地 Mod 列表
-const modLoadStatus = ref('idle') // idle | loading | no-mods | has-mods
-const hasModSources = ref(false) // 该游戏是否有 Mod 平台支持
+const playtimeHistory = ref([]) // 游戏时长历史数据
+const playtimeHistoryLoading = ref(false) // 游戏时长历史加载状态
+const platformPlaytimes = ref([]) // 不同平台的游戏时长数据
 
 // 隐藏成就相关状态
 const revealedHiddenAchievements = ref(new Set()) // 已点击显示剧透的隐藏成就ID集合
@@ -693,29 +369,11 @@ const newlyRevealedAchievements = ref(new Set()) // 刚刚被点击显示的成�
 const selectedPlatformId = ref(null) // 当前选中的平台ID，null表示显示所有平台
 const platformGroups = ref([]) // 按平台分组的成就数据
 
-// 游戏介绍展开状态
-const showDetailedDescription = ref(false) // 是否显示详细描述
+// Mod 管理相关状态
+const mods = ref([]) // 用户已安装的本地 Mod 列表
+const modLoadStatus = ref('idle') // idle | loading | no-mods | has-mods
+const hasModSources = ref(false) // 该游戏是否有 Mod 平台支持
 
-// 新闻相关状态
-const gameNews = ref([]) // 游戏新闻列表
-const newsLoading = ref(false) // 新闻加载状态
-const newsPage = ref(1) // 当前新闻页码
-const newsPageSize = ref(5) // 每页新闻数量（初始显示5条）
-const newsTotal = ref(0) // 新闻总数
-const hasMoreNews = computed(() => gameNews.value.length < newsTotal.value) // 是否还有更多新闻
-
-// 新闻详情弹窗状态
-const showNewsModal = ref(false) // 是否显示新闻详情弹窗
-const currentNews = ref(null) // 当前查看的新闻
-const newsDetailLoading = ref(false) // 新闻详情加载状态
-const newsDetailContent = ref('') // 新闻详情内容
-
-// 价格提醒对话框
-const showAlertDialog = ref(false)
-const alertType = ref('price')
-const targetPrice = ref(null)
-const targetDiscount = ref(null)
-const savingAlert = ref(false)
 
 // 平台ID到平台名称的映射
 const platformNameMap = {
@@ -790,9 +448,9 @@ const loadGameDetail = async () => {
   error.value = null
   try {
     const gameId = route.params.id
-    console.log('加载游戏详情，游戏ID:', gameId)
+    console.log('加载玩家游戏详情，游戏ID:', gameId)
 
-    // 1. 从游戏库API获取“个人数据”（只查当前游戏）
+    // 从游戏库API获取玩家数据
     try {
       const libraryResponse = await libraryApi.getGames({ gameId, page: 1, pageSize: 1 })
       console.log('游戏库个人数据响应:', libraryResponse)
@@ -812,21 +470,7 @@ const loadGameDetail = async () => {
             id: libraryGame.gameId ?? libraryGame.GameId,
             name: libraryGame.name ?? libraryGame.Name,
             headerImage: libraryGame.headerImage ?? libraryGame.HeaderImage ?? '',
-            description: '',
             platform: platformName || '未知平台',
-            genre: '',
-            isFree: null,
-            releaseDate: null,
-            requireAge: null,
-            shortDescription: '',
-            detailedDescription: '',
-            requirements: null,
-            reviews: null,
-            developers: [],
-            publishers: [],
-            categories: [],
-            genres: [],
-            languages: [],
             playtimeMinutes,
             lastPlayed: libraryGame.lastPlayed ?? libraryGame.LastPlayed,
             achievementsUnlocked: unlocked,
@@ -835,84 +479,66 @@ const loadGameDetail = async () => {
 
           // 将分钟转换为小时用于展示
           gamePlaytime.value = playtimeMinutes > 0 ? playtimeMinutes / 60 : 0
+          
+          // 处理平台游戏时长数据
+          if (ownedPlatforms && ownedPlatforms.length > 0) {
+            const totalPlaytime = ownedPlatforms.reduce((sum, p) => {
+              return sum + (p.playtimeMinutes ?? p.PlaytimeMinutes ?? 0)
+            }, 0)
+            
+            platformPlaytimes.value = ownedPlatforms
+              .map(p => ({
+                platformId: p.platformId ?? p.PlatformId,
+                platformName: p.platformName ?? p.PlatformName,
+                playtimeMinutes: p.playtimeMinutes ?? p.PlaytimeMinutes ?? 0,
+                playtimeHours: (p.playtimeMinutes ?? p.PlaytimeMinutes ?? 0) / 60,
+                percentage: totalPlaytime > 0 
+                  ? ((p.playtimeMinutes ?? p.PlaytimeMinutes ?? 0) / totalPlaytime) * 100 
+                  : 0
+              }))
+              .filter(p => p.playtimeMinutes > 0) // 只显示有游戏时长的平台
+              .sort((a, b) => b.playtimeMinutes - a.playtimeMinutes) // 按时长降序排列
+          } else {
+            platformPlaytimes.value = []
+          }
+        } else {
+          // 如果游戏库里没有，尝试从通用API获取基本信息
+          const gameResponse = await gameApi.getGame(gameId)
+          if (gameResponse.success && gameResponse.data) {
+            const detail = gameResponse.data
+            game.value = {
+              id: detail.gameId ?? detail.GameId,
+              name: detail.name ?? detail.Name,
+              headerImage: detail.media?.headerImage ?? detail.Media?.HeaderImage,
+              platform: '',
+              playtimeMinutes: 0,
+              lastPlayed: null,
+              achievementsUnlocked: 0,
+              achievementsTotal: 0
+            }
+          }
         }
       }
     } catch (libErr) {
       console.log('从游戏库获取失败:', libErr)
-    }
-
-    // 2. 使用通用游戏API获取"公共详情"（题材/开发商/系统需求等）
-    const gameResponse = await gameApi.getGame(gameId)
-    console.log('通用游戏详情响应:', gameResponse)
-    if (gameResponse.success && gameResponse.data) {
-      const detail = gameResponse.data
-
-      // 提取分类、类型和语言数据（支持多种命名格式）
-      const categories = detail.categories ?? detail.Categories ?? []
-      const genres = detail.genres ?? detail.Genres ?? []
-      const languages = detail.languages ?? detail.Languages ?? []
-      
-      // 格式化数据为统一格式
-      const formattedCategories = Array.isArray(categories) ? categories : []
-      const formattedGenres = Array.isArray(genres) ? genres : []
-      const formattedLanguages = Array.isArray(languages) ? languages : []
-
-      if (!game.value) {
-        // 如果游戏库里没有记录，就完全使用公共详情
-        const genreNames = formattedGenres.map(g => g.name ?? g.Name ?? g)
-        const developers = detail.developers ?? detail.Developers ?? []
-        const publishers = detail.publishers ?? detail.Publishers ?? []
-
-        game.value = {
-          id: detail.gameId ?? detail.GameId,
-          name: detail.name ?? detail.Name,
-          headerImage: detail.media?.headerImage ?? detail.Media?.HeaderImage,
-          description: detail.shortDescription ?? detail.ShortDescription ?? detail.detailedDescription ?? detail.DetailedDescription,
-          platform: detail.platforms ? formatPlatforms(detail.platforms) : '',
-          genre: genreNames.join(' / '),
-          isFree: detail.isFree ?? detail.IsFree ?? null,
-          releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? '',
-          requireAge: detail.requireAge ?? detail.RequireAge ?? null,
-          shortDescription: detail.shortDescription ?? detail.ShortDescription,
-          detailedDescription: detail.detailedDescription ?? detail.DetailedDescription,
-          requirements: detail.requirements ?? detail.Requirements,
-          reviews: detail.reviews ?? detail.Reviews,
-          developers,
-          publishers,
-          categories: formattedCategories,
-          genres: formattedGenres,
-          languages: formattedLanguages,
-          playtimeMinutes: 0,
-          lastPlayed: null,
-          achievementsUnlocked: 0,
-          achievementsTotal: 0
+      // 如果游戏库获取失败，尝试从通用API获取基本信息
+      try {
+        const gameResponse = await gameApi.getGame(gameId)
+        if (gameResponse.success && gameResponse.data) {
+          const detail = gameResponse.data
+          game.value = {
+            id: detail.gameId ?? detail.GameId,
+            name: detail.name ?? detail.Name,
+            headerImage: detail.media?.headerImage ?? detail.Media?.HeaderImage,
+            platform: '',
+            playtimeMinutes: 0,
+            lastPlayed: null,
+            achievementsUnlocked: 0,
+            achievementsTotal: 0
+          }
         }
-      } else {
-        // 合并个人数据与公共详情
-        const genreNames = formattedGenres.map(g => g.name ?? g.Name ?? g)
-        const developers = detail.developers ?? detail.Developers ?? game.value.developers ?? []
-        const publishers = detail.publishers ?? detail.Publishers ?? game.value.publishers ?? []
-
-        game.value = {
-          ...game.value,
-          name: detail.name || detail.Name || game.value.name,
-          headerImage: game.value.headerImage || detail.media?.headerImage || detail.Media?.HeaderImage,
-          description: game.value.description || detail.shortDescription || detail.ShortDescription || detail.detailedDescription || detail.DetailedDescription,
-          platform: game.value.platform || (detail.platforms ? formatPlatforms(detail.platforms) : ''),
-          genre: genreNames.join(' / ') || game.value.genre,
-          isFree: detail.isFree ?? detail.IsFree ?? game.value.isFree,
-          releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? game.value.releaseDate,
-          requireAge: detail.requireAge ?? detail.RequireAge ?? game.value.requireAge,
-          shortDescription: detail.shortDescription ?? detail.ShortDescription ?? game.value.shortDescription,
-          detailedDescription: detail.detailedDescription ?? detail.DetailedDescription ?? game.value.detailedDescription,
-          requirements: detail.requirements ?? detail.Requirements ?? game.value.requirements,
-          reviews: detail.reviews ?? detail.Reviews ?? game.value.reviews,
-          developers,
-          publishers,
-          categories: formattedCategories.length > 0 ? formattedCategories : (game.value.categories ?? []),
-          genres: formattedGenres.length > 0 ? formattedGenres : (game.value.genres ?? []),
-          languages: formattedLanguages.length > 0 ? formattedLanguages : (game.value.languages ?? [])
-        }
+      } catch (gameErr) {
+        console.error('从通用API获取失败:', gameErr)
       }
     }
 
@@ -920,11 +546,11 @@ const loadGameDetail = async () => {
       throw new Error('未找到游戏信息')
     }
 
-    // 加载成就数据
+    // 只加载成就数据（玩家信息）
     await loadAchievements()
     
-    // 加载价格数据
-    await loadPriceData()
+    // 加载游戏时长历史数据
+    await loadPlaytimeHistory()
     
     // 加载 Mod 数据
     await loadGameMods()
@@ -934,6 +560,188 @@ const loadGameDetail = async () => {
   } finally {
     loading.value = false
   }
+}
+
+
+// 加载成就数据
+const loadAchievements = async () => {
+  if (!game.value) return
+  
+  achievementsLoading.value = true
+  try {
+    const gameId = game.value.id || route.params.id
+    console.log('加载成就数据，游戏ID:', gameId)
+    
+    const response = await achievementApi.getUserGameAchievements(gameId)
+    console.log('成就API响应:', response)
+    
+    if (response.success && response.data) {
+      const data = response.data
+      // 标准结构：{ gameId, gameName, achievements: [] }
+      const list = Array.isArray(data)
+        ? data
+        : (data.achievements && Array.isArray(data.achievements) ? data.achievements : [])
+
+      achievements.value = list.map(a => {
+        const unlocked = a.unlocked ?? a.Unlocked
+        const unlockTime = a.unlockTime ?? a.UnlockTime
+        const hidden = a.hidden ?? a.Hidden ?? false
+        const platformId = a.platformId ?? a.PlatformId ?? 1
+        const platformName = a.platformName ?? a.PlatformName
+
+        return {
+          id: a.id || a.achievementId || a.AchievementId,
+          name: a.displayName || a.DisplayName || a.name || a.achievementName || a.AchievementName,
+          description: a.description || a.achievementDescription || a.Description,
+          iconUnlocked: a.iconUnlocked || a.IconUnlocked || a.icon,
+          iconLocked: a.iconLocked || a.IconLocked,
+          isUnlocked: unlocked !== undefined ? unlocked : (unlockTime != null),
+          unlockTime,
+          hidden,
+          platformId,
+          platformName
+        }
+      })
+      console.log('处理后的成就数据:', achievements.value.length, achievements.value)
+    }
+  } catch (err) {
+    console.error('加载成就失败:', err)
+    // 不显示错误，只是没有成就数据
+    achievements.value = []
+  } finally {
+    achievementsLoading.value = false
+  }
+}
+
+// 格式化游戏时长
+const formatPlaytime = (hours) => {
+  if (!hours) return '0 小时'
+  if (hours < 1) return `${Math.round(hours * 60)} 分钟`
+  return `${hours.toFixed(1)} 小时`
+}
+
+// 计算属性 - 游戏时长趋势图数据点
+const playtimeChartPoints = computed(() => {
+  if (!playtimeHistory.value || playtimeHistory.value.length === 0) {
+    // 如果没有数据，返回一条水平线
+    return '0,50 100,50'
+  }
+  
+  const data = playtimeHistory.value
+  const maxPlaytime = Math.max(...data.map(d => d.playtimeMinutes || 0), 1)
+  const pointCount = data.length
+  
+  const points = data.map((item, index) => {
+    const x = (index / (pointCount - 1)) * 100
+    const y = 100 - ((item.playtimeMinutes || 0) / maxPlaytime) * 80 // 留出上下边距
+    return `${x},${y}`
+  }).join(' ')
+  
+  return points
+})
+
+// 计算属性 - 游戏时长趋势图填充区域
+const playtimeChartArea = computed(() => {
+  if (!playtimeHistory.value || playtimeHistory.value.length === 0) {
+    return '0,100 100,100 100,50 0,50'
+  }
+  
+  const points = playtimeChartPoints.value
+  const data = playtimeHistory.value
+  const firstX = 0
+  const lastX = 100
+  
+  return `${firstX},100 ${points} ${lastX},100`
+})
+
+// 加载游戏时长历史数据
+const loadPlaytimeHistory = async () => {
+  if (!game.value) return
+  
+  playtimeHistoryLoading.value = true
+  try {
+    const gameId = game.value.id || route.params.id
+    console.log('加载游戏时长历史数据，游戏ID:', gameId)
+    
+    // 从 UserPlaytimeHistory 表获取最近30天的数据
+    // 注意：这里需要调用后端API，如果还没有API，可以先使用模拟数据
+    // TODO: 调用后端API获取游戏时长历史数据
+    
+    // 临时使用模拟数据（最近30天）
+    const mockData = []
+    const today = new Date()
+    const basePlaytime = gamePlaytime.value * 60 // 转换为分钟
+    
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - i)
+      
+      // 模拟数据：随机波动，但总体趋势向上
+      const randomFactor = 0.8 + Math.random() * 0.4 // 0.8-1.2
+      const trendFactor = 1 - (i / 29) * 0.3 // 从0.7到1.0
+      const playtimeMinutes = Math.max(0, basePlaytime * trendFactor * randomFactor)
+      
+      mockData.push({
+        date: date.toISOString().split('T')[0],
+        playtimeMinutes: Math.round(playtimeMinutes)
+      })
+    }
+    
+    playtimeHistory.value = mockData
+  } catch (err) {
+    console.error('加载游戏时长历史数据失败:', err)
+    playtimeHistory.value = []
+  } finally {
+    playtimeHistoryLoading.value = false
+  }
+}
+
+
+// 格式化日期（中国时区）
+const formatDate = (date) => {
+  if (!date) return ''
+  try {
+    const d = new Date(date)
+    // 转换为中国时区（UTC+8）
+    const chinaTime = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+    
+    // 格式化显示：年月日 时分
+    const year = chinaTime.getFullYear()
+    const month = String(chinaTime.getMonth() + 1).padStart(2, '0')
+    const day = String(chinaTime.getDate()).padStart(2, '0')
+    const hour = String(chinaTime.getHours()).padStart(2, '0')
+    const minute = String(chinaTime.getMinutes()).padStart(2, '0')
+    
+    return `${year}-${month}-${day} ${hour}:${minute}`
+  } catch {
+    return date
+  }
+}
+
+// 图片加载错误处理
+const handleImageError = (event) => {
+  event.target.src = noCoverImage
+}
+
+// 处理隐藏成就点击
+const handleHiddenAchievementClick = (achievement) => {
+  if (achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.value.has(achievement.id)) {
+    // 只允许显示一次，不允许再次隐藏
+    revealedHiddenAchievements.value.add(achievement.id)
+    // 标记为刚刚显示，用于触发动画
+    newlyRevealedAchievements.value.add(achievement.id)
+    // 动画结束后移除标记（动画持续0.5秒）
+    setTimeout(() => {
+      newlyRevealedAchievements.value.delete(achievement.id)
+    }, 500)
+  }
+}
+
+
+// 跳转到游戏商店详情页
+const goToStoreDetail = () => {
+  const gameId = game.value?.id || route.params.id
+  router.push({ name: 'StoreDetail', params: { id: gameId } })
 }
 
 // 加载游戏 Mod 数据
@@ -994,523 +802,6 @@ const loadGameMods = async () => {
   }
 }
 
-// 加载成就数据
-const loadAchievements = async () => {
-  if (!game.value) return
-  
-  achievementsLoading.value = true
-  try {
-    const gameId = game.value.id || route.params.id
-    console.log('加载成就数据，游戏ID:', gameId)
-    
-    const response = await achievementApi.getUserGameAchievements(gameId)
-    console.log('成就API响应:', response)
-    
-    if (response.success && response.data) {
-      const data = response.data
-      // 标准结构：{ gameId, gameName, achievements: [] }
-      const list = Array.isArray(data)
-        ? data
-        : (data.achievements && Array.isArray(data.achievements) ? data.achievements : [])
-
-      achievements.value = list.map(a => {
-        const unlocked = a.unlocked ?? a.Unlocked
-        const unlockTime = a.unlockTime ?? a.UnlockTime
-        const hidden = a.hidden ?? a.Hidden ?? false
-        const platformId = a.platformId ?? a.PlatformId ?? 1
-        const platformName = a.platformName ?? a.PlatformName
-
-        return {
-          id: a.id || a.achievementId || a.AchievementId,
-          name: a.displayName || a.DisplayName || a.name || a.achievementName || a.AchievementName,
-          description: a.description || a.achievementDescription || a.Description,
-          iconUnlocked: a.iconUnlocked || a.IconUnlocked || a.icon,
-          iconLocked: a.iconLocked || a.IconLocked,
-          isUnlocked: unlocked !== undefined ? unlocked : (unlockTime != null),
-          unlockTime,
-          hidden,
-          platformId,
-          platformName
-        }
-      })
-      console.log('处理后的成就数据:', achievements.value.length, achievements.value)
-    }
-  } catch (err) {
-    console.error('加载成就失败:', err)
-    // 不显示错误，只是没有成就数据
-    achievements.value = []
-  } finally {
-    achievementsLoading.value = false
-  }
-}
-
-// 格式化游戏时长
-const formatPlaytime = (hours) => {
-  if (!hours) return '0 小时'
-  if (hours < 1) return `${Math.round(hours * 60)} 分钟`
-  return `${hours.toFixed(1)} 小时`
-}
-
-// 将平台支持对象格式化为字符串
-const formatPlatforms = (platforms) => {
-  const list = []
-  if (platforms.windows) list.push('Windows')
-  if (platforms.mac) list.push('Mac')
-  if (platforms.linux) list.push('Linux')
-  return list.join(' / ')
-}
-
-// 格式化游戏分类
-const formatGameCategories = (categories) => {
-  if (!categories || !Array.isArray(categories) || categories.length === 0) return ''
-  return categories.map(cat => {
-    if (typeof cat === 'string') return cat
-    return cat.name ?? cat.Name ?? cat.description ?? cat.Description ?? cat.id ?? cat.Id ?? ''
-  }).filter(Boolean).join('，')
-}
-
-// 格式化游戏类型
-const formatGameGenres = (genres) => {
-  if (!genres || !Array.isArray(genres) || genres.length === 0) return ''
-  return genres.map(genre => {
-    if (typeof genre === 'string') return genre
-    return genre.name ?? genre.Name ?? genre.description ?? genre.Description ?? genre.id ?? genre.Id ?? ''
-  }).filter(Boolean).join('，')
-}
-
-// 加载游戏新闻
-const loadGameNews = async (reset = false) => {
-  // 尝试多种方式获取 gameId
-  const gameId = game.value?.gameId || game.value?.GameId || game.value?.id || route.params.id
-  
-  if (!gameId) {
-    console.warn('无法获取游戏ID，跳过加载新闻')
-    return
-  }
-  
-  console.log('加载游戏新闻，gameId:', gameId, 'game.value:', game.value)
-  newsLoading.value = true
-  
-  try {
-    if (reset) {
-      newsPage.value = 1
-      gameNews.value = []
-      
-      // 先尝试同步Steam新闻（静默失败，不影响后续获取）
-      try {
-        console.log('尝试同步游戏新闻:', gameId)
-        await newsApi.syncSteamNews(gameId, 20)
-        console.log('游戏新闻同步成功')
-      } catch (syncErr) {
-        console.warn('同步游戏新闻失败（继续尝试获取已有新闻）:', syncErr)
-        // 同步失败不影响后续获取，继续执行
-      }
-    }
-    
-    const params = {
-      page: newsPage.value,
-      pageSize: newsPageSize.value
-    }
-    
-    console.log('获取游戏新闻:', gameId, params)
-    const response = await newsApi.getGameNews(gameId, params)
-    console.log('游戏新闻响应:', response)
-    
-    if (response.success && response.data) {
-      const data = response.data
-      const newsItems = data.news || data.News || []
-      
-      console.log('获取到新闻数量:', newsItems.length)
-      
-      if (reset) {
-        gameNews.value = newsItems
-      } else {
-        gameNews.value.push(...newsItems)
-      }
-      
-      const meta = data.meta || data.Meta
-      if (meta) {
-        newsTotal.value = meta.total || meta.Total || 0
-        console.log('新闻总数:', newsTotal.value)
-      }
-    } else {
-      console.warn('获取游戏新闻失败，响应:', response)
-      if (reset) {
-        gameNews.value = []
-      }
-    }
-  } catch (err) {
-    console.error('加载游戏新闻失败，错误详情:', err)
-    console.error('错误响应:', err.response)
-    console.error('错误消息:', err.message)
-    // 不显示错误，只是没有新闻数据
-    if (reset) {
-      gameNews.value = []
-    }
-  } finally {
-    newsLoading.value = false
-  }
-}
-
-// 加载更多新闻
-const loadMoreNews = () => {
-  newsPage.value++
-  loadGameNews(false)
-}
-
-// 格式化新闻日期
-const formatNewsDate = (timestamp) => {
-  if (!timestamp) return ''
-  const date = new Date(timestamp * 1000) // Steam 日期是 Unix 时间戳（秒）
-  const now = new Date()
-  const diff = now - date
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  
-  if (days === 0) {
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    if (hours === 0) {
-      const minutes = Math.floor(diff / (1000 * 60))
-      return minutes <= 0 ? '刚刚' : `${minutes} 分钟前`
-    }
-    return `${hours} 小时前`
-  } else if (days < 7) {
-    return `${days} 天前`
-  } else {
-    return date.toLocaleDateString('zh-CN', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })
-  }
-}
-
-// 格式化新闻内容（截取前200字符，保留 HTML 格式）
-const formatNewsContent = (content) => {
-  if (!content) return ''
-  // 移除 HTML 标签，只保留文本用于预览
-  const text = content.replace(/<[^>]*>/g, '')
-  // 截取前200字符
-  if (text.length > 200) {
-    return text.substring(0, 200) + '...'
-  }
-  return text
-}
-
-// 打开新闻详情弹窗
-const openNewsModal = async (news) => {
-  currentNews.value = news
-  showNewsModal.value = true
-  newsDetailLoading.value = true
-  newsDetailContent.value = ''
-  
-  try {
-    // 尝试获取新闻详情（如果有 newsId）
-    const newsId = news.newsId || news.NewsId
-    if (newsId) {
-      const response = await newsApi.getNewsDetail(newsId)
-      if (response.success && response.data) {
-        const data = response.data
-        newsDetailContent.value = data.contents || data.Contents || news.contents || news.Contents || ''
-        // 更新当前新闻数据（包含相关游戏等信息）
-        if (data.relatedGames) {
-          currentNews.value = { ...currentNews.value, relatedGames: data.relatedGames }
-        }
-      } else {
-        // 如果获取详情失败，使用列表中的内容
-        newsDetailContent.value = news.contents || news.Contents || ''
-      }
-    } else {
-      // 没有 newsId，直接使用列表中的内容
-      newsDetailContent.value = news.contents || news.Contents || ''
-    }
-  } catch (err) {
-    console.error('加载新闻详情失败:', err)
-    // 失败时使用列表中的内容
-    newsDetailContent.value = news.contents || news.Contents || ''
-  } finally {
-    newsDetailLoading.value = false
-  }
-}
-
-// 关闭新闻详情弹窗
-const closeNewsModal = () => {
-  showNewsModal.value = false
-  currentNews.value = null
-  newsDetailContent.value = ''
-}
-
-// 打开原文链接
-const openOriginalNews = () => {
-  const url = currentNews.value?.newsUrl || currentNews.value?.NewsUrl
-  if (url) {
-    window.open(url, '_blank')
-  }
-}
-
-// 格式化游戏语言
-const formatGameLanguages = (languages) => {
-  if (!languages || !Array.isArray(languages) || languages.length === 0) return ''
-  return languages.map(lang => {
-    if (typeof lang === 'string') return lang
-    // 语言可能有 name、description、languageName 等字段
-    return lang.name ?? lang.Name ?? lang.languageName ?? lang.LanguageName ?? lang.description ?? lang.Description ?? lang.id ?? lang.Id ?? ''
-  }).filter(Boolean).join('，')
-}
-
-// 格式化日期（中国时区）
-const formatDate = (date) => {
-  if (!date) return ''
-  try {
-    const d = new Date(date)
-    // 转换为中国时区（UTC+8）
-    const chinaTime = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
-    
-    // 格式化显示：年月日 时分
-    const year = chinaTime.getFullYear()
-    const month = String(chinaTime.getMonth() + 1).padStart(2, '0')
-    const day = String(chinaTime.getDate()).padStart(2, '0')
-    const hour = String(chinaTime.getHours()).padStart(2, '0')
-    const minute = String(chinaTime.getMinutes()).padStart(2, '0')
-    
-    return `${year}-${month}-${day} ${hour}:${minute}`
-  } catch {
-    return date
-  }
-}
-
-// 图片加载错误处理
-const handleImageError = (event) => {
-  event.target.src = noCoverImage
-}
-
-// 处理隐藏成就点击
-const handleHiddenAchievementClick = (achievement) => {
-  if (achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.value.has(achievement.id)) {
-    // 只允许显示一次，不允许再次隐藏
-    revealedHiddenAchievements.value.add(achievement.id)
-    // 标记为刚刚显示，用于触发动画
-    newlyRevealedAchievements.value.add(achievement.id)
-    // 动画结束后移除标记（动画持续0.5秒）
-    setTimeout(() => {
-      newlyRevealedAchievements.value.delete(achievement.id)
-    }, 500)
-  }
-}
-
-// 加载价格数据
-const loadPriceData = async () => {
-  if (!game.value) return
-  
-  const gameId = game.value.id || route.params.id
-  priceLoading.value = true
-  priceError.value = null
-  
-  try {
-    // 获取价格历史
-    const historyResponse = await priceApi.getPriceHistory(gameId)
-    if (historyResponse.success && historyResponse.data) {
-      const data = historyResponse.data
-      
-      // 更新价格信息（适配后端返回的数据结构）
-      priceInfo.value = {
-        currentPrice: data.currentPrice ?? data.CurrentPrice ?? null,
-        originalPrice: data.originalPrice ?? data.OriginalPrice ?? null,
-        discountRate: data.discount ?? data.discountRate ?? data.Discount ?? data.DiscountRate ?? 0,
-        isDiscount: data.isDiscount ?? data.IsDiscount ?? false,
-        lowestPrice: data.lowestPrice ?? data.LowestPrice ?? null,
-        lowestDate: data.lowestDate ?? data.LowestDate ?? null
-      }
-      
-      // 如果没有当前价格，尝试从历史记录中获取最新的
-      if (priceInfo.value.currentPrice === null && data.priceHistory && Array.isArray(data.priceHistory) && data.priceHistory.length > 0) {
-        const latest = data.priceHistory[0]
-        priceInfo.value.currentPrice = latest.CurrentPrice ?? latest.currentPrice ?? null
-        priceInfo.value.originalPrice = latest.OriginalPrice ?? latest.originalPrice ?? priceInfo.value.originalPrice
-        priceInfo.value.discountRate = latest.Discount ?? latest.discount ?? priceInfo.value.discountRate
-        priceInfo.value.isDiscount = latest.IsDiscount ?? latest.isDiscount ?? priceInfo.value.isDiscount
-      }
-      
-      // 处理价格历史数据
-      if (data.priceHistory && Array.isArray(data.priceHistory)) {
-        priceHistory.value = data.priceHistory.map(item => ({
-          date: item.Date ?? item.date,
-          currentPrice: item.CurrentPrice ?? item.currentPrice ?? 0,
-          originalPrice: item.OriginalPrice ?? item.originalPrice ?? 0,
-          discount: item.Discount ?? item.discount ?? item.DiscountRate ?? item.discountRate ?? 0,
-          isDiscount: item.IsDiscount ?? item.isDiscount ?? false
-        }))
-      }
-    }
-    
-    // 检查是否已有价格提醒
-    await checkPriceAlert()
-  } catch (err) {
-    console.error('加载价格数据失败:', err)
-    priceError.value = '加载价格数据失败'
-  } finally {
-    priceLoading.value = false
-  }
-}
-
-// 检查是否已有价格提醒
-const checkPriceAlert = async () => {
-  try {
-    const response = await priceApi.getSubscriptions()
-    if (response.success && response.data) {
-      const subscriptions = response.data.subscriptions || response.data.items || []
-      const gameId = parseInt(game.value?.id || route.params.id)
-      
-      // 查找当前游戏的订阅
-      currentSubscription.value = subscriptions.find(sub => 
-        parseInt(sub.gameId) === gameId
-      ) || null
-      
-      // 检查是否有活跃的订阅
-      hasPriceAlert.value = currentSubscription.value !== null
-    }
-  } catch (err) {
-    console.error('检查价格提醒失败:', err)
-  }
-}
-
-// 计算图表柱状图高度
-const getChartBarHeight = (price) => {
-  if (!price || priceHistory.value.length === 0) return 0
-  const prices = priceHistory.value.map(p => p.currentPrice).filter(p => p > 0)
-  if (prices.length === 0) return 0
-  const maxPrice = Math.max(...prices)
-  const minPrice = Math.min(...prices)
-  if (maxPrice === minPrice) return 50
-  return ((price - minPrice) / (maxPrice - minPrice)) * 80 + 10
-}
-
-// 格式化图表日期
-const formatChartDate = (dateString) => {
-  if (!dateString) return ''
-  try {
-    const date = new Date(dateString)
-    const month = date.getMonth() + 1
-    const day = date.getDate()
-    return `${month}/${day}`
-  } catch {
-    return dateString
-  }
-}
-
-// 显示价格提醒对话框
-const showPriceAlertDialog = async () => {
-  // 确保先加载最新的订阅信息
-  await checkPriceAlert()
-  
-  showAlertDialog.value = true
-  
-  // 如果有现有订阅，加载其设置
-  if (currentSubscription.value) {
-    if (currentSubscription.value.targetPrice !== null && currentSubscription.value.targetPrice !== undefined) {
-      alertType.value = 'price'
-      targetPrice.value = currentSubscription.value.targetPrice
-      targetDiscount.value = null
-    } else if (currentSubscription.value.targetDiscount !== null && currentSubscription.value.targetDiscount !== undefined) {
-      alertType.value = 'discount'
-      targetDiscount.value = currentSubscription.value.targetDiscount
-      targetPrice.value = null
-    } else {
-      alertType.value = 'price'
-      targetPrice.value = null
-      targetDiscount.value = null
-    }
-  } else {
-    // 重置表单
-    alertType.value = 'price'
-    targetPrice.value = null
-    targetDiscount.value = null
-  }
-}
-
-// 关闭价格提醒对话框
-const closeAlertDialog = () => {
-  showAlertDialog.value = false
-  // 重置表单
-  alertType.value = 'price'
-  targetPrice.value = null
-  targetDiscount.value = null
-}
-
-// 保存价格提醒
-const savePriceAlert = async () => {
-  if (!game.value) return
-  
-  // 验证输入
-  if (alertType.value === 'price' && (!targetPrice.value || targetPrice.value <= 0)) {
-    alert('请输入有效的目标价格')
-    return
-  }
-  if (alertType.value === 'discount' && (!targetDiscount.value || targetDiscount.value < 0 || targetDiscount.value > 100)) {
-    alert('请输入有效的折扣百分比（0-100）')
-    return
-  }
-  
-  savingAlert.value = true
-  try {
-    const gameId = parseInt(game.value.id || route.params.id)
-    // 获取平台ID，默认为Steam (1)
-    const platformId = 1 // 可以根据实际情况获取
-    
-    const data = {
-      gameId: gameId,
-      platformId: platformId,
-      targetPrice: alertType.value === 'price' ? targetPrice.value : null,
-      targetDiscount: alertType.value === 'discount' ? targetDiscount.value : null
-    }
-    
-    let response
-    if (currentSubscription.value) {
-      // 更新现有订阅
-      response = await priceApi.updateSubscription(currentSubscription.value.subscriptionId, data)
-    } else {
-      // 创建新订阅
-      response = await priceApi.trackPrice(data)
-    }
-    
-    if (response.success) {
-      // 刷新订阅信息
-      await checkPriceAlert()
-      closeAlertDialog()
-    } else {
-      alert(response.message || '操作失败，请重试')
-    }
-  } catch (err) {
-    console.error('保存价格提醒失败:', err)
-    alert('操作失败: ' + (err.message || '未知错误'))
-  } finally {
-    savingAlert.value = false
-  }
-}
-
-// 删除价格提醒
-const deletePriceAlert = async () => {
-  if (!currentSubscription.value) return
-  
-  if (!confirm('确定要删除这个价格提醒吗？')) return
-  
-  savingAlert.value = true
-  try {
-    const response = await priceApi.unsubscribeAlert(currentSubscription.value.subscriptionId)
-    if (response.success) {
-      // 刷新订阅信息
-      await checkPriceAlert()
-      closeAlertDialog()
-    } else {
-      alert(response.message || '删除失败，请重试')
-    }
-  } catch (err) {
-    console.error('删除价格提醒失败:', err)
-    alert('删除失败: ' + (err.message || '未知错误'))
-  } finally {
-    savingAlert.value = false
-  }
-}
-
 // Mod 管理处理 - 跳转到 Mod 与存档页面
 const handleManageMods = () => {
   router.push({ name: 'Mods' })
@@ -1522,45 +813,16 @@ const handleBrowseMods = () => {
   router.push({ name: 'ModExplore', query: { gameId } })
 }
 
-// 格式化下载数
-const formatDownloads = (num) => {
-  if (!num) return '0'
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
-  return num.toString()
-}
 
-// 切换 Mod 启用状态（预留）
-const handleToggleMod = (mod) => {
-  console.log('切换 Mod 状态:', mod.name, mod.enabled)
-  // TODO: 实现 Mod 启用/禁用功能
-}
-
-// 监听游戏ID变化，重新加载价格数据和新闻
+// 监听游戏ID变化，重新加载数据
 watch(() => route.params.id, () => {
   if (route.params.id) {
-    loadPriceData()
-    loadGameNews(true)
-  }
-})
-
-// 监听游戏数据加载完成，然后加载新闻
-watch(() => game.value?.id || game.value?.gameId || game.value?.GameId, (newId) => {
-  if (newId && !newsLoading.value && gameNews.value.length === 0) {
-    console.log('游戏数据已加载，开始加载新闻，gameId:', newId)
-    loadGameNews(true)
+    loadGameDetail()
   }
 })
 
 onMounted(() => {
   loadGameDetail()
-  // 延迟加载游戏新闻，确保游戏数据先加载完成
-  setTimeout(() => {
-    const gameId = game.value?.gameId || game.value?.GameId || game.value?.id || route.params.id
-    if (gameId) {
-      loadGameNews(true)
-    }
-  }, 1000)
 })
 </script>
 
@@ -1815,6 +1077,21 @@ onMounted(() => {
   gap: 24px;
 }
 
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sidebar-title {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+  margin-bottom: 16px;
+}
+
 .main-content {
   display: flex;
   flex-direction: column;
@@ -1853,6 +1130,144 @@ onMounted(() => {
 .achievement-progress {
   font-size: 14px;
   color: #94a3b8;
+}
+
+/* 时间栏目样式 */
+.playtime-section {
+  position: relative;
+  overflow: hidden;
+  min-height: 180px;
+}
+
+.playtime-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+}
+
+.playtime-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: center;
+}
+
+.playtime-chart-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.playtime-chart {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.playtime-display {
+  position: relative;
+  z-index: 2;
+}
+
+.playtime-display .section-title {
+  margin-bottom: 8px;
+  font-size: 18px;
+  color: #94a3b8;
+}
+
+.playtime-value {
+  font-size: 48px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 平台时长条形图样式 */
+.platform-playtime-chart {
+  position: relative;
+  z-index: 2;
+}
+
+.chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bar-label {
+  min-width: 80px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #cbd5e1;
+  text-align: right;
+}
+
+.bar-container {
+  flex: 1;
+  position: relative;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s ease-out;
+  opacity: 0.85;
+}
+
+.bar-color-0 {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.8), rgba(139, 92, 246, 0.6));
+}
+
+.bar-color-1 {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.6));
+}
+
+.bar-color-2 {
+  background: linear-gradient(90deg, rgba(236, 72, 153, 0.8), rgba(236, 72, 153, 0.6));
+}
+
+.bar-color-3 {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.8), rgba(34, 197, 94, 0.6));
+}
+
+.bar-value {
+  position: absolute;
+  right: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f8fafc;
+  z-index: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 /* 平台筛选器 */

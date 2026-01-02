@@ -153,7 +153,7 @@ const changePage = (newPage) => {
 }
 
 const goToDetail = (id) => {
-  router.push(`/app/game/${id}`)
+  router.push({ name: 'StoreDetail', params: { id } })
 }
 
 const handleImageError = (e) => {

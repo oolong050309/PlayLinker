@@ -20,7 +20,7 @@ export default [
   {
     path: '/store/:id',
     name: 'StoreDetail',
-    component: () => import('@/views/ComingSoon.vue'),
+    component: () => import('@/views/GameDetail/StoreDetail.vue'),
     meta: {
       title: '商店详情',
       requiresAuth: true
