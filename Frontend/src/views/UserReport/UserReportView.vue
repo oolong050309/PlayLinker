@@ -339,13 +339,38 @@
               <h3 class="report-title">月度游戏报告</h3>
               <p class="report-desc">游戏时长、成就、消费等统计</p>
               <div class="report-options">
-                <div class="date-selector">
-                  <select v-model="monthlyYear" class="date-select">
-                    <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-                  </select>
-                  <select v-model="monthlyMonth" class="date-select">
-                    <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
-                  </select>
+                <!-- 月份选择器 -->
+                <div class="month-picker" @click="showMonthPicker = !showMonthPicker">
+                  <Calendar class="picker-icon" />
+                  <span class="picker-value">{{ monthlyYear }}年{{ monthlyMonth }}月</span>
+                  <ChevronDown class="picker-arrow" :class="{ 'rotate': showMonthPicker }" />
+                </div>
+                <!-- 月份选择弹窗 -->
+                <div v-if="showMonthPicker" class="month-picker-dropdown" @click.stop>
+                  <div class="picker-header">
+                    <button class="picker-nav" @click="pickerYear--" :disabled="pickerYear <= currentYear - 4">
+                      <ChevronLeft class="nav-icon" />
+                    </button>
+                    <span class="picker-year">{{ pickerYear }}年</span>
+                    <button class="picker-nav" @click="pickerYear++" :disabled="pickerYear >= currentYear">
+                      <ChevronRight class="nav-icon" />
+                    </button>
+                  </div>
+                  <div class="picker-months">
+                    <button 
+                      v-for="m in 12" 
+                      :key="m" 
+                      class="picker-month"
+                      :class="{ 
+                        'selected': monthlyYear === pickerYear && monthlyMonth === m,
+                        'disabled': isMonthDisabled(pickerYear, m)
+                      }"
+                      :disabled="isMonthDisabled(pickerYear, m)"
+                      @click="selectMonth(pickerYear, m)"
+                    >
+                      {{ m }}月
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -371,10 +396,25 @@
               <h3 class="report-title">年度总结报告</h3>
               <p class="report-desc">年度游戏数据全面分析</p>
               <div class="report-options">
-                <div class="date-selector">
-                  <select v-model="yearlyYear" class="date-select">
-                    <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-                  </select>
+                <!-- 年份选择器 -->
+                <div class="year-picker" @click="showYearPicker = !showYearPicker">
+                  <Calendar class="picker-icon" />
+                  <span class="picker-value">{{ yearlyYear }}年</span>
+                  <ChevronDown class="picker-arrow" :class="{ 'rotate': showYearPicker }" />
+                </div>
+                <!-- 年份选择弹窗 -->
+                <div v-if="showYearPicker" class="year-picker-dropdown" @click.stop>
+                  <div class="picker-years">
+                    <button 
+                      v-for="y in yearlyYearOptions" 
+                      :key="y" 
+                      class="picker-year-btn"
+                      :class="{ 'selected': yearlyYear === y }"
+                      @click="selectYear(y)"
+                    >
+                      {{ y }}年
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -471,19 +511,19 @@
           <div class="form-group" v-if="exportForm.type === 'monthly'">
             <label>选择月份</label>
             <div class="date-row">
-              <select v-model="exportForm.year" class="form-select">
-                <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
+              <select v-model="monthlyYear" class="form-select">
+                <option v-for="y in monthlyYearOptions" :key="y" :value="y">{{ y }}年</option>
               </select>
-              <select v-model="exportForm.month" class="form-select">
-                <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
+              <select v-model="monthlyMonth" class="form-select">
+                <option v-for="m in monthlyMonthOptions" :key="m" :value="m">{{ m }}月</option>
               </select>
             </div>
           </div>
           
           <div class="form-group" v-if="exportForm.type === 'yearly'">
             <label>选择年份</label>
-            <select v-model="exportForm.year" class="form-select">
-              <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
+            <select v-model="yearlyYear" class="form-select">
+              <option v-for="y in yearlyYearOptions" :key="y" :value="y">{{ y }}年</option>
             </select>
           </div>
           
@@ -511,11 +551,11 @@
 
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { 
   RefreshCw, AlertCircle, User, Gamepad2, Clock, Trophy, Heart,
   Calendar, Award, Package, FileText, FileSpreadsheet, Globe, Download, Trash2,
-  TrendingUp, Activity, Layers
+  TrendingUp, Activity, Layers, ChevronDown, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
 import Chart from 'chart.js/auto'
 import noCoverImage from '@/assets/no_cover.png'
@@ -556,27 +596,129 @@ const generating = ref({
 // Export dialog
 const showExportDialog = ref(false)
 const exporting = ref(false)
-const exportForm = ref({
-  type: 'monthly',
-  year: new Date().getFullYear(),
-  month: new Date().getMonth() + 1,
-  format: 'pdf'
-})
 
 // Report date selectors
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth() + 1
-const monthlyYear = ref(currentYear)
-const monthlyMonth = ref(currentMonth)
-const yearlyYear = ref(currentYear)
 
-// Year options (last 5 years)
-const yearOptions = computed(() => {
+// 获取上个月的年份和月份
+const getLastMonthYearAndMonth = () => {
+  const now = new Date()
+  now.setMonth(now.getMonth() - 1)
+  return {
+    year: now.getFullYear(),
+    month: now.getMonth() + 1
+  }
+}
+
+const lastMonth = getLastMonthYearAndMonth()
+
+const monthlyYear = ref(lastMonth.year)
+const monthlyMonth = ref(lastMonth.month)
+const yearlyYear = ref(currentYear - 1) // 默认选择去年
+
+// 月份/年份选择器状态
+const showMonthPicker = ref(false)
+const showYearPicker = ref(false)
+const pickerYear = ref(lastMonth.year)
+
+// 判断月份是否禁用（未完成的月份）
+const isMonthDisabled = (year, month) => {
+  if (year > currentYear) return true
+  if (year === currentYear && month >= currentMonth) return true
+  return false
+}
+
+// 选择月份
+const selectMonth = (year, month) => {
+  monthlyYear.value = year
+  monthlyMonth.value = month
+  exportForm.value.year = year
+  exportForm.value.month = month
+  showMonthPicker.value = false
+}
+
+// 选择年份
+const selectYear = (year) => {
+  yearlyYear.value = year
+  exportForm.value.year = year
+  showYearPicker.value = false
+}
+
+// 点击外部关闭选择器
+const closePickersOnClickOutside = (e) => {
+  if (!e.target.closest('.month-picker') && !e.target.closest('.month-picker-dropdown')) {
+    showMonthPicker.value = false
+  }
+  if (!e.target.closest('.year-picker') && !e.target.closest('.year-picker-dropdown')) {
+    showYearPicker.value = false
+  }
+}
+
+const exportForm = ref({
+  type: 'monthly',
+  year: lastMonth.year,
+  month: lastMonth.month,
+  format: 'pdf'
+})
+
+// Year options for monthly report (last 5 years)
+const monthlyYearOptions = computed(() => {
   const years = []
   for (let i = currentYear; i >= currentYear - 4; i--) {
     years.push(i)
   }
   return years
+})
+
+// Month options for monthly report (only completed months)
+const monthlyMonthOptions = computed(() => {
+  const months = []
+  const maxMonth = monthlyYear.value === currentYear ? currentMonth - 1 : 12
+  for (let m = 1; m <= maxMonth; m++) {
+    months.push(m)
+  }
+  return months
+})
+
+// Year options for yearly report (only completed years, excluding current year)
+const yearlyYearOptions = computed(() => {
+  const years = []
+  for (let i = currentYear - 1; i >= currentYear - 5; i--) {
+    years.push(i)
+  }
+  return years
+})
+
+// Watch for monthly year change to reset month if needed
+watch(() => monthlyYear.value, (newYear) => {
+  const maxMonth = newYear === currentYear ? currentMonth - 1 : 12
+  if (monthlyMonth.value > maxMonth) {
+    monthlyMonth.value = maxMonth
+  }
+  // 同步到 exportForm
+  exportForm.value.year = newYear
+  exportForm.value.month = monthlyMonth.value
+})
+
+// Watch for monthly month change
+watch(() => monthlyMonth.value, (newMonth) => {
+  exportForm.value.month = newMonth
+})
+
+// Watch for yearly year change
+watch(() => yearlyYear.value, (newYear) => {
+  exportForm.value.year = newYear
+})
+
+// Watch for report type change to reset year
+watch(() => exportForm.value.type, (newType) => {
+  if (newType === 'yearly') {
+    exportForm.value.year = yearlyYear.value
+  } else if (newType === 'monthly') {
+    exportForm.value.year = monthlyYear.value
+    exportForm.value.month = monthlyMonth.value
+  }
 })
 
 // Available formats based on report type
@@ -1137,10 +1279,14 @@ const handleExport = async () => {
 onMounted(() => {
   loadData()
   loadReportHistory()
+  // 添加点击外部关闭选择器的事件监听
+  document.addEventListener('click', closePickersOnClickOutside)
 })
 
 onUnmounted(() => {
   if (genreChart) genreChart.destroy()
+  // 移除事件监听
+  document.removeEventListener('click', closePickersOnClickOutside)
 })
 </script>
 
@@ -2246,6 +2392,186 @@ onUnmounted(() => {
 
 .report-options {
   margin-top: 8px;
+  position: relative;
+}
+
+/* 月份选择器样式 */
+.month-picker,
+.year-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.month-picker:hover,
+.year-picker:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--primary-color);
+}
+
+.picker-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--primary-color);
+}
+
+.picker-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.picker-arrow {
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.picker-arrow.rotate {
+  transform: rotate(180deg);
+}
+
+/* 月份选择弹窗 */
+.month-picker-dropdown,
+.year-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 100;
+  background: #1f1f23;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: dropdownFadeIn 0.2s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.picker-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.picker-nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.picker-nav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-primary);
+}
+
+.picker-year {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.picker-months {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 12px;
+}
+
+.picker-month {
+  padding: 10px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.picker-month:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.picker-month.selected {
+  background: var(--primary-color);
+  color: white;
+  font-weight: 500;
+}
+
+.picker-month.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* 年份选择弹窗 */
+.picker-years {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 12px;
+  min-width: 180px;
+}
+
+.picker-year-btn {
+  padding: 12px 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.picker-year-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.picker-year-btn.selected {
+  background: var(--primary-color);
+  color: white;
+  font-weight: 500;
 }
 
 .date-selector {

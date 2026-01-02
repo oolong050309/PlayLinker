@@ -116,23 +116,22 @@ export const getInventoryReportUrl = (format) => {
 
 /**
  * 下载报告（带认证）
- * @param {string} url - 报告URL
+ * @param {string} url - 报告完整URL
  * @param {string} filename - 文件名
  */
 export const downloadReport = async (url, filename) => {
-  const token = localStorage.getItem('token')
+  // 从完整URL中提取相对路径
+  const baseUrl = getBaseUrl()
+  const relativePath = url.replace(baseUrl, '')
   
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+  const response = await request({
+    url: relativePath,
+    method: 'get',
+    responseType: 'blob',
+    timeout: 60000 // 60秒超时
   })
   
-  if (!response.ok) {
-    throw new Error('下载失败')
-  }
-  
-  const blob = await response.blob()
+  const blob = new Blob([response.data])
   const downloadUrl = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = downloadUrl
@@ -145,25 +144,29 @@ export const downloadReport = async (url, filename) => {
 
 /**
  * 在新窗口打开HTML报告
- * @param {string} url - 报告URL
+ * @param {string} url - 报告完整URL
  */
 export const openHtmlReport = async (url) => {
-  const token = localStorage.getItem('token')
+  // 从完整URL中提取相对路径
+  const baseUrl = getBaseUrl()
+  const relativePath = url.replace(baseUrl, '')
   
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+  const response = await request({
+    url: relativePath,
+    method: 'get',
+    timeout: 60000 // 60秒超时
   })
   
-  if (!response.ok) {
-    throw new Error('获取报告失败')
-  }
+  // request返回的是包装后的响应，需要从data中获取HTML内容
+  const html = response.data || response
   
-  const html = await response.text()
   const newWindow = window.open('', '_blank')
-  newWindow.document.write(html)
-  newWindow.document.close()
+  if (newWindow) {
+    newWindow.document.write(html)
+    newWindow.document.close()
+  } else {
+    throw new Error('无法打开新窗口，请检查浏览器弹窗设置')
+  }
 }
 
 export default {
