@@ -193,14 +193,14 @@ const formatTime = (date) => {
   if (!date) return ''
   
   // 如果date是字符串，先转换为Date对象
+  // 后端返回的时间通常是UTC时间字符串（如 "2024-01-01T12:00:00Z"）
   const dateObj = date instanceof Date ? date : new Date(date)
   
-  // 转换为中国时区（UTC+8）
-  const chinaTime = new Date(dateObj.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+  // 获取当前时间（本地时间）
+  const now = new Date()
   
-  // 计算时间差（使用中国时区时间）
-  const diff = now - chinaTime
+  // 计算时间差（毫秒）
+  const diff = now - dateObj
   const minutes = Math.floor(diff / 60000)
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
@@ -210,12 +210,24 @@ const formatTime = (date) => {
   if (hours < 24) return `${hours}小时前`
   if (days < 7) return `${days}天前`
   
-  // 超过7天，显示具体日期和时间（中国时区，格式化更美观）
-  const year = chinaTime.getFullYear()
-  const month = String(chinaTime.getMonth() + 1).padStart(2, '0')
-  const day = String(chinaTime.getDate()).padStart(2, '0')
-  const hour = String(chinaTime.getHours()).padStart(2, '0')
-  const minute = String(chinaTime.getMinutes()).padStart(2, '0')
+  // 超过7天，显示具体日期和时间（转换为中国时区显示）
+  // 使用Intl.DateTimeFormat来正确转换时区
+  const formatter = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+  
+  const parts = formatter.formatToParts(dateObj)
+  const year = parts.find(p => p.type === 'year').value
+  const month = parts.find(p => p.type === 'month').value
+  const day = parts.find(p => p.type === 'day').value
+  const hour = parts.find(p => p.type === 'hour').value
+  const minute = parts.find(p => p.type === 'minute').value
   
   return `${year}-${month}-${day} ${hour}:${minute}`
 }

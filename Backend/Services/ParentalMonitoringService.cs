@@ -4,6 +4,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PlayLinker.Data;
 using PlayLinker.Models.Entities;
+using PlayLinker.Services;
+using System.Net.Http;
 using System.Text.Json;
 
 namespace PlayLinker.Services;
@@ -127,41 +129,6 @@ public class ParentalMonitoringService : BackgroundService
     }
 
     /// <summary>
-    /// 检查单个规则是否违规（公共方法，允许从外部调用）
-    /// </summary>
-    public async Task<bool> CheckSingleRuleAsync(long ruleId, CancellationToken cancellationToken = default)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<PlayLinkerDbContext>();
-
-        try
-        {
-            var rule = await context.ParentalControlRules
-                .Include(r => r.ChildUser)
-                .FirstOrDefaultAsync(r => r.RuleId == ruleId, cancellationToken);
-
-            if (rule == null)
-            {
-                _logger.LogWarning("规则 {RuleId} 不存在", ruleId);
-                return false;
-            }
-
-            if (rule.IsActive != true)
-            {
-                _logger.LogDebug("规则 {RuleId} 未激活，跳过检查", ruleId);
-                return false;
-            }
-
-            return await CheckRuleViolationAsync(context, rule, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "检查规则 {RuleId} 时发生错误", ruleId);
-            return false;
-        }
-    }
-
-    /// <summary>
     /// 检查单个规则是否违规
     /// </summary>
     private async Task<bool> CheckRuleViolationAsync(
@@ -176,16 +143,11 @@ public class ParentalMonitoringService : BackgroundService
             var now = DateTime.UtcNow;
             var today = now.Date;
 
-            _logger.LogDebug("检查规则 {RuleId} (类型: {RuleType}, 子账户: {ChildUserId}), 规则值: {RuleValue}", 
-                rule.RuleId, rule.RuleType, rule.ChildUserId, rule.RuleValue);
-
             // 检查今天是否已经发送过该规则的提醒（避免重复通知）
-            // 只查询需要的字段，避免查询不存在的 severity 列
             var todayAlert = await context.ParentalAlertLogs
                 .Where(l => l.RuleId == rule.RuleId
                     && l.AlertTime.HasValue
                     && l.AlertTime.Value.Date == today)
-                .Select(l => new { l.AlertId, l.RuleId, l.AlertTime })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (todayAlert != null)
@@ -280,24 +242,7 @@ public class ParentalMonitoringService : BackgroundService
                     notificationContent = $"您的孩子 {childUser.Username} 的游戏库中包含超出年龄分级（{maxAgeRating}+）的游戏：{string.Join("、", violatingGameNames)}。";
                 }
 
-                // 检查是否已存在相同的通知（基于 related_id 和 user_id）
-                var existingNotification = await context.NotificationCenters
-                    .FirstOrDefaultAsync(n => n.RelatedId == rule.RuleId && n.UserId == parentUser.UserId, cancellationToken);
-
-                NotificationCenter notification;
-                if (existingNotification != null)
-                {
-                    // 更新现有通知
-                    existingNotification.Title = notificationTitle;
-                    existingNotification.Content = notificationContent;
-                    existingNotification.IsRead = false; // 重置为未读
-                    existingNotification.CreatedAt = DateTime.UtcNow; // 更新创建时间
-                    notification = existingNotification;
-                }
-                else
-                {
-                    // 创建新通知
-                    notification = new NotificationCenter
+                var notification = new NotificationCenter
                 {
                     UserId = parentUser.UserId,
                     SourceModule = "parental_control",
@@ -308,9 +253,8 @@ public class ParentalMonitoringService : BackgroundService
                     RelatedId = rule.RuleId,
                     CreatedAt = DateTime.UtcNow
                 };
-                context.NotificationCenters.Add(notification);
-                }
 
+                context.NotificationCenters.Add(notification);
                 await context.SaveChangesAsync(cancellationToken);
 
                 // 创建违规日志
@@ -320,9 +264,8 @@ public class ParentalMonitoringService : BackgroundService
                     ChildUserId = rule.ChildUserId,
                     ViolationDetails = JsonSerializer.Serialize(violationDetails),
                     AlertTime = DateTime.UtcNow,
-                    NotificationId = notification.NotificationId
-                    // 注意：Severity 字段在数据库表中不存在，已标记为 NotMapped
-                    // Severity = "warning"
+                    NotificationId = notification.NotificationId,
+                    Severity = "warning"
                 };
 
                 context.ParentalAlertLogs.Add(alertLog);
@@ -394,32 +337,122 @@ public class ParentalMonitoringService : BackgroundService
                 return false;
             }
 
-            // 获取今天的游戏时长（从UserGameLibrary的recent_playtime_minutes或total_playtime_minutes）
-            // 注意：这里假设recent_playtime_minutes是最近24小时的游戏时长
-            // 如果需要更精确的每日统计，可能需要单独的游戏时长记录表
-            var userLibrary = await context.UserGameLibraries
-                .FirstOrDefaultAsync(ul => ul.UserId == rule.ChildUserId, cancellationToken);
+            // 使用PlaytimeForever字段计算今日游戏时长：今天的值 - 昨天的值
+            var today = DateTime.UtcNow.Date;
+            var yesterday = today.AddDays(-1);
+
+            // 获取昨天的PlaytimeForever快照数据
+            var yesterdayRecords = await context.UserPlaytimeHistories
+                .Where(h => h.UserId == rule.ChildUserId && h.RecordDate == yesterday)
+                .ToDictionaryAsync(h => h.GameId, h => h.PlaytimeForever, cancellationToken);
 
             int currentMinutes = 0;
-            if (userLibrary != null)
+
+            // 方法1：如果今天已有快照数据，使用快照中的PlaytimeForever
+            var todayRecords = await context.UserPlaytimeHistories
+                .Where(h => h.UserId == rule.ChildUserId && h.RecordDate == today)
+                .ToListAsync(cancellationToken);
+
+            if (todayRecords.Any())
             {
-                // 优先使用recent_playtime_minutes（最近游戏时长）
-                // 如果系统没有更新这个字段，可以考虑使用total_playtime_minutes的增量
-                currentMinutes = userLibrary.RecentPlaytimeMinutes;
+                // 使用今天的PlaytimeForever - 昨天的PlaytimeForever计算增量
+                foreach (var todayRecord in todayRecords)
+                {
+                    if (yesterdayRecords.TryGetValue(todayRecord.GameId, out var yesterdayPlaytime))
+                    {
+                        // 计算增量：今天的总时长 - 昨天的总时长 = 今日新增时长
+                        var dailyIncrement = todayRecord.PlaytimeForever - yesterdayPlaytime;
+                        if (dailyIncrement > 0)
+                        {
+                            currentMinutes += dailyIncrement;
+                        }
+                    }
+                    else
+                    {
+                        // 新游戏：如果今天有记录但昨天没有，且PlaytimeForever较小，可能是今天开始玩的
+                        if (todayRecord.PlaytimeForever > 0 && todayRecord.PlaytimeForever < 480) // 8小时内认为是今天玩的
+                        {
+                            currentMinutes += todayRecord.PlaytimeForever;
+                        }
+                    }
+                }
             }
 
-            // 如果recent_playtime_minutes为0，尝试从UserPlatformLibrary获取
-            if (currentMinutes == 0)
+            // 方法2：如果今天还没有快照，但有昨天的快照，尝试实时获取Steam数据
+            if (currentMinutes == 0 && yesterdayRecords.Any())
             {
-                var platformLibraries = await context.UserPlatformLibraries
-                    .Include(upl => upl.PlayerPlatform)
-                        .ThenInclude(pp => pp.UserPlatformBindings)
-                    .Where(upl => upl.PlayerPlatform.UserPlatformBindings
-                        .Any(upb => upb.UserId == rule.ChildUserId))
-                    .ToListAsync(cancellationToken);
+                // 获取用户的Steam绑定信息
+                var steamBinding = await context.UserPlatformBindings
+                    .Include(b => b.PlayerPlatform)
+                    .FirstOrDefaultAsync(b => b.UserId == rule.ChildUserId && b.PlatformId == 1 && b.BindingStatus == true, cancellationToken);
 
-                currentMinutes = platformLibraries.Sum(upl => upl.PlaytimeMinutes);
+                if (steamBinding != null && !string.IsNullOrEmpty(steamBinding.AccessToken))
+                {
+                    try
+                    {
+                        // 实时调用Steam API获取最新数据
+                        using var serviceScope = _serviceProvider.CreateScope();
+                        var tokenService = serviceScope.ServiceProvider.GetRequiredService<ITokenEncryptionService>();
+                        var apiKey = tokenService.DecryptToken(steamBinding.AccessToken);
+                        var steamId = steamBinding.PlatformUserId;
+
+                        if (!string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(steamId))
+                        {
+                            var httpClient = new System.Net.Http.HttpClient();
+                            var url = $"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={Uri.EscapeDataString(apiKey)}&steamid={Uri.EscapeDataString(steamId)}&include_appinfo=false&include_played_free_games=true";
+                            var response = await httpClient.GetAsync(url, cancellationToken);
+
+                            if (response.IsSuccessStatusCode)
+                            {
+                                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                                using var doc = JsonDocument.Parse(json);
+
+                                if (doc.RootElement.TryGetProperty("response", out var responseEl) &&
+                                    responseEl.TryGetProperty("games", out var gamesEl))
+                                {
+                                    var knownGamesMap = await context.GamePlatforms
+                                        .Where(gp => gp.PlatformId == 1)
+                                        .ToDictionaryAsync(gp => gp.PlatformGameId, gp => gp.GameId, cancellationToken);
+
+                                    foreach (var gameItem in gamesEl.EnumerateArray())
+                                    {
+                                        var appId = gameItem.GetProperty("appid").GetInt32();
+                                        var playtimeForever = gameItem.GetProperty("playtime_forever").GetInt32();
+
+                                        if (playtimeForever > 0 && knownGamesMap.TryGetValue(appId.ToString(), out var gameId))
+                                        {
+                                            if (yesterdayRecords.TryGetValue(gameId, out var yesterdayPlaytime))
+                                            {
+                                                // 使用PlaytimeForever计算增量：今天的值 - 昨天的值
+                                                var dailyIncrement = playtimeForever - yesterdayPlaytime;
+                                                if (dailyIncrement > 0)
+                                                {
+                                                    currentMinutes += dailyIncrement;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                // 新游戏：如果总时长较小，可能是今天开始玩的
+                                                if (playtimeForever < 480) // 8小时内认为是今天玩的
+                                                {
+                                                    currentMinutes += playtimeForever;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "实时获取Steam数据失败，使用回退方案: userId={UserId}", rule.ChildUserId);
+                    }
+                }
             }
+
+            // 如果没有昨天的快照数据，无法通过PlaytimeForever计算，返回0
+            // 这样可以确保计算的准确性，避免使用不准确的估算值
 
             violationDetails["currentMinutes"] = currentMinutes;
             violationDetails["limitMinutes"] = limitMinutes;
@@ -548,7 +581,7 @@ public class ParentalMonitoringService : BackgroundService
     }
 
     /// <summary>
-    /// 检查游戏限制
+    /// 检查游戏限制（使用游戏名称blockedGameNames）
     /// </summary>
     private async Task<bool> CheckGameRestrictionAsync(
         PlayLinkerDbContext context,
@@ -559,15 +592,12 @@ public class ParentalMonitoringService : BackgroundService
     {
         try
         {
-            // 优先使用 blockedGameNames（新格式），兼容 blockedGameIds（旧格式）
+            // 优先使用blockedGameNames（新格式），兼容blockedGameIds（旧格式）
             List<string> blockedGameNames = new List<string>();
-            List<long> blockedGameIds = new List<long>();
-            bool useGameNames = false;
-
+            
             if (ruleValue.TryGetProperty("blockedGameNames", out var blockedGameNamesProp))
             {
-                // 使用游戏名称（新格式）
-                useGameNames = true;
+                // 使用新格式：游戏名称列表
                 if (blockedGameNamesProp.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var item in blockedGameNamesProp.EnumerateArray())
@@ -582,13 +612,13 @@ public class ParentalMonitoringService : BackgroundService
                         }
                     }
                 }
-                _logger.LogInformation("规则 {RuleId} 使用游戏名称限制，共 {Count} 个被限制的游戏: {Games}", 
-                    rule.RuleId, blockedGameNames.Count, string.Join(", ", blockedGameNames));
             }
             else if (ruleValue.TryGetProperty("blockedGameIds", out var blockedGameIdsProp))
             {
-                // 兼容旧格式：使用游戏ID
-                _logger.LogWarning("规则 {RuleId} 使用已废弃的 blockedGameIds 格式，建议使用 blockedGameNames", rule.RuleId);
+                // 兼容旧格式：游戏ID列表，需要转换为游戏名称
+                _logger.LogWarning("规则 {RuleId} 使用已废弃的 blockedGameIds 格式，建议更新为 blockedGameNames", rule.RuleId);
+                
+                var blockedGameIds = new List<long>();
                 if (blockedGameIdsProp.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var item in blockedGameIdsProp.EnumerateArray())
@@ -599,6 +629,17 @@ public class ParentalMonitoringService : BackgroundService
                         }
                     }
                 }
+
+                // 通过游戏ID查找游戏名称
+                if (blockedGameIds.Any())
+                {
+                    var games = await context.Games
+                        .Where(g => blockedGameIds.Contains(g.GameId))
+                        .Select(g => g.Name)
+                        .ToListAsync(cancellationToken);
+                    
+                    blockedGameNames.AddRange(games);
+                }
             }
             else
             {
@@ -606,14 +647,8 @@ public class ParentalMonitoringService : BackgroundService
                 return false;
             }
 
-            if (useGameNames && blockedGameNames.Count == 0)
+            if (blockedGameNames.Count == 0)
             {
-                _logger.LogDebug("规则 {RuleId} 没有限制的游戏名称", rule.RuleId);
-                return false; // 没有限制的游戏
-            }
-            if (!useGameNames && blockedGameIds.Count == 0)
-            {
-                _logger.LogDebug("规则 {RuleId} 没有限制的游戏ID", rule.RuleId);
                 return false; // 没有限制的游戏
             }
 
@@ -622,9 +657,6 @@ public class ParentalMonitoringService : BackgroundService
                 .Where(upb => upb.UserId == rule.ChildUserId && upb.BindingStatus == true)
                 .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
                 .ToListAsync(cancellationToken);
-
-            _logger.LogDebug("规则 {RuleId} 检查子账户 {ChildUserId}，找到 {Count} 个平台绑定", 
-                rule.RuleId, rule.ChildUserId, platformBindings.Count);
 
             if (platformBindings.Count == 0)
             {
@@ -649,82 +681,32 @@ public class ParentalMonitoringService : BackgroundService
             // 去重
             childGameIds = childGameIds.Distinct().ToList();
 
-            _logger.LogDebug("规则 {RuleId} 子账户 {ChildUserId} 共有 {Count} 个游戏", 
-                rule.RuleId, rule.ChildUserId, childGameIds.Count);
-
-            if (childGameIds.Count == 0)
-            {
-                _logger.LogDebug("子账户 {ChildUserId} 没有游戏", rule.ChildUserId);
-                return false; // 孩子没有游戏
-            }
-
-            // 获取孩子游戏库中的所有游戏名称
-            var childGames = await context.Games
-                .Where(g => childGameIds.Contains(g.GameId))
-                .Select(g => new { g.GameId, g.Name })
+            // 通过游戏名称查找对应的游戏ID
+            var blockedGameIdList = await context.Games
+                .Where(g => blockedGameNames.Contains(g.Name))
+                .Select(g => g.GameId)
                 .ToListAsync(cancellationToken);
 
-            var childGameNames = childGames.Select(g => g.Name).ToList();
+            // 检查是否有被限制的游戏
+            var violatingGameIds = childGameIds.Intersect(blockedGameIdList).ToList();
 
-            _logger.LogDebug("规则 {RuleId} 子账户游戏名称列表（前10个）: {Games}", 
-                rule.RuleId, string.Join(", ", childGameNames.Take(10)));
-
-            if (useGameNames)
+            if (violatingGameIds.Count > 0)
             {
-                // 使用游戏名称匹配（不区分大小写）
-                var violatingGameNames = childGameNames
-                    .Where(name => blockedGameNames.Any(blocked => 
-                        string.Equals(name, blocked, StringComparison.OrdinalIgnoreCase)))
-                    .ToList();
+                // 获取违规游戏的名称
+                var violatingGames = await context.Games
+                    .Where(g => violatingGameIds.Contains(g.GameId))
+                    .Select(g => new { g.GameId, g.Name })
+                    .ToListAsync(cancellationToken);
 
-                _logger.LogInformation("规则 {RuleId} 游戏名称匹配结果: 被限制游戏={BlockedCount}, 子账户游戏={ChildCount}, 违规游戏={ViolatingCount}", 
-                    rule.RuleId, blockedGameNames.Count, childGameNames.Count, violatingGameNames.Count);
+                var violatingGameNames = violatingGames.Select(g => g.Name).ToList();
 
-                if (violatingGameNames.Count > 0)
-                {
-                    var violatingGameIds = childGames
-                        .Where(g => violatingGameNames.Contains(g.Name))
-                        .Select(g => g.GameId)
-                        .ToList();
+                violationDetails["blockedGameNames"] = blockedGameNames;
+                violationDetails["violatingGameIds"] = violatingGameIds;
+                violationDetails["violatingGameNames"] = violatingGameNames;
+                violationDetails["totalBlockedGames"] = blockedGameNames.Count;
+                violationDetails["violatingGamesCount"] = violatingGameIds.Count;
 
-                    violationDetails["blockedGameNames"] = blockedGameNames;
-                    violationDetails["violatingGameNames"] = violatingGameNames;
-                    violationDetails["violatingGameIds"] = violatingGameIds;
-                    violationDetails["totalBlockedGames"] = blockedGameNames.Count;
-                    violationDetails["violatingGamesCount"] = violatingGameNames.Count;
-
-                    _logger.LogInformation("规则 {RuleId} 检测到违规: 违规游戏={Games}", 
-                        rule.RuleId, string.Join(", ", violatingGameNames));
-
-                    return true;
-                }
-                else
-                {
-                    _logger.LogDebug("规则 {RuleId} 未检测到违规: 被限制游戏={BlockedGames}, 子账户游戏={ChildGames}", 
-                        rule.RuleId, string.Join(", ", blockedGameNames), string.Join(", ", childGameNames.Take(5)));
-                }
-            }
-            else
-            {
-                // 使用游戏ID匹配（兼容旧格式）
-                var violatingGameIds = childGameIds.Intersect(blockedGameIds).ToList();
-
-                if (violatingGameIds.Count > 0)
-                {
-                    var violatingGames = childGames
-                        .Where(g => violatingGameIds.Contains(g.GameId))
-                        .ToList();
-
-                    var violatingGameNames = violatingGames.Select(g => g.Name).ToList();
-
-                    violationDetails["blockedGameIds"] = blockedGameIds;
-                    violationDetails["violatingGameIds"] = violatingGameIds;
-                    violationDetails["blockedGameNames"] = violatingGameNames;
-                    violationDetails["totalBlockedGames"] = blockedGameIds.Count;
-                    violationDetails["violatingGamesCount"] = violatingGameIds.Count;
-
-                    return true;
-                }
+                return true;
             }
 
             return false;
@@ -806,10 +788,7 @@ public class ParentalMonitoringService : BackgroundService
             if (violatingGames.Count > 0)
             {
                 var violatingGameNames = violatingGames.Select(g => g.Name).ToList();
-                var violatingGameAges = violatingGames
-                    .Where(g => g.RequireAge.HasValue)
-                    .Select(g => g.RequireAge!.Value)
-                    .ToList();
+                var violatingGameAges = violatingGames.Select(g => g.RequireAge.Value).ToList();
 
                 violationDetails["maxAgeRating"] = maxAgeRating;
                 violationDetails["violatingGameIds"] = violatingGames.Select(g => g.GameId).ToList();

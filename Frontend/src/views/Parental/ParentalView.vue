@@ -43,8 +43,29 @@
                   <h4 class="relationship-name">{{ child.childUsername }}</h4>
                   <div class="relationship-stats">
                     <span>活跃规则: {{ child.activeRulesCount || 0 }}</span>
-                    <span>今日游戏时长: {{ child.todayPlaytime || 0 }} 分钟</span>
+                    <span>今日游戏时长: {{ formatPlaytime(child.todayPlaytime || 0) }}</span>
                     <span>近期违规: {{ child.recentAlerts || 0 }} 次</span>
+                  </div>
+                  <!-- 游戏时长进度条（如果有每日限制规则） -->
+                  <div v-if="getDailyLimitRule(child.childUserId)" class="playtime-summary">
+                    <div class="playtime-summary-info">
+                      <span class="summary-label">今日进度:</span>
+                      <span class="summary-value">
+                        {{ formatPlaytime(child.todayPlaytime || 0) }} / {{ formatPlaytime(getDailyLimitRule(child.childUserId)?.ruleValue?.limitMinutes || 0) }}
+                      </span>
+                    </div>
+                    <div class="playtime-progress-bar">
+                      <div 
+                        class="progress-fill-summary" 
+                        :class="{ 
+                          'exceeded': (child.todayPlaytime || 0) >= (getDailyLimitRule(child.childUserId)?.ruleValue?.limitMinutes || 0),
+                          'warning': (child.todayPlaytime || 0) >= (getDailyLimitRule(child.childUserId)?.ruleValue?.warningMinutes || 0) && (child.todayPlaytime || 0) < (getDailyLimitRule(child.childUserId)?.ruleValue?.limitMinutes || 0)
+                        }"
+                        :style="{ 
+                          width: `${Math.min(100, ((child.todayPlaytime || 0) / (getDailyLimitRule(child.childUserId)?.ruleValue?.limitMinutes || 1)) * 100)}%` 
+                        }"
+                      ></div>
+                    </div>
                   </div>
                 </div>
                 <div class="relationship-actions">
@@ -85,7 +106,80 @@
                         </span>
                       </div>
                       <div class="rule-details">
-                        <pre class="rule-value">{{ formatRuleValue(rule.ruleValue) }}</pre>
+                        <div class="rule-value-display">
+                          <div v-if="rule.ruleType === 'playtime_daily_limit'" class="playtime-limit-info">
+                            <div class="limit-item">
+                              <span class="limit-label">每日限制:</span>
+                              <span class="limit-value">{{ formatPlaytime(rule.ruleValue?.limitMinutes || 0) }}</span>
+                            </div>
+                            <div class="limit-item" v-if="rule.ruleValue?.warningMinutes">
+                              <span class="limit-label">警告阈值:</span>
+                              <span class="limit-value warning">{{ formatPlaytime(rule.ruleValue.warningMinutes) }}</span>
+                            </div>
+                            <div class="limit-item" v-if="child && rule.ruleType === 'playtime_daily_limit'">
+                              <span class="limit-label">今日已用:</span>
+                              <span class="limit-value" :class="{ 
+                                'exceeded': (child.todayPlaytime || 0) >= (rule.ruleValue?.limitMinutes || 0),
+                                'warning': (child.todayPlaytime || 0) >= (rule.ruleValue?.warningMinutes || 0) && (child.todayPlaytime || 0) < (rule.ruleValue?.limitMinutes || 0)
+                              }">
+                                {{ formatPlaytime(child.todayPlaytime || 0) }}
+                              </span>
+                            </div>
+                            <div class="limit-item" v-if="child && rule.ruleType === 'playtime_daily_limit'">
+                              <span class="limit-label">剩余时长:</span>
+                              <span class="limit-value" :class="{ 
+                                'exceeded': (child.todayPlaytime || 0) >= (rule.ruleValue?.limitMinutes || 0)
+                              }">
+                                {{ formatPlaytime(Math.max(0, (rule.ruleValue?.limitMinutes || 0) - (child.todayPlaytime || 0))) }}
+                              </span>
+                            </div>
+                            <div v-if="child && rule.ruleType === 'playtime_daily_limit'" class="playtime-progress">
+                              <div class="progress-bar">
+                                <div 
+                                  class="progress-fill" 
+                                  :class="{ 
+                                    'exceeded': (child.todayPlaytime || 0) >= (rule.ruleValue?.limitMinutes || 0),
+                                    'warning': (child.todayPlaytime || 0) >= (rule.ruleValue?.warningMinutes || 0) && (child.todayPlaytime || 0) < (rule.ruleValue?.limitMinutes || 0)
+                                  }"
+                                  :style="{ 
+                                    width: `${Math.min(100, ((child.todayPlaytime || 0) / (rule.ruleValue?.limitMinutes || 1)) * 100)}%` 
+                                  }"
+                                ></div>
+                              </div>
+                            </div>
+                          </div>
+                          <div v-else-if="rule.ruleType === 'playtime_curfew'" class="curfew-info">
+                            <div class="limit-item">
+                              <span class="limit-label">宵禁时间:</span>
+                              <span class="limit-value">{{ rule.ruleValue?.startTime || '--' }} - {{ rule.ruleValue?.endTime || '--' }}</span>
+                            </div>
+                          </div>
+                          <div v-else-if="rule.ruleType === 'game_restriction'" class="game-restriction-info">
+                            <div class="limit-item">
+                              <span class="limit-label">禁止游戏:</span>
+                              <span class="limit-value">
+                                {{ Array.isArray(rule.ruleValue?.blockedGameNames) ? rule.ruleValue.blockedGameNames.length + ' 个游戏' : '未设置' }}
+                              </span>
+                            </div>
+                            <div v-if="Array.isArray(rule.ruleValue?.blockedGameNames) && rule.ruleValue.blockedGameNames.length > 0" class="blocked-games-tags">
+                              <span v-for="(gameName, index) in rule.ruleValue.blockedGameNames.slice(0, 5)" :key="index" class="game-tag">
+                                {{ gameName }}
+                              </span>
+                              <span v-if="rule.ruleValue.blockedGameNames.length > 5" class="game-tag more">
+                                +{{ rule.ruleValue.blockedGameNames.length - 5 }} 更多
+                              </span>
+                            </div>
+                          </div>
+                          <div v-else-if="rule.ruleType === 'age_restriction'" class="age-restriction-info">
+                            <div class="limit-item">
+                              <span class="limit-label">最大年龄分级:</span>
+                              <span class="limit-value">{{ rule.ruleValue?.maxAgeRating || '--' }}+</span>
+                            </div>
+                          </div>
+                          <div v-else class="rule-value-raw">
+                            <pre class="rule-value">{{ formatRuleValue(rule.ruleValue) }}</pre>
+                          </div>
+                        </div>
                         <div class="rule-statistics" v-if="rule.statistics">
                           <span>总违规: {{ rule.statistics.totalViolations || 0 }}</span>
                           <span>近期违规: {{ rule.statistics.recentViolations || 0 }}</span>
@@ -109,12 +203,20 @@
                       >
                         {{ togglingRuleStatus[rule.ruleId] ? '启用中...' : '启用' }}
                       </button>
-                      <button 
-                        class="btn btn-sm btn-secondary"
-                        @click="openEditRuleDialog(child, rule)"
-                      >
-                        编辑
-                      </button>
+                  <button 
+                    class="btn btn-sm btn-secondary"
+                    @click="openEditRuleDialog(child, rule)"
+                  >
+                    编辑
+                  </button>
+                  <button 
+                    v-if="rule.ruleType === 'playtime_daily_limit'"
+                    class="btn btn-sm btn-info"
+                    @click="selectedChild = child; showRuleDialog = false; setTimeout(() => { openEditRuleDialog(child, rule) }, 100)"
+                    title="查看详细时长信息"
+                  >
+                    查看详情
+                  </button>
                       <button 
                         class="btn btn-sm btn-danger"
                         @click="handleDeleteRule(rule.ruleId, child.childUserId)"
@@ -217,29 +319,57 @@
 
           <!-- 每日时长限制 -->
           <div v-if="ruleForm.ruleType === 'playtime_daily_limit'" class="form-group">
-            <label class="form-label">每日限制时长（分钟）</label>
-            <input 
-              v-model.number="ruleForm.ruleValue.limitMinutes"
-              type="number"
-              class="form-input"
-              min="0"
-              placeholder="120"
-            />
-            <label class="form-label" style="margin-top: 10px;">警告时长（分钟）</label>
-            <input 
-              v-model.number="ruleForm.ruleValue.warningMinutes"
-              type="number"
-              class="form-input"
-              min="0"
-              placeholder="100"
-            />
-            <label class="form-label" style="margin-top: 10px;">重置时间</label>
+            <label class="form-label">每日限制时长</label>
+            <div class="time-input-group">
+              <input 
+                v-model.number="ruleForm.ruleValue.limitMinutes"
+                type="number"
+                class="form-input"
+                min="1"
+                placeholder="120"
+                @input="validatePlaytimeLimit"
+              />
+              <span class="input-unit">分钟</span>
+            </div>
+            <p class="form-hint">
+              建议值：小学生60-90分钟，中学生90-120分钟，高中生120-180分钟
+            </p>
+            <div v-if="selectedChild" class="current-playtime-info">
+              <span class="info-label">今日已用时长:</span>
+              <span class="info-value" :class="{ 
+                'exceeded': (selectedChild.todayPlaytime || 0) >= (ruleForm.ruleValue.limitMinutes || 0),
+                'warning': (selectedChild.todayPlaytime || 0) >= (ruleForm.ruleValue.limitMinutes * 0.8 || 0)
+              }">
+                {{ formatPlaytime(selectedChild.todayPlaytime || 0) }}
+              </span>
+            </div>
+            
+            <label class="form-label" style="margin-top: 15px;">警告时长（可选）</label>
+            <div class="time-input-group">
+              <input 
+                v-model.number="ruleForm.ruleValue.warningMinutes"
+                type="number"
+                class="form-input"
+                min="0"
+                :max="ruleForm.ruleValue.limitMinutes || 9999"
+                placeholder="100"
+              />
+              <span class="input-unit">分钟</span>
+            </div>
+            <p class="form-hint">
+              当游戏时长达到此值时，系统会提前发送警告通知（建议设置为限制时长的80%）
+            </p>
+            
+            <label class="form-label" style="margin-top: 15px;">每日重置时间</label>
             <input 
               v-model="ruleForm.ruleValue.resetTime"
               type="time"
               class="form-input"
               placeholder="00:00"
             />
+            <p class="form-hint">
+              每日在此时间重置游戏时长统计（默认00:00，即午夜）
+            </p>
           </div>
 
           <!-- 宵禁时间 -->
@@ -417,6 +547,27 @@ const formatRuleValue = (ruleValue) => {
   } catch {
     return String(ruleValue)
   }
+}
+
+// 格式化游戏时长（分钟转小时和分钟）
+const formatPlaytime = (minutes) => {
+  if (!minutes || minutes === 0) return '0分钟'
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (hours > 0 && mins > 0) {
+    return `${hours}小时${mins}分钟`
+  } else if (hours > 0) {
+    return `${hours}小时`
+  } else {
+    return `${mins}分钟`
+  }
+}
+
+// 获取子账户的每日限制规则
+const getDailyLimitRule = (childId) => {
+  const rules = childRules.value[childId]
+  if (!rules || !Array.isArray(rules)) return null
+  return rules.find(r => r.ruleType === 'playtime_daily_limit' && r.isActive)
 }
 
 // 切换规则状态（启用/停用）
@@ -645,6 +796,18 @@ const openEditRuleDialog = (child, rule) => {
 const handleSaveRule = async () => {
   if (!selectedChild.value) return
 
+  // 验证每日时长限制规则
+  if (ruleForm.value.ruleType === 'playtime_daily_limit') {
+    if (!ruleForm.value.ruleValue.limitMinutes || ruleForm.value.ruleValue.limitMinutes < 1) {
+      alert('每日限制时长必须大于0分钟')
+      return
+    }
+    if (ruleForm.value.ruleValue.warningMinutes && ruleForm.value.ruleValue.warningMinutes >= ruleForm.value.ruleValue.limitMinutes) {
+      alert('警告时长必须小于限制时长')
+      return
+    }
+  }
+
   // 处理游戏限制：确保 blockedGameNames 是数组
   let ruleValue = { ...ruleForm.value.ruleValue }
   if (ruleForm.value.ruleType === 'game_restriction') {
@@ -745,6 +908,17 @@ const updateGameRestriction = (value) => {
     ruleForm.value.ruleValue.blockedGameNames = value.split(',')
       .map(name => name.trim())
       .filter(name => name.length > 0)
+  }
+}
+
+// 验证游戏时长限制
+const validatePlaytimeLimit = () => {
+  if (ruleForm.value.ruleValue.limitMinutes < 1) {
+    ruleForm.value.ruleValue.limitMinutes = 1
+  }
+  // 确保警告时长不超过限制时长
+  if (ruleForm.value.ruleValue.warningMinutes > ruleForm.value.ruleValue.limitMinutes) {
+    ruleForm.value.ruleValue.warningMinutes = ruleForm.value.ruleValue.limitMinutes
   }
 }
 
@@ -1442,6 +1616,197 @@ onMounted(() => {
 .form-hint {
   font-size: 12px;
   color: var(--text-tertiary);
+  margin-top: var(--spacing-xs);
+}
+
+/* 游戏时长相关样式 */
+.playtime-limit-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.limit-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 14px;
+}
+
+.limit-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.limit-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.limit-value.warning {
+  color: #f59e0b;
+}
+
+.limit-value.exceeded {
+  color: var(--error-color);
+}
+
+.playtime-progress {
+  margin-top: var(--spacing-xs);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--primary-color);
+  transition: width 0.3s, background-color 0.3s;
+  border-radius: 4px;
+}
+
+.progress-fill.warning {
+  background: #f59e0b;
+}
+
+.progress-fill.exceeded {
+  background: var(--error-color);
+}
+
+.playtime-summary {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.playtime-summary-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+  font-size: 13px;
+}
+
+.summary-label {
+  color: var(--text-secondary);
+}
+
+.summary-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.playtime-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill-summary {
+  height: 100%;
+  background: var(--primary-color);
+  transition: width 0.3s, background-color 0.3s;
+  border-radius: 3px;
+}
+
+.progress-fill-summary.warning {
+  background: #f59e0b;
+}
+
+.progress-fill-summary.exceeded {
+  background: var(--error-color);
+}
+
+.time-input-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.input-unit {
+  color: var(--text-secondary);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.current-playtime-info {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.info-label {
+  color: var(--text-secondary);
+  margin-right: var(--spacing-sm);
+}
+
+.info-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.info-value.warning {
+  color: #f59e0b;
+}
+
+.info-value.exceeded {
+  color: var(--error-color);
+}
+
+.curfew-info,
+.game-restriction-info,
+.age-restriction-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.blocked-games-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.game-tag {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.game-tag.more {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.btn-info {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-info:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.rule-value-display {
+  margin-top: var(--spacing-xs);
+}
+
+.rule-value-raw {
   margin-top: var(--spacing-xs);
 }
 </style>
