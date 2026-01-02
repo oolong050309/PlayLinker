@@ -68,7 +68,7 @@ public class ModsController : ControllerBase
                 ModName = request.ModName,
                 Version = request.Version,
                 FilePath = targetPath, // 使用目标路径作为文件路径
-                Enabled = false, // 网页版默认禁用
+                Enabled = request.AutoEnable, // 根据请求参数决定是否启用
                 LastModified = DateTime.UtcNow
             };
 

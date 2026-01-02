@@ -715,6 +715,7 @@ import {
   deleteCloudSave,
   getCloudStorageUsage,
   getGameMods,
+  getLocalGameDetail,
   addMod,
   toggleMod,
   deleteMod,
@@ -949,9 +950,17 @@ const viewGameMods = async (game) => {
   showModsDialog.value = true
   
   try {
-    const res = await getGameMods(game.gameId, { install_id: game.installId })
+    // 使用 getLocalGameDetail 获取游戏详情（包含 Mods）
+    const res = await getLocalGameDetail(game.installId)
     if (res.data?.mods) {
-      gameMods.value = res.data.mods
+      gameMods.value = res.data.mods.map(mod => ({
+        modId: mod.modId,
+        modName: mod.modName,
+        version: mod.version,
+        enabled: mod.enabled,
+        filePath: mod.filePath,
+        sizeGB: mod.sizeGB || 0
+      }))
     } else {
       gameMods.value = []
     }
@@ -1080,11 +1089,22 @@ const handleConfirmAddMod = async () => {
   
   addingMod.value = true
   try {
+    // 解析版本号，提取主版本号作为整数
+    let versionInt = 1
+    const versionStr = addModForm.value.version || '1.0'
+    const versionMatch = versionStr.match(/^(\d+)/)
+    if (versionMatch) {
+      versionInt = parseInt(versionMatch[1], 10)
+    }
+    
     await addMod({
       installId: modTargetGame.value.installId,
       modName: addModForm.value.modName,
-      version: addModForm.value.version || '1.0',
-      filePath: addModForm.value.filePath
+      version: versionInt,
+      filePath: addModForm.value.filePath,
+      description: addModForm.value.description || '',
+      author: addModForm.value.author || '',
+      autoEnable: true
     })
     
     showAddModDialog.value = false

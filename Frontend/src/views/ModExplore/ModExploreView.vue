@@ -80,8 +80,22 @@
       </div>
     </div>
 
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-state">
+    <!-- 无 Mod 来源提示 -->
+    <div v-else-if="selectedGameId && !sourcesLoading" class="empty-state no-source">
+      <Package class="empty-icon" />
+      <h3>该游戏暂无 Mod 平台支持</h3>
+      <p>我们尚未收录 <strong>{{ selectedGame?.gameName }}</strong> 的 Mod 来源</p>
+      <p class="hint">目前支持 NexusMods、3DM 等平台的热门游戏</p>
+    </div>
+
+    <!-- 加载来源状态 -->
+    <div v-if="sourcesLoading" class="loading-state">
+      <div class="loader"></div>
+      <p>正在加载 Mod 来源...</p>
+    </div>
+
+    <!-- 加载 Mod 列表状态 -->
+    <div v-else-if="loading" class="loading-state">
       <div class="loader"></div>
       <p>正在加载 Mod 列表...</p>
     </div>
@@ -111,12 +125,12 @@
       </div>
     </div>
 
-    <!-- 空状态 - 选择了游戏但没有 Mod -->
-    <div v-else-if="selectedGameId && selectedSource && !loading" class="empty-state">
+    <!-- 空状态 - 选择了游戏和来源但没有 Mod -->
+    <div v-else-if="selectedGameId && selectedSource && !loading && !sourcesLoading && modSources.length > 0" class="empty-state">
       <Package class="empty-icon" />
-      <h3>暂无 Mod 数据</h3>
-      <p>该游戏在 {{ selectedSourceName }} 上可能没有 Mod，或需要配置 API</p>
-      <p class="hint">请确保已在数据库中配置游戏的 Mod 平台映射</p>
+      <h3>在 {{ selectedSourceName }} 上暂无 Mod</h3>
+      <p>该游戏在 {{ selectedSourceName }} 平台上目前没有可用的 Mod</p>
+      <p class="hint">可以尝试切换其他 Mod 来源平台</p>
     </div>
 
     <!-- 空状态 - 未选择游戏 -->
@@ -159,6 +173,7 @@ import { getLocalGames } from '@/api/localGame'
 
 // State
 const loading = ref(false)
+const sourcesLoading = ref(false)
 const dropdownOpen = ref(false)
 const localGames = ref([])
 const selectedGameId = ref(null)
@@ -227,6 +242,7 @@ const selectGame = async (game) => {
   modSources.value = []
   selectedSource.value = ''
   mods.value = []
+  sourcesLoading.value = true
   
   // 加载该游戏的 Mod 来源
   try {
@@ -243,6 +259,9 @@ const selectGame = async (game) => {
     }
   } catch (error) {
     console.error('加载 Mod 来源失败:', error)
+    modSources.value = []
+  } finally {
+    sourcesLoading.value = false
   }
 }
 
@@ -807,6 +826,17 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
 .empty-state .hint {
   font-size: 13px;
   color: #4a5568;
+}
+
+.empty-state.no-source {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  margin-top: 20px;
+}
+
+.empty-state.no-source strong {
+  color: #8b5cf6;
 }
 
 .btn-primary {

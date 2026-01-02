@@ -98,6 +98,10 @@ public class ModDto
     public string ModName { get; set; } = string.Empty;
     public int Version { get; set; }
     public bool Enabled { get; set; }
+    public string FilePath { get; set; } = string.Empty;
+    public decimal SizeGB { get; set; }
+    public string? Description { get; set; }
+    public string? Author { get; set; }
 }
 
 public class PaginatedResponse<T>

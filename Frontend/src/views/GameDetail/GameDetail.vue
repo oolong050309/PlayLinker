@@ -543,40 +543,54 @@
 
           <!-- Mod 管理 -->
           <section class="section-card">
-            <h3 class="sidebar-title">Mod 管理</h3>
+            <h3 class="sidebar-title">已安装 Mod</h3>
             <div class="mod-manager">
-              <div v-if="mods.length === 0" class="mod-empty">
+              <!-- 加载中 -->
+              <div v-if="modLoadStatus === 'loading'" class="mod-loading">
+                <div class="loading-spinner-small"></div>
+                <span>加载 Mod 中...</span>
+              </div>
+              
+              <!-- 没有安装 Mod -->
+              <div v-else-if="modLoadStatus === 'no-mods'" class="mod-empty">
                 <Package class="mod-empty-icon" size="32" />
-                <p class="mod-empty-text">暂无已安装的 Mod</p>
-                <button class="btn-outline" @click="handleManageMods">
-                  管理 Mod
+                <p class="mod-empty-text">暂未安装 Mod</p>
+                <p class="mod-empty-hint">在「Mod与存档」页面添加本地 Mod</p>
+                <button v-if="hasModSources" class="btn-outline" @click="handleBrowseMods">
+                  浏览 Mod 商店
                 </button>
               </div>
-              <div v-else class="mod-list">
+              
+              <!-- 有已安装的 Mod -->
+              <div v-else-if="modLoadStatus === 'has-mods'" class="mod-list">
                 <div 
-                  v-for="mod in mods" 
+                  v-for="mod in mods.slice(0, 5)" 
                   :key="mod.id"
                   class="mod-item"
+                  :class="{ 'mod-disabled': !mod.enabled }"
                 >
+                  <div class="mod-status" :class="{ enabled: mod.enabled }">
+                    <span v-if="mod.enabled">✓</span>
+                    <span v-else>○</span>
+                  </div>
                   <div class="mod-info">
                     <h4 class="mod-name">{{ mod.name }}</h4>
-                    <p class="mod-version">{{ mod.version }}</p>
-                  </div>
-                  <div class="mod-toggle">
-                    <input 
-                      type="checkbox" 
-                      :id="`mod-${mod.id}`"
-                      v-model="mod.enabled"
-                      @change="handleToggleMod(mod)"
-                      class="toggle-switch"
-                    />
-                    <label :for="`mod-${mod.id}`" class="toggle-label"></label>
+                    <p class="mod-meta">
+                      <span v-if="mod.version">v{{ mod.version }}</span>
+                      <span v-if="mod.author"> • {{ mod.author }}</span>
+                    </p>
                   </div>
                 </div>
                 <button class="btn-outline full-width" @click="handleManageMods">
                   <Package class="icon" size="16" />
-                  管理更多 Mod
+                  管理 Mod
                 </button>
+              </div>
+              
+              <!-- 默认状态 -->
+              <div v-else class="mod-empty">
+                <Package class="mod-empty-icon" size="32" />
+                <p class="mod-empty-text">暂未安装 Mod</p>
               </div>
             </div>
           </section>
@@ -638,6 +652,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { gameApi, achievementApi, libraryApi, newsApi } from '@/api'
 import { priceApi } from '@/api/price'
+import modExploreApi from '@/api/modExplore'
+import { getLocalGames } from '@/api/localGame'
 import { ArrowLeft, Clock, Trophy, Calendar, Play, Settings, Bell, Package, Lock, X } from 'lucide-vue-next'
 import noCoverImage from '@/assets/no_cover.png'
 
@@ -664,7 +680,9 @@ const priceLoading = ref(false)
 const priceError = ref(null)
 const hasPriceAlert = ref(false)
 const currentSubscription = ref(null) // 当前游戏的订阅信息
-const mods = ref([]) // 预留的 Mod 列表
+const mods = ref([]) // 用户已安装的本地 Mod 列表
+const modLoadStatus = ref('idle') // idle | loading | no-mods | has-mods
+const hasModSources = ref(false) // 该游戏是否有 Mod 平台支持
 
 // 隐藏成就相关状态
 const revealedHiddenAchievements = ref(new Set()) // 已点击显示剧透的隐藏成就ID集合
@@ -907,11 +925,72 @@ const loadGameDetail = async () => {
     
     // 加载价格数据
     await loadPriceData()
+    
+    // 加载 Mod 数据
+    await loadGameMods()
   } catch (err) {
     console.error('加载游戏详情失败:', err)
     error.value = '加载游戏详情失败: ' + (err.message || '未知错误')
   } finally {
     loading.value = false
+  }
+}
+
+// 加载游戏 Mod 数据
+const loadGameMods = async () => {
+  if (!game.value) return
+  
+  modLoadStatus.value = 'loading'
+  
+  try {
+    const gameId = game.value.id || route.params.id
+    console.log('加载本地 Mod 数据，游戏ID:', gameId)
+    
+    // 先获取用户的本地游戏列表，找到该游戏的安装记录
+    const localGamesRes = await getLocalGames()
+    const localGamesList = localGamesRes.data?.items || localGamesRes.items || []
+    
+    // 查找该游戏的本地安装记录
+    const localInstall = localGamesList.find(g => g.gameId == gameId)
+    
+    if (localInstall && localInstall.modsCount > 0) {
+      // 如果有安装记录且有 Mod，从游戏详情中获取 Mod 列表
+      // 注意：LocalGameListDto 已经包含 modsCount，但不包含详细 Mod 列表
+      // 需要调用详情 API 获取完整 Mod 列表
+      const { getLocalGameDetail } = await import('@/api/localGame')
+      const detailRes = await getLocalGameDetail(localInstall.installId)
+      
+      if (detailRes.data?.mods && detailRes.data.mods.length > 0) {
+        mods.value = detailRes.data.mods.map(mod => ({
+          id: mod.modId || mod.id,
+          name: mod.modName || mod.name,
+          version: mod.version || 1,
+          author: mod.author,
+          enabled: mod.enabled !== false,
+          filePath: mod.filePath,
+          sizeGB: mod.sizeGB || 0
+        }))
+        modLoadStatus.value = 'has-mods'
+      } else {
+        mods.value = []
+        modLoadStatus.value = 'no-mods'
+      }
+    } else {
+      mods.value = []
+      modLoadStatus.value = 'no-mods'
+    }
+    
+    // 同时检查该游戏是否有 Mod 平台支持（用于显示"浏览更多"按钮）
+    try {
+      const sourcesResponse = await modExploreApi.getGameModSources(gameId)
+      hasModSources.value = sourcesResponse.success && sourcesResponse.data?.sources?.length > 0
+    } catch (e) {
+      hasModSources.value = false
+    }
+  } catch (err) {
+    console.log('加载本地 Mod 数据失败:', err)
+    modLoadStatus.value = 'no-mods'
+    mods.value = []
   }
 }
 
@@ -1432,10 +1511,23 @@ const deletePriceAlert = async () => {
   }
 }
 
-// Mod 管理处理（预留）
+// Mod 管理处理 - 跳转到 Mod 与存档页面
 const handleManageMods = () => {
-  console.log('打开 Mod 管理')
-  // TODO: 实现 Mod 管理功能
+  router.push({ name: 'Mods' })
+}
+
+// 浏览 Mod 商店 - 跳转到 Mod 探索页面
+const handleBrowseMods = () => {
+  const gameId = game.value?.id || route.params.id
+  router.push({ name: 'ModExplore', query: { gameId } })
+}
+
+// 格式化下载数
+const formatDownloads = (num) => {
+  if (!num) return '0'
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+  return num.toString()
 }
 
 // 切换 Mod 启用状态（预留）
@@ -2651,8 +2743,24 @@ onMounted(() => {
 }
 
 .mod-empty-text {
+  color: #94a3b8;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.mod-empty-hint {
   color: #64748b;
+  font-size: 12px;
   margin-bottom: 16px;
+}
+
+.mod-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  color: #94a3b8;
   font-size: 14px;
 }
 
@@ -2664,15 +2772,47 @@ onMounted(() => {
 
 .mod-item {
   display: flex;
-  justify-content: space-between;
+  gap: 12px;
   align-items: center;
   padding: 12px;
   background: rgba(15, 15, 19, 0.6);
   border-radius: 8px;
+  transition: opacity 0.2s;
+}
+
+.mod-item.mod-disabled {
+  opacity: 0.5;
+}
+
+.mod-status {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: rgba(100, 116, 139, 0.3);
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.mod-status.enabled {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.mod-thumbnail {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .mod-info {
   flex: 1;
+  min-width: 0;
 }
 
 .mod-name {
@@ -2680,6 +2820,20 @@ onMounted(() => {
   font-weight: 600;
   margin-bottom: 4px;
   color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mod-meta {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  gap: 8px;
+}
+
+.mod-downloads {
+  color: #818cf8;
 }
 
 .mod-version {

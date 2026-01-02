@@ -129,16 +129,21 @@ public class UserReportService : IUserReportService
         result.PlayedGames = libraryGames.Count(g => g.PlaytimeMinutes > 0);
         result.NeverPlayedGames = libraryGames.Count(g => g.PlaytimeMinutes == 0);
 
-        // 按平台统计
+        // 按平台统计 - 先在内存中处理，避免空引用问题
         var platformStats = libraryGames
-            .GroupBy(l => new { l.PlatformId, PlatformName = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown" })
-            .Select(g => new PlatformStatsDto
-            {
-                PlatformId = g.Key.PlatformId,
-                PlatformName = g.Key.PlatformName,
-                GameCount = g.Count(),
-                PlaytimeMinutes = g.Sum(x => x.PlaytimeMinutes),
-                PlaytimeFormatted = FormatPlaytime(g.Sum(x => x.PlaytimeMinutes))
+            .GroupBy(l => l.PlatformId)
+            .Select(g => {
+                var firstItem = g.First();
+                var platformName = firstItem.PlayerPlatform?.Platform?.PlatformName ?? "Unknown";
+                var totalPlaytime = g.Sum(x => x.PlaytimeMinutes);
+                return new PlatformStatsDto
+                {
+                    PlatformId = g.Key,
+                    PlatformName = platformName,
+                    GameCount = g.Count(),
+                    PlaytimeMinutes = totalPlaytime,
+                    PlaytimeFormatted = FormatPlaytime(totalPlaytime)
+                };
             })
             .OrderByDescending(x => x.PlaytimeMinutes)
             .ToList();
