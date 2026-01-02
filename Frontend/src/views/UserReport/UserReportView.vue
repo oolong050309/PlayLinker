@@ -15,12 +15,6 @@
         </p>
       </div>
       <div class="header-right">
-        <select v-model="selectedPeriod" class="period-select" @change="handlePeriodChange">
-          <option value="week">最近7天</option>
-          <option value="month">最近30天</option>
-          <option value="year">今年</option>
-          <option value="all">全部</option>
-        </select>
         <button class="btn-export" @click="showExportDialog = true">
           <Download class="icon" />
           导出报表
@@ -92,7 +86,29 @@
             </div>
           </div>
           <div class="stat-value">{{ gameLibrary.totalPlaytimeFormatted }}</div>
-          <div class="stat-desc">最近2周 {{ formatMinutes(gameLibrary.recentPlaytimeMinutes) }}</div>
+          <div class="stat-desc">日均 {{ formatMinutes(gameLibrary.dailyAverageMinutes) }}</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">本周时长</span>
+            <div class="stat-icon cyan">
+              <TrendingUp class="icon" />
+            </div>
+          </div>
+          <div class="stat-value">{{ formatMinutes(gameLibrary.thisWeekPlaytimeMinutes) }}</div>
+          <div class="stat-desc">本月 {{ formatMinutes(gameLibrary.thisMonthPlaytimeMinutes) }}</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">绑定平台</span>
+            <div class="stat-icon blue">
+              <Layers class="icon" />
+            </div>
+          </div>
+          <div class="stat-value">{{ gameLibrary.boundPlatformCount }} 个</div>
+          <div class="stat-desc">跨平台游戏 {{ gameLibrary.crossPlatformGames }} 款</div>
         </div>
 
         <div class="stat-card">
@@ -115,6 +131,14 @@
           </div>
           <div class="stat-value">{{ wishlist.totalItems }}</div>
           <div class="stat-desc">{{ wishlist.onSaleCount }} 款在打折</div>
+        </div>
+      </div>
+
+      <!-- Playtime Trend Chart -->
+      <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="trend-section">
+        <h3 class="section-title">📈 游戏时长趋势（最近14天）</h3>
+        <div class="trend-chart-container">
+          <canvas ref="trendChartRef"></canvas>
         </div>
       </div>
 
@@ -490,7 +514,8 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { 
   RefreshCw, AlertCircle, User, Gamepad2, Clock, Trophy, Heart,
-  Calendar, Award, Package, FileText, FileSpreadsheet, Globe, Download, Trash2
+  Calendar, Award, Package, FileText, FileSpreadsheet, Globe, Download, Trash2,
+  TrendingUp, Activity, Layers
 } from 'lucide-vue-next'
 import Chart from 'chart.js/auto'
 import noCoverImage from '@/assets/no_cover.png'
@@ -510,7 +535,9 @@ const CACHE_EXPIRY = 30 * 60 * 1000 // 30 minutes
 
 // Refs
 const genreChartRef = ref(null)
+const trendChartRef = ref(null)
 let genreChart = null
+let trendChart = null
 
 const loading = ref(true)
 const refreshing = ref(false)
@@ -518,9 +545,6 @@ const error = ref(null)
 const syncing = ref(false)
 const hasCachedData = ref(false)
 const lastUpdateTime = ref('')
-
-// Time period selector
-const selectedPeriod = ref('all')
 
 // Report generation state
 const generating = ref({
@@ -572,8 +596,15 @@ const gameLibrary = ref({
   playedGames: 0,
   neverPlayedGames: 0,
   recentPlaytimeMinutes: 0,
+  thisWeekPlaytimeMinutes: 0,
+  thisMonthPlaytimeMinutes: 0,
+  dailyAverageMinutes: 0,
+  boundPlatformCount: 0,
+  crossPlatformGames: 0,
+  dailyPlaytimeTrend: [],
   playtimeByGenre: [],
-  topPlayedGames: []
+  topPlayedGames: [],
+  platformStats: []
 })
 const achievements = ref({
   totalAchievements: 0,
@@ -770,6 +801,7 @@ const handleSync = async () => {
 }
 
 const initCharts = () => {
+  // 初始化类型分布饼图
   if (genreChartRef.value && gameLibrary.value.playtimeByGenre?.length > 0) {
     const ctx = genreChartRef.value.getContext('2d')
     
@@ -799,6 +831,68 @@ const initCharts = () => {
                 const minutes = context.raw
                 const hours = Math.floor(minutes / 60)
                 return `${context.label}: ${hours}小时`
+              }
+            }
+          }
+        }
+      }
+    })
+  }
+
+  // 初始化时长趋势折线图
+  if (trendChartRef.value && gameLibrary.value.dailyPlaytimeTrend?.length > 0) {
+    const ctx = trendChartRef.value.getContext('2d')
+    
+    if (trendChart) trendChart.destroy()
+
+    const trendData = gameLibrary.value.dailyPlaytimeTrend
+    
+    trendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: trendData.map(d => {
+          const date = new Date(d.date)
+          return `${date.getMonth() + 1}/${date.getDate()}`
+        }),
+        datasets: [{
+          label: '游戏时长',
+          data: trendData.map(d => d.playtimeMinutes),
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const minutes = context.raw
+                const hours = Math.floor(minutes / 60)
+                const mins = minutes % 60
+                const dayData = trendData[context.dataIndex]
+                let label = hours > 0 ? `${hours}小时${mins}分钟` : `${mins}分钟`
+                if (dayData.gamesPlayed > 0) {
+                  label += ` (${dayData.gamesPlayed}款游戏)`
+                }
+                return label
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: (value) => {
+                const hours = Math.floor(value / 60)
+                return hours > 0 ? `${hours}h` : `${value}m`
               }
             }
           }
@@ -1003,13 +1097,6 @@ const getReportTypeIcon = (type) => {
 }
 
 // Period change handler (for future backend implementation)
-const handlePeriodChange = () => {
-  // TODO: 当后端实现差值计算后，这里会根据选择的时间范围重新加载数据
-  console.log('Selected period:', selectedPeriod.value)
-  // 目前只是UI展示，后端还没有实现按时间范围筛选
-  // loadData() // 未来启用
-}
-
 // Export dialog handler
 const handleExport = async () => {
   exporting.value = true
@@ -1307,9 +1394,23 @@ onUnmounted(() => {
 /* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+/* Trend Section */
+.trend-section {
+  margin-bottom: 24px;
+}
+
+.trend-chart-container {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+  height: 280px;
 }
 
 /* Platform Stats Section */
@@ -1424,6 +1525,9 @@ onUnmounted(() => {
 .stat-icon.emerald { background: rgba(16, 185, 129, 0.2); color: #34d399; }
 .stat-icon.amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
 .stat-icon.rose { background: rgba(244, 63, 94, 0.2); color: #fb7185; }
+.stat-icon.cyan { background: rgba(6, 182, 212, 0.2); color: #22d3ee; }
+.stat-icon.purple { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+.stat-icon.blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
 
 .stat-icon .icon {
   width: 20px;
@@ -2036,7 +2140,7 @@ onUnmounted(() => {
 /* Responsive */
 @media (max-width: 1200px) {
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   
   .content-grid {
@@ -2055,11 +2159,15 @@ onUnmounted(() => {
   }
   
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
   
   .wishlist-grid {
     grid-template-columns: 1fr;
+  }
+  
+  .trend-chart-container {
+    height: 220px;
   }
 }
 
