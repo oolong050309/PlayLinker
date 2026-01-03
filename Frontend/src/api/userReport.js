@@ -120,10 +120,6 @@ export const getInventoryReportUrl = (format) => {
  * @param {string} filename - 文件名
  */
 export const downloadReport = async (url, filename) => {
-  // 从完整URL中提取相对路径
-  const baseUrl = getBaseUrl()
-  const relativePath = url.replace(baseUrl, '')
-  
   // 获取 token
   const token = sessionStorage.getItem('token')
   
@@ -155,26 +151,37 @@ export const downloadReport = async (url, filename) => {
  * @param {string} url - 报告完整URL
  */
 export const openHtmlReport = async (url) => {
-  // 从完整URL中提取相对路径
-  const baseUrl = getBaseUrl()
-  const relativePath = url.replace(baseUrl, '')
+  // 获取 token
+  const token = sessionStorage.getItem('token')
   
-  const response = await request({
-    url: relativePath,
-    method: 'get',
-    timeout: 60000 // 60秒超时
+  // 直接使用 fetch 获取 HTML，避免 axios 拦截器处理
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': token ? `Bearer ${token}` : ''
+    }
   })
   
-  // request返回的是包装后的响应，需要从data中获取HTML内容
-  const html = response.data || response
+  if (!response.ok) {
+    throw new Error(`获取报告失败: ${response.status}`)
+  }
   
-  const newWindow = window.open('', '_blank')
-  if (newWindow) {
-    newWindow.document.write(html)
-    newWindow.document.close()
-  } else {
+  const html = await response.text()
+  
+  // 使用 Blob URL 方式打开，更可靠
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  
+  const newWindow = window.open(blobUrl, '_blank')
+  if (!newWindow) {
+    URL.revokeObjectURL(blobUrl)
     throw new Error('无法打开新窗口，请检查浏览器弹窗设置')
   }
+  
+  // 延迟释放 Blob URL，确保页面加载完成
+  setTimeout(() => {
+    URL.revokeObjectURL(blobUrl)
+  }, 5000)
 }
 
 export default {

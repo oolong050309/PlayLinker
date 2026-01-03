@@ -349,7 +349,7 @@ public class UserReportService : IUserReportService
     }
 
     /// <summary>
-    /// 获取最近游玩记录（支持多平台）
+    /// 获取最近游玩记录（支持多平台，按两周内时长从高到低排序）
     /// </summary>
     public async Task<List<RecentPlayedGameDto>> GetRecentPlayedGamesAsync(int userId, int count = 10)
     {
@@ -368,24 +368,75 @@ public class UserReportService : IUserReportService
             .Select(b => b.PlatformUserId)
             .ToList();
 
-        // 从数据库获取所有平台的最近游玩记录
-        var dbGames = await _context.UserPlatformLibraries
-            .Include(l => l.Game)
-            .Include(l => l.PlayerPlatform)
-                .ThenInclude(pp => pp.Platform)
-            .Where(l => platformUserIds.Contains(l.PlatformUserId) && l.LastPlayed.HasValue)
-            .OrderByDescending(l => l.LastPlayed)
-            .Take(count)
+        // 从 user_playtime_history 获取用户所有历史记录，包含游戏信息
+        var allHistory = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+            .Where(h => h.UserId == userId)
             .ToListAsync();
 
-        return dbGames.Select(l => new RecentPlayedGameDto
-            {
-                GameId = l.GameId,
-                GameName = l.Game.Name,
-                HeaderImage = l.Game.HeaderImage,
-                PlaytimeMinutes = l.PlaytimeMinutes,
-                LastPlayed = l.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
-                Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
+        if (!allHistory.Any())
+        {
+            // 如果没有历史记录，回退到按最后游玩时间排序
+            var dbGames = await _context.UserPlatformLibraries
+                .Include(l => l.Game)
+                .Include(l => l.PlayerPlatform)
+                    .ThenInclude(pp => pp.Platform)
+                .Where(l => platformUserIds.Contains(l.PlatformUserId) && l.LastPlayed.HasValue)
+                .OrderByDescending(l => l.LastPlayed)
+                .Take(count)
+                .ToListAsync();
+
+            return dbGames.Select(l => new RecentPlayedGameDto
+                {
+                    GameId = l.GameId,
+                    GameName = l.Game.Name,
+                    HeaderImage = l.Game.HeaderImage,
+                    PlaytimeMinutes = l.PlaytimeMinutes,
+                    RecentPlaytimeMinutes = 0,
+                    LastPlayed = l.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
+                    Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
+                })
+                .ToList();
+        }
+
+        // 在内存中按游戏+平台分组，取每组最新记录，按两周时长排序
+        var latestPlaytimeHistory = allHistory
+            .GroupBy(h => new { h.GameId, h.PlatformId })
+            .Select(g => g.OrderByDescending(h => h.RecordDate).First())
+            .OrderByDescending(h => h.Playtime2Weeks)
+            .Take(count)
+            .ToList();
+
+        // 获取平台信息
+        var platformIds = latestPlaytimeHistory.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 获取用户库中的游戏时长信息
+        var gameIds = latestPlaytimeHistory.Select(h => h.GameId).ToList();
+        var libraryGames = await _context.UserPlatformLibraries
+            .Where(l => platformUserIds.Contains(l.PlatformUserId) && gameIds.Contains(l.GameId))
+            .ToListAsync();
+
+        var libraryLookup = libraryGames
+            .GroupBy(l => (l.GameId, l.PlatformId))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // 按两周时长排序返回结果
+        return latestPlaytimeHistory
+            .Select(h => {
+                var library = libraryLookup.TryGetValue((h.GameId, h.PlatformId), out var lib) ? lib : null;
+                return new RecentPlayedGameDto
+                {
+                    GameId = h.GameId,
+                    GameName = h.Game?.Name ?? "Unknown",
+                    HeaderImage = h.Game?.HeaderImage,
+                    PlaytimeMinutes = library?.PlaytimeMinutes ?? h.PlaytimeForever,
+                    RecentPlaytimeMinutes = h.Playtime2Weeks,
+                    LastPlayed = library?.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
+                    Platform = platforms.GetValueOrDefault(h.PlatformId, "Unknown")
+                };
             })
             .ToList();
     }

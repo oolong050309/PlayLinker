@@ -126,6 +126,63 @@
         <div class="trend-chart-container">
           <canvas ref="trendChartRef"></canvas>
         </div>
+        <!-- 趋势分析摘要 -->
+        <div class="trend-summary">
+          <div class="trend-stat">
+            <span class="trend-stat-label">日均时长</span>
+            <span class="trend-stat-value">{{ dailyAverageFormatted }}</span>
+          </div>
+          <div class="trend-stat">
+            <span class="trend-stat-label">最高单日</span>
+            <span class="trend-stat-value">{{ maxDayPlaytimeFormatted }}</span>
+          </div>
+          <div class="trend-stat">
+            <span class="trend-stat-label">活跃天数</span>
+            <span class="trend-stat-value">{{ activeDaysCount }} 天</span>
+          </div>
+          <div class="trend-stat" :class="trendDirection">
+            <span class="trend-stat-label">趋势</span>
+            <span class="trend-stat-value">{{ trendDirectionText }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weekly Comparison Chart -->
+      <div v-if="gameLibrary.dailyPlaytimeTrend?.length >= 7" class="weekly-section">
+        <h3 class="section-title">📊 周游戏时长对比</h3>
+        <div class="weekly-chart-container">
+          <canvas ref="weeklyChartRef"></canvas>
+        </div>
+      </div>
+
+      <!-- Activity Heatmap -->
+      <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="heatmap-section">
+        <h3 class="section-title">🔥 游戏活跃度</h3>
+        <div class="heatmap-container">
+          <div class="heatmap-weekdays">
+            <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+          </div>
+          <div class="heatmap-grid">
+            <div 
+              v-for="(day, index) in heatmapData" 
+              :key="index" 
+              class="heatmap-cell"
+              :class="getHeatmapClass(day.playtimeMinutes)"
+              :title="`${day.date}: ${formatMinutes(day.playtimeMinutes)}`"
+            >
+              <span class="heatmap-date">{{ day.dayOfMonth }}</span>
+            </div>
+          </div>
+          <div class="heatmap-legend">
+            <span class="legend-label">少</span>
+            <div class="legend-cell level-0"></div>
+            <div class="legend-cell level-1"></div>
+            <div class="legend-cell level-2"></div>
+            <div class="legend-cell level-3"></div>
+            <div class="legend-cell level-4"></div>
+            <span class="legend-label">多</span>
+          </div>
+        </div>
       </div>
 
       <!-- Platform Stats -->
@@ -181,7 +238,7 @@
           <div class="chart-card">
             <h3 class="chart-title">最常玩的游戏</h3>
             <div v-if="gameLibrary.topPlayedGames?.length" class="games-list">
-              <div v-for="(game, index) in gameLibrary.topPlayedGames" :key="game.gameId" class="game-item">
+              <div v-for="(game, index) in gameLibrary.topPlayedGames" :key="game.gameId" class="game-item clickable" @click="goToGameDetail(game.gameId)">
                 <div class="game-rank" :class="getRankClass(index)">{{ index + 1 }}</div>
                 <img :src="game.headerImage || noCoverImage" class="game-image" @error="handleImageError" />
                 <div class="game-info">
@@ -255,7 +312,7 @@
           <div class="chart-card">
             <h3 class="chart-title">最近游玩</h3>
             <div v-if="recentPlayed.length" class="recent-list">
-              <div v-for="game in recentPlayed.slice(0, 5)" :key="game.gameId" class="recent-item">
+              <div v-for="game in recentPlayed.slice(0, 5)" :key="game.gameId" class="recent-item clickable" @click="goToGameDetail(game.gameId)">
                 <img :src="game.headerImage || noCoverImage" class="recent-image" @error="handleImageError" />
                 <div class="recent-info">
                   <h4 class="recent-name">{{ game.gameName }}</h4>
@@ -599,6 +656,10 @@ import {
   downloadReport,
   openHtmlReport
 } from '@/api/userReport'
+import { useRouter } from 'vue-router'
+
+// Router
+const router = useRouter()
 
 // Cache key
 const CACHE_KEY = 'user_report_cache'
@@ -607,8 +668,10 @@ const CACHE_EXPIRY = 30 * 60 * 1000 // 30 minutes
 // Refs
 const genreChartRef = ref(null)
 const trendChartRef = ref(null)
+const weeklyChartRef = ref(null)
 let genreChart = null
 let trendChart = null
+let weeklyChart = null
 
 const loading = ref(true)
 const refreshing = ref(false)
@@ -823,6 +886,66 @@ const chartColors = [
   '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'
 ]
 
+// 趋势分析计算属性
+const dailyAverageFormatted = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return '0分钟'
+  const total = trend.reduce((sum, d) => sum + d.playtimeMinutes, 0)
+  const avg = Math.round(total / trend.length)
+  return formatMinutes(avg)
+})
+
+const maxDayPlaytimeFormatted = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return '0分钟'
+  const max = Math.max(...trend.map(d => d.playtimeMinutes))
+  return formatMinutes(max)
+})
+
+const activeDaysCount = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return 0
+  return trend.filter(d => d.playtimeMinutes > 0).length
+})
+
+const trendDirection = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length || trend.length < 7) return ''
+  const firstHalf = trend.slice(0, Math.floor(trend.length / 2))
+  const secondHalf = trend.slice(Math.floor(trend.length / 2))
+  const firstAvg = firstHalf.reduce((s, d) => s + d.playtimeMinutes, 0) / firstHalf.length
+  const secondAvg = secondHalf.reduce((s, d) => s + d.playtimeMinutes, 0) / secondHalf.length
+  if (secondAvg > firstAvg * 1.1) return 'trend-up'
+  if (secondAvg < firstAvg * 0.9) return 'trend-down'
+  return 'trend-stable'
+})
+
+const trendDirectionText = computed(() => {
+  const dir = trendDirection.value
+  if (dir === 'trend-up') return '📈 上升'
+  if (dir === 'trend-down') return '📉 下降'
+  return '➡️ 平稳'
+})
+
+// 热力图数据
+const heatmapData = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return []
+  return trend.map(d => ({
+    date: new Date(d.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
+    dayOfMonth: new Date(d.date).getDate(),
+    playtimeMinutes: d.playtimeMinutes
+  }))
+})
+
+const getHeatmapClass = (minutes) => {
+  if (minutes === 0) return 'level-0'
+  if (minutes < 30) return 'level-1'
+  if (minutes < 60) return 'level-2'
+  if (minutes < 120) return 'level-3'
+  return 'level-4'
+}
+
 // Cache functions
 const saveToCache = (data) => {
   try {
@@ -866,6 +989,13 @@ const formatCacheTime = (timestamp) => {
 // 处理图片加载错误
 const handleImageError = (e) => {
   e.target.src = noCoverImage
+}
+
+// 跳转到游戏详情页面
+const goToGameDetail = (gameId) => {
+  if (gameId) {
+    router.push({ name: 'GameDetail', params: { id: gameId } })
+  }
 }
 
 const applyData = (data) => {
@@ -1072,6 +1202,74 @@ const initCharts = () => {
                   label += ` (${dayData.gamesPlayed}款游戏)`
                 }
                 return label
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: (value) => {
+                const hours = Math.floor(value / 60)
+                return hours > 0 ? `${hours}h` : `${value}m`
+              }
+            }
+          }
+        }
+      }
+    })
+  }
+
+  // 初始化周对比柱状图
+  if (weeklyChartRef.value && gameLibrary.value.dailyPlaytimeTrend?.length >= 7) {
+    const ctx = weeklyChartRef.value.getContext('2d')
+    
+    if (weeklyChart) weeklyChart.destroy()
+
+    const trendData = gameLibrary.value.dailyPlaytimeTrend
+    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    
+    // 按星期几分组统计
+    const weekdayStats = Array(7).fill(0).map(() => ({ total: 0, count: 0 }))
+    trendData.forEach(d => {
+      const dayOfWeek = new Date(d.date).getDay()
+      weekdayStats[dayOfWeek].total += d.playtimeMinutes
+      weekdayStats[dayOfWeek].count++
+    })
+    
+    const avgByWeekday = weekdayStats.map(s => s.count > 0 ? Math.round(s.total / s.count) : 0)
+    // 重新排序：周一到周日
+    const reorderedAvg = [...avgByWeekday.slice(1), avgByWeekday[0]]
+    const reorderedLabels = [...weekdays.slice(1), weekdays[0]]
+    
+    weeklyChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: reorderedLabels,
+        datasets: [{
+          label: '平均游戏时长',
+          data: reorderedAvg,
+          backgroundColor: reorderedAvg.map((v, i) => {
+            const max = Math.max(...reorderedAvg)
+            const intensity = max > 0 ? v / max : 0
+            return `rgba(99, 102, 241, ${0.3 + intensity * 0.7})`
+          }),
+          borderColor: '#6366f1',
+          borderWidth: 1,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const minutes = context.raw
+                return formatMinutes(minutes)
               }
             }
           }
@@ -1607,6 +1805,174 @@ onUnmounted(() => {
   height: 280px;
 }
 
+.trend-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.trend-stat {
+  background: rgba(24, 24, 27, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.trend-stat-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.trend-stat-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.trend-stat.trend-up .trend-stat-value {
+  color: #10b981;
+}
+
+.trend-stat.trend-down .trend-stat-value {
+  color: #ef4444;
+}
+
+.trend-stat.trend-stable .trend-stat-value {
+  color: #6366f1;
+}
+
+/* Weekly Section */
+.weekly-section {
+  margin-bottom: 24px;
+}
+
+.weekly-chart-container {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+  height: 220px;
+}
+
+/* Heatmap Section */
+.heatmap-section {
+  margin-bottom: 24px;
+}
+
+.heatmap-container {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.heatmap-weekdays {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+.heatmap-weekdays span {
+  width: 32px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.heatmap-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.heatmap-cell {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.1);
+}
+
+.heatmap-date {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.heatmap-cell.level-0 {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.heatmap-cell.level-1 {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.heatmap-cell.level-2 {
+  background: rgba(99, 102, 241, 0.4);
+}
+
+.heatmap-cell.level-3 {
+  background: rgba(99, 102, 241, 0.6);
+}
+
+.heatmap-cell.level-4 {
+  background: rgba(99, 102, 241, 0.9);
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.heatmap-legend .legend-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0 4px;
+}
+
+.heatmap-legend .legend-cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+}
+
+.heatmap-legend .legend-cell.level-0 {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.heatmap-legend .legend-cell.level-1 {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.heatmap-legend .legend-cell.level-2 {
+  background: rgba(99, 102, 241, 0.4);
+}
+
+.heatmap-legend .legend-cell.level-3 {
+  background: rgba(99, 102, 241, 0.6);
+}
+
+.heatmap-legend .legend-cell.level-4 {
+  background: rgba(99, 102, 241, 0.9);
+}
+
 /* Platform Stats Section */
 .platform-stats-section {
   margin-bottom: 24px;
@@ -1826,6 +2192,14 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.game-item.clickable {
+  cursor: pointer;
+}
+
+.game-item.clickable:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
 .game-rank {
   width: 28px;
   height: 28px;
@@ -1938,6 +2312,17 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.recent-item.clickable {
+  cursor: pointer;
+}
+
+.recent-item.clickable:hover {
+  background: rgba(99, 102, 241, 0.15);
 }
 
 .recent-image {
