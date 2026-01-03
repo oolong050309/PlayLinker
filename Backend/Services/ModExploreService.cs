@@ -465,6 +465,50 @@ public class ModExploreService : IModExploreService
 
     #region Helper Methods
 
+    public async Task<ModGameSearchResponse> SearchModGamesAsync(string query, int page = 1, int pageSize = 10)
+    {
+        try
+        {
+            // 搜索有 Mod 来源的游戏（模糊匹配游戏名称）
+            var gamesQuery = _context.Set<PlayLinker.Models.Entities.GameModSource>()
+                .Include(x => x.Game)
+                .Where(x => x.Game != null && EF.Functions.Like(x.Game.Name, $"%{query}%"))
+                .Select(x => new { x.GameId, x.Game!.Name, x.Game.HeaderImage, x.Source })
+                .Distinct();
+
+            // 按游戏分组，获取每个游戏的所有 Mod 来源
+            var groupedGames = await gamesQuery
+                .GroupBy(x => new { x.GameId, x.Name, x.HeaderImage })
+                .Select(g => new ModGameItemDto
+                {
+                    GameId = g.Key.GameId,
+                    Name = g.Key.Name,
+                    HeaderImage = g.Key.HeaderImage,
+                    ModSources = g.Select(x => x.Source).Distinct().ToList()
+                })
+                .ToListAsync();
+
+            var total = groupedGames.Count;
+            var items = groupedGames
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new ModGameSearchResponse
+            {
+                Items = items,
+                Total = total,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching mod games");
+            return new ModGameSearchResponse();
+        }
+    }
+
     private static ModExploreResponse CreateEmptyResponse(ModExploreRequest request, string gameName)
     {
         return new ModExploreResponse
