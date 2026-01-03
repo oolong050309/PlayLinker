@@ -48,20 +48,6 @@
             <h2 class="profile-name">{{ profile.steamProfileName || profile.username }}</h2>
             <p class="profile-id" v-if="profile.steamId">Steam ID: {{ profile.steamId }}</p>
           </div>
-          <div class="profile-stats">
-            <div class="profile-stat">
-              <span class="stat-value">{{ profile.steamLevel }}</span>
-              <span class="stat-label">等级</span>
-            </div>
-            <div class="profile-stat">
-              <span class="stat-value">{{ profile.badgeCount }}</span>
-              <span class="stat-label">徽章</span>
-            </div>
-            <div class="profile-stat">
-              <span class="stat-value">{{ profile.friendCount }}</span>
-              <span class="stat-label">好友</span>
-            </div>
-          </div>
         </div>
       </div>
 
