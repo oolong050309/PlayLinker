@@ -243,11 +243,6 @@
                 <img :src="game.headerImage || noCoverImage" class="game-image" @error="handleImageError" />
                 <div class="game-info">
                   <h4 class="game-name">{{ game.gameName }}</h4>
-                  <p class="game-meta">
-                    <span v-if="game.achievementsUnlocked !== null">
-                      成就 {{ game.achievementsUnlocked }}/{{ game.achievementsTotal }}
-                    </span>
-                  </p>
                 </div>
                 <div class="game-playtime">
                   <span class="playtime-value">{{ game.playtimeFormatted }}</span>
