@@ -1052,6 +1052,134 @@ public class ReportGenerationService
     }
 
     /// <summary>
+    /// 生成年度总结报告 CSV
+    /// </summary>
+    public async Task<byte[]> GenerateYearlyReportCsv(int userId, int year)
+    {
+        var startDate = new DateTime(year, 1, 1);
+        var endDate = new DateTime(year, 12, 31);
+
+        // 从 user_playtime_history 表计算年度时长增量
+        var historyRecords = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+                .ThenInclude(g => g.GameGenres)
+                    .ThenInclude(gg => gg.Genre)
+            .Where(h => h.UserId == userId 
+                && h.RecordDate >= startDate 
+                && h.RecordDate <= endDate)
+            .OrderBy(h => h.GameId)
+            .ThenBy(h => h.RecordDate)
+            .ToListAsync();
+
+        // 获取所有相关的平台信息
+        var platformIds = historyRecords.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 按游戏分组计算年度增量
+        var gamePlaytimeDict = new Dictionary<int, (string gameName, string platformName, int playtimeMinutes, Game? game)>();
+        
+        foreach (var group in historyRecords.GroupBy(h => new { h.GameId, h.PlatformId }))
+        {
+            var records = group.OrderBy(h => h.RecordDate).ToList();
+            if (records.Count == 0) continue;
+
+            var firstRecord = records.First();
+            var lastRecord = records.Last();
+            
+            var playtimeIncrease = lastRecord.PlaytimeForever - firstRecord.PlaytimeForever;
+            if (records.Count == 1)
+            {
+                playtimeIncrease = firstRecord.PlaytimeForever;
+            }
+            
+            if (playtimeIncrease > 0)
+            {
+                var gameId = (int)group.Key.GameId;
+                var gameName = firstRecord.Game?.Name ?? "未知游戏";
+                var platformName = platforms.GetValueOrDefault(group.Key.PlatformId, "未知平台");
+                
+                if (gamePlaytimeDict.ContainsKey(gameId))
+                {
+                    var existing = gamePlaytimeDict[gameId];
+                    gamePlaytimeDict[gameId] = (existing.gameName, existing.platformName, existing.playtimeMinutes + playtimeIncrease, existing.game);
+                }
+                else
+                {
+                    gamePlaytimeDict[gameId] = (gameName, platformName, playtimeIncrease, firstRecord.Game);
+                }
+            }
+        }
+
+        var achievements = await _context.UserAchievements
+            .Where(a => a.UserId == userId && a.Unlocked)
+            .ToListAsync();
+
+        // 计算统计数据
+        var totalMinutes = gamePlaytimeDict.Values.Sum(v => v.playtimeMinutes);
+        var totalHours = Math.Round(totalMinutes / 60.0, 1);
+        var totalGames = gamePlaytimeDict.Count;
+        var totalAchievements = achievements.Count;
+
+        // 按类型统计
+        var genreStats = gamePlaytimeDict.Values
+            .Where(v => v.game is not null)
+            .SelectMany(v => v.game!.GameGenres.Select(gg => new { Genre = gg.Genre?.Name ?? "未知", Minutes = v.playtimeMinutes }))
+            .GroupBy(x => x.Genre)
+            .Select(g => new { Genre = g.Key, Minutes = g.Sum(x => x.Minutes) })
+            .OrderByDescending(x => x.Minutes)
+            .ToList();
+
+        // 游戏排行
+        var gameRecords = gamePlaytimeDict
+            .OrderByDescending(kv => kv.Value.playtimeMinutes)
+            .ToList();
+
+        var csv = new StringBuilder();
+        
+        // 添加BOM以支持Excel正确显示中文
+        csv.Append("\uFEFF");
+        
+        // 标题
+        csv.AppendLine($"年度游戏报告,{year}年");
+        csv.AppendLine();
+        
+        // 总体统计
+        csv.AppendLine("总体统计");
+        csv.AppendLine("指标,数值");
+        csv.AppendLine($"总游玩时长（小时）,{totalHours}");
+        csv.AppendLine($"游戏数量,{totalGames}");
+        csv.AppendLine($"解锁成就,{totalAchievements}");
+        csv.AppendLine();
+        
+        // 类型统计
+        csv.AppendLine("游戏类型统计");
+        csv.AppendLine("类型,游玩时长（小时）");
+        foreach (var genre in genreStats)
+        {
+            csv.AppendLine($"{genre.Genre},{Math.Round(genre.Minutes / 60.0, 1)}");
+        }
+        csv.AppendLine();
+        
+        // 游戏详情
+        csv.AppendLine("游戏详情");
+        csv.AppendLine("排名,游戏名称,平台,游玩时长（小时）,游玩时长（分钟）");
+        
+        int rank = 1;
+        foreach (var record in gameRecords)
+        {
+            csv.AppendLine($"{rank},{record.Value.gameName},{record.Value.platformName},{Math.Round(record.Value.playtimeMinutes / 60.0, 1)},{record.Value.playtimeMinutes}");
+            rank++;
+        }
+        
+        csv.AppendLine();
+        csv.AppendLine($"报告生成时间,{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+
+        return Encoding.UTF8.GetBytes(csv.ToString());
+    }
+
+    /// <summary>
     /// 生成游戏库存报告 HTML
     /// </summary>
     public async Task<string> GenerateInventoryReportHtml(int userId)

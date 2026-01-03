@@ -422,6 +422,9 @@
               <button class="btn-report pdf" @click="generateYearlyReport('pdf')" :disabled="generating.yearly">
                 <FileText class="btn-icon" /> PDF
               </button>
+              <button class="btn-report csv" @click="generateYearlyReport('csv')" :disabled="generating.yearly">
+                <FileSpreadsheet class="btn-icon" /> CSV
+              </button>
               <button class="btn-report html" @click="generateYearlyReport('html')" :disabled="generating.yearly">
                 <Globe class="btn-icon" /> HTML
               </button>
@@ -723,9 +726,6 @@ watch(() => exportForm.value.type, (newType) => {
 
 // Available formats based on report type
 const availableFormats = computed(() => {
-  if (exportForm.value.type === 'yearly') {
-    return ['pdf', 'html']
-  }
   return ['pdf', 'csv', 'html']
 })
 

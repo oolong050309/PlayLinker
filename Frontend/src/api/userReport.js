@@ -124,14 +124,22 @@ export const downloadReport = async (url, filename) => {
   const baseUrl = getBaseUrl()
   const relativePath = url.replace(baseUrl, '')
   
-  const response = await request({
-    url: relativePath,
-    method: 'get',
-    responseType: 'blob',
-    timeout: 60000 // 60秒超时
+  // 获取 token
+  const token = sessionStorage.getItem('token')
+  
+  // 直接使用 fetch 来下载 blob，避免 axios 拦截器处理
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': token ? `Bearer ${token}` : ''
+    }
   })
   
-  const blob = new Blob([response.data])
+  if (!response.ok) {
+    throw new Error(`下载失败: ${response.status}`)
+  }
+  
+  const blob = await response.blob()
   const downloadUrl = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = downloadUrl
