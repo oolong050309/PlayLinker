@@ -513,21 +513,63 @@
           
           <div class="form-group" v-if="exportForm.type === 'monthly'">
             <label>选择月份</label>
-            <div class="date-row">
-              <select v-model="monthlyYear" class="form-select">
-                <option v-for="y in monthlyYearOptions" :key="y" :value="y">{{ y }}年</option>
-              </select>
-              <select v-model="monthlyMonth" class="form-select">
-                <option v-for="m in monthlyMonthOptions" :key="m" :value="m">{{ m }}月</option>
-              </select>
+            <div class="dialog-picker-wrapper">
+              <div class="month-picker dialog-picker" @click="showExportMonthPicker = !showExportMonthPicker">
+                <Calendar class="picker-icon" />
+                <span class="picker-value">{{ exportForm.year }}年{{ exportForm.month }}月</span>
+                <ChevronDown class="picker-arrow" :class="{ 'rotate': showExportMonthPicker }" />
+              </div>
+              <div v-if="showExportMonthPicker" class="month-picker-dropdown dialog-dropdown" @click.stop>
+                <div class="picker-header">
+                  <button class="picker-nav" @click="exportPickerYear--" :disabled="exportPickerYear <= currentYear - 4">
+                    <ChevronLeft class="nav-icon" />
+                  </button>
+                  <span class="picker-year">{{ exportPickerYear }}年</span>
+                  <button class="picker-nav" @click="exportPickerYear++" :disabled="exportPickerYear >= currentYear">
+                    <ChevronRight class="nav-icon" />
+                  </button>
+                </div>
+                <div class="picker-months">
+                  <button 
+                    v-for="m in 12" 
+                    :key="m" 
+                    class="picker-month"
+                    :class="{ 
+                      'selected': exportForm.year === exportPickerYear && exportForm.month === m,
+                      'disabled': isMonthDisabled(exportPickerYear, m)
+                    }"
+                    :disabled="isMonthDisabled(exportPickerYear, m)"
+                    @click="selectExportMonth(exportPickerYear, m)"
+                  >
+                    {{ m }}月
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           
           <div class="form-group" v-if="exportForm.type === 'yearly'">
             <label>选择年份</label>
-            <select v-model="yearlyYear" class="form-select">
-              <option v-for="y in yearlyYearOptions" :key="y" :value="y">{{ y }}年</option>
-            </select>
+            <div class="dialog-picker-wrapper">
+              <div class="year-picker dialog-picker" @click="showExportYearPicker = !showExportYearPicker">
+                <Calendar class="picker-icon" />
+                <span class="picker-value">{{ exportForm.year }}年</span>
+                <ChevronDown class="picker-arrow" :class="{ 'rotate': showExportYearPicker }" />
+              </div>
+              <div v-if="showExportYearPicker" class="year-picker-dropdown dialog-dropdown" @click.stop>
+                <div class="picker-years">
+                  <button 
+                    v-for="y in yearlyYearOptions" 
+                    :key="y" 
+                    class="picker-year-btn"
+                    :class="{ 'selected': exportForm.year === y }"
+                    @click="selectExportYear(y)"
+                  >
+                    {{ y }}年
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div class="form-group">
@@ -625,6 +667,11 @@ const showMonthPicker = ref(false)
 const showYearPicker = ref(false)
 const pickerYear = ref(lastMonth.year)
 
+// 导出对话框的选择器状态
+const showExportMonthPicker = ref(false)
+const showExportYearPicker = ref(false)
+const exportPickerYear = ref(lastMonth.year)
+
 // 判断月份是否禁用（未完成的月份）
 const isMonthDisabled = (year, month) => {
   if (year > currentYear) return true
@@ -641,6 +688,19 @@ const selectMonth = (year, month) => {
   showMonthPicker.value = false
 }
 
+// 导出对话框选择月份
+const selectExportMonth = (year, month) => {
+  exportForm.value.year = year
+  exportForm.value.month = month
+  showExportMonthPicker.value = false
+}
+
+// 导出对话框选择年份
+const selectExportYear = (year) => {
+  exportForm.value.year = year
+  showExportYearPicker.value = false
+}
+
 // 选择年份
 const selectYear = (year) => {
   yearlyYear.value = year
@@ -652,9 +712,11 @@ const selectYear = (year) => {
 const closePickersOnClickOutside = (e) => {
   if (!e.target.closest('.month-picker') && !e.target.closest('.month-picker-dropdown')) {
     showMonthPicker.value = false
+    showExportMonthPicker.value = false
   }
   if (!e.target.closest('.year-picker') && !e.target.closest('.year-picker-dropdown')) {
     showYearPicker.value = false
+    showExportYearPicker.value = false
   }
 }
 
@@ -2749,6 +2811,53 @@ onUnmounted(() => {
 
 .date-row .form-select {
   flex: 1;
+}
+
+.dialog-picker-wrapper {
+  position: relative;
+}
+
+.dialog-picker {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 10px 14px;
+}
+
+.dialog-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  z-index: 1001;
+}
+
+.picker-years {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 12px;
+}
+
+.picker-year-btn {
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.picker-year-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.picker-year-btn.selected {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
 }
 
 .format-options {
