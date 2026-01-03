@@ -1,0 +1,3702 @@
+<template>
+  <div class="game-detail-container">
+    <!-- 加载状态 -->
+    <div v-if="loading" class="loading">
+      <div class="loading-spinner"></div>
+      <p>加载中...</p>
+    </div>
+
+    <!-- 错误状态 -->
+    <div v-else-if="error" class="error">
+      <p>{{ error }}</p>
+      <button @click="loadGameDetail" class="retry-btn">重试</button>
+    </div>
+
+    <!-- 游戏详情内容 -->
+    <div v-else-if="game" class="game-detail">
+      <!-- 返回按钮 -->
+      <button @click="$router.back()" class="back-btn">
+        <ArrowLeft class="icon" size="20" />
+        返回
+      </button>
+
+      <!-- Hero 区域 -->
+      <div class="hero-section">
+        <div class="hero-background">
+          <img :src="game.headerImage || noCoverImage" :alt="game.name" class="hero-bg-img" @error="handleImageError" />
+          <div class="hero-gradient"></div>
+        </div>
+
+        <div class="hero-content">
+          <div class="game-cover-wrapper">
+            <img 
+              :src="game.coverImage || game.headerImage || noCoverImage" 
+              :alt="game.name" 
+              class="game-cover"
+              @error="handleImageError"
+            />
+            <!-- 已拥有标签 -->
+            <div v-if="isGameOwned" class="owned-badge">
+              已拥有
+            </div>
+          </div>
+
+          <div class="game-header-info">
+            <div class="game-badges">
+              <span v-for="platform in gamePlatforms" :key="platform" class="platform-badge">{{ platform }}</span>
+              <span v-if="game.genre" class="genre-badge">{{ game.genre }}</span>
+            </div>
+            <h1 class="game-title">{{ game.name || game.gameName }}</h1>
+            
+            <div class="game-stats">
+              <div class="stat-item" v-if="game.releaseDate">
+                <Calendar class="stat-icon" size="16" />
+                <span>发行日期：{{ game.releaseDate }}</span>
+              </div>
+              <div class="stat-item" v-if="game.isFree !== undefined && game.isFree !== null">
+                <span>{{ game.isFree ? '免费游戏' : '付费游戏' }}</span>
+              </div>
+            </div>
+            
+          </div>
+        </div>
+      </div>
+
+      <!-- 主要内容区域 -->
+      <div class="content-grid">
+        <!-- 左侧主要内容 -->
+        <div class="main-content">
+          <!-- 游戏介绍 -->
+          <section class="section-card">
+            <h2 class="section-title">游戏介绍</h2>
+            <div class="game-description" :class="{ expanded: showDetailedDescription }">
+              <div class="description-content">
+                <!-- 展开状态：优先显示详细描述（HTML格式） -->
+                <template v-if="showDetailedDescription">
+                  <div v-if="game.detailedDescription" class="description-text description-html" v-html="game.detailedDescription"></div>
+                  <p v-else-if="game.description" class="description-text">{{ game.description }}</p>
+                  <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
+                  <p v-else class="description-text text-muted">暂无游戏介绍</p>
+                </template>
+                <!-- 收起状态：显示简短描述 -->
+                <template v-else>
+                  <p v-if="game.description" class="description-text">{{ game.description }}</p>
+                  <p v-else-if="game.shortDescription" class="description-text">{{ game.shortDescription }}</p>
+                  <p v-else class="description-text text-muted">暂无游戏介绍</p>
+                </template>
+              </div>
+              <!-- 显示详情按钮（仅在未展开且有详细描述时显示） -->
+              <button 
+                v-if="game.detailedDescription && !showDetailedDescription" 
+                @click="showDetailedDescription = true"
+                class="show-details-btn"
+              >
+                显示详情
+              </button>
+              <!-- 收起详情按钮（仅在展开时显示） -->
+              <button 
+                v-if="showDetailedDescription" 
+                @click="showDetailedDescription = false"
+                class="show-details-btn"
+              >
+                收起详情
+              </button>
+            </div>
+          </section>
+
+          <!-- 基本信息：发行日期 / 游戏平台 / 开发商 / 发行商 / 分类 / 类型 / 语言 / 年龄要求 -->
+          <section class="section-card">
+            <h2 class="section-title">基本信息</h2>
+            <div class="basic-info-grid">
+              <div class="basic-info-item" v-if="game.releaseDate">
+                <div class="basic-label">发行日期</div>
+                <div class="basic-value">{{ game.releaseDate }}</div>
+              </div>
+              <div class="basic-info-item" v-if="gamePlatforms.length > 0">
+                <div class="basic-label">游戏平台</div>
+                <div class="basic-value">
+                  {{ gamePlatforms.join('，') }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.requireAge !== null && game.requireAge !== undefined">
+                <div class="basic-label">年龄要求</div>
+                <div class="basic-value">
+                  {{ game.requireAge === 0 ? '全年龄' : `${game.requireAge}+` }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.developers && game.developers.length">
+                <div class="basic-label">开发商</div>
+                <div class="basic-value">
+                  {{ game.developers.map(d => d.name || d.Name).join('，') }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.publishers && game.publishers.length">
+                <div class="basic-label">发行商</div>
+                <div class="basic-value">
+                  {{ game.publishers.map(p => p.name || p.Name).join('，') }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.categories && game.categories.length">
+                <div class="basic-label">分类</div>
+                <div class="basic-value">
+                  {{ formatGameCategories(game.categories) }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.genres && game.genres.length">
+                <div class="basic-label">类型</div>
+                <div class="basic-value">
+                  {{ formatGameGenres(game.genres) }}
+                </div>
+              </div>
+              <div class="basic-info-item" v-if="game.languages && game.languages.length">
+                <div class="basic-label">支持语言</div>
+                <div class="basic-value">
+                  {{ formatGameLanguages(game.languages) }}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 成就预览 -->
+          <section class="section-card">
+            <h2 class="section-title">成就</h2>
+            <div class="achievement-preview">
+              <div v-if="achievementsLoading" class="loading-small">
+                <div class="loading-spinner-small"></div>
+                <span>加载中...</span>
+              </div>
+              <div v-else-if="achievements.length === 0" class="empty-state">
+                <p>暂无成就数据</p>
+              </div>
+              <div v-else>
+                <div class="achievement-count">
+                  <span class="count-label">成就总数：</span>
+                  <span class="count-value">{{ achievementsTotal || achievements.length }}</span>
+                </div>
+                <div class="achievement-icons-grid">
+                  <div 
+                    v-for="(achievement, index) in displayedAchievementIcons" 
+                    :key="achievement.id || achievement.achievementId"
+                    class="achievement-icon-preview"
+                    :class="{ unlocked: achievement.isUnlocked, locked: !achievement.isUnlocked }"
+                    :title="achievement.name || achievement.displayName || achievement.achievementName"
+                  >
+                    <!-- 隐藏且未解锁且未点击：显示问号 -->
+                    <div 
+                      v-if="achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.has(achievement.id)"
+                      class="achievement-icon-placeholder-small hidden-icon"
+                    >
+                      <span class="question-mark-small">?</span>
+                    </div>
+                    <!-- 已解锁：显示解锁图标 -->
+                    <img 
+                      v-else-if="achievement.iconUnlocked && achievement.isUnlocked" 
+                      :src="achievement.iconUnlocked" 
+                      :alt="achievement.name"
+                      class="achievement-icon-small"
+                      @error="handleImageError"
+                    />
+                    <!-- 未解锁：显示锁定图标 -->
+                    <img 
+                      v-else-if="achievement.iconLocked" 
+                      :src="achievement.iconLocked" 
+                      :alt="achievement.name"
+                      class="achievement-icon-small locked"
+                      @error="handleImageError"
+                    />
+                    <!-- 没有图标时的占位符 -->
+                    <div v-else class="achievement-icon-placeholder-small">
+                      <Trophy v-if="achievement.isUnlocked" class="placeholder-icon-small" size="16" />
+                      <Lock v-else class="placeholder-icon-small" size="16" />
+                    </div>
+                  </div>
+                  <!-- 显示更多按钮（算作两行成就中的一个图标） -->
+                  <div 
+                    v-if="hasMoreAchievements"
+                    class="achievement-icon-preview more-achievements"
+                    @click="showAllAchievementsModal = true"
+                    title="查看更多成就"
+                  >
+                    <span class="more-icon">...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 游戏新闻 -->
+          <section class="section-card">
+            <h2 class="section-title">新闻</h2>
+            <div v-if="newsLoading" class="loading-small">
+              <div class="loading-spinner-small"></div>
+              <span>加载新闻中...</span>
+            </div>
+            <div v-else-if="gameNews.length === 0" class="empty-state">
+              <p>暂无新闻</p>
+            </div>
+            <div v-else class="news-list">
+              <div 
+                v-for="news in gameNews" 
+                :key="news.newsId || news.NewsId"
+                class="news-item"
+              >
+                <div class="news-header">
+                  <h3 class="news-title">
+                    <a 
+                      href="javascript:void(0)"
+                      @click="openNewsModal(news)"
+                      class="news-link"
+                    >
+                      {{ news.title || news.Title }}
+                    </a>
+                  </h3>
+                  <div class="news-meta">
+                    <span v-if="news.author || news.Author" class="news-author">
+                      作者: {{ news.author || news.Author }}
+                    </span>
+                    <span v-if="news.date || news.Date" class="news-date">
+                      日期: {{ formatNewsDate(news.date || news.Date) }}
+                    </span>
+                  </div>
+                </div>
+                <div 
+                  v-if="news.contents || news.Contents" 
+                  class="news-content"
+                >
+                  {{ formatNewsContent(news.contents || news.Contents) }}
+                </div>
+                <div v-if="news.relatedGames && news.relatedGames.length > 0" class="related-games">
+                  <span>相关游戏: </span>
+                  <span v-for="game in news.relatedGames" :key="game.gameId || game.GameId" class="game-tag">
+                    {{ game.gameName || game.GameName }}
+                  </span>
+                </div>
+              </div>
+              <button 
+                v-if="hasMoreNews" 
+                @click="loadMoreNews"
+                class="show-more-news-btn"
+              >
+                显示更多
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <!-- 右侧边栏 -->
+        <div class="sidebar">
+          <!-- 我的游戏数据（仅当玩家拥有该游戏时显示） -->
+          <section v-if="isGameOwned && playerGameData" class="section-card my-game-data-section">
+            <h3 class="sidebar-title clickable-title" @click="goToPlayerDetail">
+              我的游戏数据
+            </h3>
+            <div class="my-game-data-content">
+              <!-- 背景成就图标 -->
+              <div class="achievement-background">
+                <div 
+                  v-for="(pos, index) in achievementBackgroundPositions" 
+                  :key="`bg-${index}`"
+                  class="achievement-bg-icon"
+                  :style="{ 
+                    '--rotation': `${pos.rotation}deg`,
+                    '--offset-x': `${pos.x}%`,
+                    '--offset-y': `${pos.y}%`,
+                    '--delay': `${pos.delay}s`
+                  }"
+                >
+                  <img 
+                    v-if="pos.icon"
+                    :src="pos.icon"
+                    :alt="pos.name"
+                    class="achievement-bg-img"
+                    @error="handleImageError"
+                  />
+                  <div v-else class="achievement-bg-placeholder">
+                    <Trophy class="bg-placeholder-icon" size="12" />
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 数据内容 -->
+              <div class="my-game-data-stats">
+                <div class="data-stat-item">
+                  <div class="data-stat-label">总游戏时长</div>
+                  <div class="data-stat-value">{{ formatPlaytime(playerGameData.playtimeMinutes || 0) }}</div>
+                </div>
+                <div class="data-stat-item">
+                  <div class="data-stat-label">成就解锁</div>
+                  <div class="data-stat-value">
+                    {{ achievementsUnlocked }} / {{ achievementsTotal || 0 }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 价格监控（免费游戏不显示） -->
+          <section v-if="game.isFree !== true" class="section-card">
+            <h3 class="sidebar-title">价格监控</h3>
+            <div class="price-monitor">
+              <div v-if="priceLoading" class="price-loading">
+                <div class="loading-spinner-small"></div>
+                <span>加载价格中...</span>
+              </div>
+              <div v-else-if="priceError" class="price-error">
+                <span>{{ priceError }}</span>
+              </div>
+              <div v-else>
+                <div class="price-current">
+                  <span class="price-label">当前价格</span>
+                  <div class="price-display">
+                    <span class="price-value" v-if="priceInfo.currentPrice !== null && priceInfo.currentPrice > 0">
+                      ¥{{ priceInfo.currentPrice.toFixed(2) }}
+                    </span>
+                    <span class="price-value" v-else-if="priceInfo.currentPrice === 0">未知</span>
+                    <span class="price-value" v-else>暂无数据</span>
+                    <span v-if="priceInfo.isDiscount && priceInfo.discountRate > 0" class="discount-badge">
+                      -{{ priceInfo.discountRate }}%
+                    </span>
+                  </div>
+                  <div v-if="priceInfo.originalPrice && priceInfo.currentPrice && priceInfo.originalPrice > priceInfo.currentPrice" class="price-original">
+                    <span class="original-price">原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}</span>
+                    <span class="savings">节省: ¥{{ (priceInfo.originalPrice - priceInfo.currentPrice).toFixed(2) }}</span>
+                  </div>
+                  <div v-else-if="priceInfo.originalPrice && priceInfo.originalPrice > 0 && (!priceInfo.currentPrice || priceInfo.currentPrice === 0)" class="price-original">
+                    <span class="original-price">原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}</span>
+                  </div>
+                  <div v-if="priceInfo.lowestPrice && priceInfo.currentPrice && priceInfo.lowestPrice < priceInfo.currentPrice" class="price-lowest">
+                    <span class="lowest-label">历史最低: ¥{{ priceInfo.lowestPrice.toFixed(2) }}</span>
+                  </div>
+                </div>
+                <div v-if="priceHistory.length > 0" class="price-chart-container">
+                  <div class="chart-bars">
+                    <div 
+                      v-for="(item, index) in priceHistory.slice(0, 7).reverse()" 
+                      :key="index"
+                      class="chart-bar-wrapper"
+                      :title="`${item.date}: ¥${item.currentPrice.toFixed(2)}`"
+                    >
+                      <div 
+                        class="chart-bar"
+                        :style="{ height: `${getChartBarHeight(item.currentPrice)}%` }"
+                      ></div>
+                      <span class="chart-label">{{ formatChartDate(item.date) }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="price-chart-empty">
+                  <span>暂无价格历史数据</span>
+                </div>
+                <div class="price-actions">
+                  <button class="btn-outline" @click="showPriceAlertDialog">
+                    <Bell class="icon" size="16" />
+                    {{ hasPriceAlert ? '管理提醒' : '设置价格提醒' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 价格提醒设置对话框 -->
+          <div v-if="showAlertDialog" class="dialog-overlay" @click.self="closeAlertDialog">
+            <div class="dialog-content">
+              <div class="dialog-header">
+                <h3>{{ currentSubscription ? '管理价格提醒' : '设置价格提醒' }}</h3>
+                <button class="dialog-close" @click="closeAlertDialog">
+                  <X class="icon" size="20" />
+                </button>
+              </div>
+              <div class="dialog-body">
+                <div class="game-info-preview">
+                  <img :src="game.headerImage || noCoverImage" class="preview-image" @error="handleImageError" />
+                  <div class="preview-info">
+                    <h4>{{ game.name }}</h4>
+                    <p class="preview-price">
+                      当前价格: ¥{{ priceInfo.currentPrice?.toFixed(2) || '0.00' }}
+                      <span v-if="priceInfo.isDiscount && priceInfo.discountRate > 0" class="discount-badge-small">
+                        -{{ priceInfo.discountRate }}%
+                      </span>
+                    </p>
+                    <p v-if="priceInfo.originalPrice && priceInfo.originalPrice > 0" class="preview-original">
+                      原价: ¥{{ priceInfo.originalPrice.toFixed(2) }}
+                    </p>
+                  </div>
+                </div>
+                <div v-if="currentSubscription && !currentSubscription.isActive" class="subscription-inactive-notice">
+                  <span>⚠️ 此提醒已触发，当前为非活跃状态</span>
+                </div>
+                <div class="alert-options">
+                  <div class="option-group">
+                    <label class="option-label">
+                      <input 
+                        type="radio" 
+                        v-model="alertType" 
+                        value="price"
+                        class="radio-input"
+                      />
+                      <span>目标价格提醒</span>
+                    </label>
+                    <div v-if="alertType === 'price'" class="option-input">
+                      <input 
+                        type="number" 
+                        v-model.number="targetPrice" 
+                        placeholder="输入目标价格"
+                        class="input-field"
+                        step="0.01"
+                        min="0"
+                      />
+                      <span class="input-hint">当价格降至或低于此价格时提醒</span>
+                    </div>
+                  </div>
+                  <div class="option-group">
+                    <label class="option-label">
+                      <input 
+                        type="radio" 
+                        v-model="alertType" 
+                        value="discount"
+                        class="radio-input"
+                      />
+                      <span>目标折扣提醒</span>
+                    </label>
+                    <div v-if="alertType === 'discount'" class="option-input">
+                      <input 
+                        type="number" 
+                        v-model.number="targetDiscount" 
+                        placeholder="输入目标折扣百分比"
+                        class="input-field"
+                        min="0"
+                        max="100"
+                      />
+                      <span class="input-hint">当折扣达到或超过此百分比时提醒</span>
+                    </div>
+                  </div>
+                  <div class="option-group">
+                    <label class="option-label">
+                      <input 
+                        type="radio" 
+                        v-model="alertType" 
+                        value="none"
+                        class="radio-input"
+                      />
+                      <span>取消提醒</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="dialog-footer">
+                <button class="btn-secondary" @click="closeAlertDialog">取消</button>
+                <button 
+                  v-if="currentSubscription && alertType === 'none'" 
+                  class="btn-danger" 
+                  @click="deletePriceAlert" 
+                  :disabled="savingAlert"
+                >
+                  {{ savingAlert ? '删除中...' : '删除提醒' }}
+                </button>
+                <button 
+                  v-else-if="alertType !== 'none'" 
+                  class="btn-primary" 
+                  @click="savePriceAlert" 
+                  :disabled="savingAlert"
+                >
+                  {{ savingAlert ? '保存中...' : (currentSubscription ? '更新' : '保存') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新闻详情弹窗 -->
+    <div v-if="showNewsModal" class="news-modal-overlay" @click.self="closeNewsModal">
+      <div class="news-modal">
+        <div class="news-modal-header">
+          <h2 class="news-modal-title">{{ currentNews?.title || currentNews?.Title || '新闻详情' }}</h2>
+          <button @click="closeNewsModal" class="news-modal-close">
+            <X size="24" />
+          </button>
+        </div>
+        <div class="news-modal-content">
+          <div v-if="newsDetailLoading" class="loading-small">
+            <div class="loading-spinner-small"></div>
+            <span>加载中...</span>
+          </div>
+          <div v-else class="news-detail">
+            <div class="news-detail-meta">
+              <span v-if="currentNews?.author || currentNews?.Author" class="news-detail-author">
+                作者: {{ currentNews.author || currentNews.Author }}
+              </span>
+              <span v-if="currentNews?.date || currentNews?.Date" class="news-detail-date">
+                日期: {{ formatNewsDate(currentNews.date || currentNews.Date) }}
+              </span>
+            </div>
+            <div class="news-detail-body" v-html="newsDetailContent || (currentNews?.contents || currentNews?.Contents || '暂无内容')"></div>
+            <div v-if="currentNews?.relatedGames && currentNews.relatedGames.length > 0" class="news-detail-related">
+              <span>相关游戏: </span>
+              <span v-for="game in currentNews.relatedGames" :key="game.gameId || game.GameId" class="game-tag">
+                {{ game.gameName || game.GameName }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="news-modal-footer">
+          <button 
+            v-if="currentNews?.newsUrl || currentNews?.NewsUrl"
+            @click="openOriginalNews"
+            class="btn-primary"
+          >
+            显示原文
+          </button>
+          <button @click="closeNewsModal" class="btn-secondary">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 所有成就弹窗 -->
+    <div v-if="showAllAchievementsModal" class="achievements-modal-overlay" @click.self="showAllAchievementsModal = false">
+      <div class="achievements-modal">
+        <div class="achievements-modal-header">
+          <h2 class="achievements-modal-title">所有成就 ({{ achievementsTotal || achievements.length }})</h2>
+          <button @click="showAllAchievementsModal = false" class="achievements-modal-close">
+            <X size="24" />
+          </button>
+        </div>
+        <div class="achievements-modal-content">
+          <div v-if="achievements.length === 0" class="empty-state-small">
+            <p>暂无成就数据</p>
+          </div>
+          <div v-else>
+            <!-- 按平台分组显示成就 -->
+            <div v-for="group in groupedAchievements" :key="group.platformId" class="achievement-platform-group">
+              <h3 class="platform-group-title">
+                {{ group.platformName }}
+                <span class="platform-group-count">({{ group.achievements.length }})</span>
+              </h3>
+              <div class="achievements-modal-grid">
+                <div 
+                  v-for="achievement in group.achievements" 
+                  :key="achievement.id || achievement.achievementId"
+                  class="achievement-modal-item"
+                  :class="{ 
+                    unlocked: achievement.isUnlocked,
+                    hidden: achievement.hidden && !achievement.isUnlocked,
+                    revealed: achievement.hidden && !achievement.isUnlocked && revealedHiddenAchievements.has(achievement.id)
+                  }"
+                  @click="handleHiddenAchievementClick(achievement)"
+                >
+                  <div class="achievement-modal-icon-wrapper">
+                    <!-- 隐藏且未解锁且未点击：显示问号 -->
+                    <div 
+                      v-if="achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.has(achievement.id)"
+                      class="achievement-icon-placeholder-modal hidden-icon"
+                    >
+                      <span class="question-mark-modal">?</span>
+                    </div>
+                    <!-- 已解锁：显示解锁图标 -->
+                    <img 
+                      v-else-if="achievement.iconUnlocked && achievement.isUnlocked" 
+                      :src="achievement.iconUnlocked" 
+                      :alt="achievement.name"
+                      class="achievement-icon-modal"
+                      @error="handleImageError"
+                    />
+                    <!-- 未解锁：显示锁定图标 -->
+                    <img 
+                      v-else-if="achievement.iconLocked" 
+                      :src="achievement.iconLocked" 
+                      :alt="achievement.name"
+                      class="achievement-icon-modal locked"
+                      @error="handleImageError"
+                    />
+                    <!-- 没有图标时的占位符 -->
+                    <div v-else class="achievement-icon-placeholder-modal">
+                      <Trophy v-if="achievement.isUnlocked" class="placeholder-icon-modal" size="20" />
+                      <Lock v-else class="placeholder-icon-modal" size="20" />
+                    </div>
+                  </div>
+                  <div class="achievement-modal-info">
+                    <h4 class="achievement-modal-name">
+                      {{ achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.has(achievement.id) 
+                        ? '隐藏的成就' 
+                        : (achievement.name || achievement.displayName || achievement.achievementName) }}
+                    </h4>
+                    <p v-if="achievement.isUnlocked && achievement.unlockTime" class="achievement-modal-time">
+                      {{ formatDate(achievement.unlockTime) }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="achievements-modal-footer">
+          <button @click="showAllAchievementsModal = false" class="btn-secondary">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { gameApi, libraryApi, newsApi, achievementApi } from '@/api'
+import { priceApi } from '@/api/price'
+import { ArrowLeft, Trophy, Calendar, Bell, X, Lock } from 'lucide-vue-next'
+import noCoverImage from '@/assets/no_cover.png'
+
+const route = useRoute()
+const router = useRouter()
+
+// 状态管理
+const loading = ref(true)
+const error = ref(null)
+const game = ref(null)
+const isGameOwned = ref(false) // 用户是否拥有该游戏
+const playerGameData = ref(null) // 玩家游戏数据（游戏时长、成就等）
+const achievements = ref([]) // 成就列表
+const achievementsLoading = ref(false) // 成就加载状态
+const showAllAchievementsModal = ref(false) // 是否显示所有成就弹窗
+const platformAchievements = ref([]) // 平台成就统计数据（从 libraryApi 获取）
+const achievementsTotal = ref(0) // 成就总数（按 Library 页面的逻辑计算）
+const achievementsUnlocked = ref(0) // 已解锁成就数
+const achievementBackgroundPositions = ref([]) // 背景成就图标的随机位置
+
+// 隐藏成就相关状态
+const revealedHiddenAchievements = ref(new Set()) // 已点击显示剧透的隐藏成就ID集合
+
+// 平台ID到平台名称的映射
+const platformNameMap = {
+  1: 'Steam',
+  2: 'Epic Games',
+  3: 'Origin',
+  4: 'Uplay',
+  5: 'GOG',
+  6: 'PSN',
+  7: 'Xbox',
+  8: 'Nintendo Switch'
+}
+const priceInfo = ref({
+  currentPrice: null,
+  originalPrice: null,
+  discountRate: 0,
+  isDiscount: false,
+  lowestPrice: null,
+  lowestDate: null
+})
+const priceHistory = ref([])
+const priceLoading = ref(false)
+const priceError = ref(null)
+const hasPriceAlert = ref(false)
+const currentSubscription = ref(null) // 当前游戏的订阅信息
+
+
+// 游戏介绍展开状态
+const showDetailedDescription = ref(false) // 是否显示详细描述
+
+// 新闻相关状态
+const gameNews = ref([]) // 游戏新闻列表
+const newsLoading = ref(false) // 新闻加载状态
+const newsPage = ref(1) // 当前新闻页码
+const newsPageSize = ref(5) // 每页新闻数量（初始显示5条）
+const newsTotal = ref(0) // 新闻总数
+const hasMoreNews = computed(() => gameNews.value.length < newsTotal.value) // 是否还有更多新闻
+
+// 新闻详情弹窗状态
+const showNewsModal = ref(false) // 是否显示新闻详情弹窗
+const currentNews = ref(null) // 当前查看的新闻
+const newsDetailLoading = ref(false) // 新闻详情加载状态
+const newsDetailContent = ref('') // 新闻详情内容
+
+// 价格提醒对话框
+const showAlertDialog = ref(false)
+const alertType = ref('price')
+const targetPrice = ref(null)
+const targetDiscount = ref(null)
+const savingAlert = ref(false)
+
+// 跳转到玩家游戏详情页
+const goToPlayerDetail = () => {
+  const gameId = game.value?.id || route.params.id
+  router.push({ name: 'GameDetail', params: { id: gameId } })
+}
+
+// 计算属性 - 按平台分组的成就
+const groupedAchievements = computed(() => {
+  const groups = {}
+  achievements.value.forEach(achievement => {
+    const platformId = achievement.platformId || 1
+    const platformName = achievement.platformName || platformNameMap[platformId] || `平台 ${platformId}`
+    
+    if (!groups[platformId]) {
+      groups[platformId] = {
+        platformId,
+        platformName,
+        achievements: []
+      }
+    }
+    groups[platformId].achievements.push(achievement)
+  })
+  return Object.values(groups)
+})
+
+// 计算属性 - 显示的成就图标（最多显示15个，加上"..."共16个，占两行）
+const displayedAchievementIcons = computed(() => {
+  return achievements.value.slice(0, 15)
+})
+
+// 计算属性 - 是否有更多成就未显示（超过15个时显示"..."）
+const hasMoreAchievements = computed(() => {
+  return achievements.value.length > 15
+})
+
+// 计算属性 - 游戏平台列表
+const gamePlatforms = computed(() => {
+  if (!game.value) return []
+  const platforms = []
+  
+  // 从 game.platforms 获取（如果是数组，包含平台ID）
+  if (Array.isArray(game.value.platforms)) {
+    game.value.platforms.forEach(p => {
+      if (typeof p === 'number') {
+        // 平台ID映射到平台名称
+        platforms.push(platformNameMap[p] || `平台 ${p}`)
+      } else if (typeof p === 'string') {
+        // 如果已经是字符串，直接使用
+        platforms.push(p)
+      }
+    })
+  }
+  
+  // 如果没有平台信息，尝试从其他字段获取
+  if (platforms.length === 0 && game.value.Platforms) {
+    const platformArray = Array.isArray(game.value.Platforms) ? game.value.Platforms : [game.value.Platforms]
+    platformArray.forEach(p => {
+      if (typeof p === 'number') {
+        platforms.push(platformNameMap[p] || `平台 ${p}`)
+      } else if (typeof p === 'string') {
+        platforms.push(p)
+      }
+    })
+  }
+  
+  // 如果还是没有，返回空数组（不显示"未知平台"）
+  return platforms
+})
+
+// 格式化游戏时长
+const formatPlaytime = (minutes) => {
+  if (!minutes || minutes === 0) return '0 小时'
+  const hours = minutes / 60
+  if (hours < 1) return `${Math.round(minutes)} 分钟`
+  return `${hours.toFixed(1)} 小时`
+}
+
+// 加载平台成就统计数据（用于计算成就总数，逻辑与 Library 页面一致）
+const loadPlatformAchievements = async () => {
+  if (!game.value) return
+  
+  try {
+    const gameId = game.value.id || route.params.id
+    console.log('加载平台成就统计数据，游戏ID:', gameId)
+    
+    // 从 libraryApi 获取游戏数据，包含 platformAchievements
+    const libraryResponse = await libraryApi.getGames({ gameId, page: 1, pageSize: 1 })
+    if (libraryResponse.success && libraryResponse.data) {
+      const data = libraryResponse.data
+      const items = data.items ?? data.Items ?? []
+      if (items.length > 0) {
+        const gameData = items[0]
+        const platformAchievementsData = gameData.platformAchievements ?? gameData.PlatformAchievements ?? []
+        platformAchievements.value = platformAchievementsData
+        
+        // 计算成就总数：如果有 platformAchievements，选择最佳平台（解锁率最高，如果相同则选择总数最多的）
+        if (platformAchievementsData.length > 0) {
+          const bestPlatform = platformAchievementsData.reduce((best, current) => {
+            if (!best) return current
+            const currentUnlockRate = current.unlockRate ?? current.UnlockRate ?? 0
+            const bestUnlockRate = best.unlockRate ?? best.UnlockRate ?? 0
+            // 优先选择解锁率更高的平台
+            if (currentUnlockRate > bestUnlockRate) {
+              return current
+            }
+            // 如果解锁率相同，选择成就总数更多的平台
+            if (currentUnlockRate === bestUnlockRate) {
+              const currentTotal = current.achievementsTotal ?? current.AchievementsTotal ?? 0
+              const bestTotal = best.achievementsTotal ?? best.AchievementsTotal ?? 0
+              if (currentTotal > bestTotal) {
+                return current
+              }
+            }
+            return best
+          }, null)
+          
+          if (bestPlatform) {
+            achievementsTotal.value = bestPlatform.achievementsTotal ?? bestPlatform.AchievementsTotal ?? 0
+            achievementsUnlocked.value = bestPlatform.achievementsUnlocked ?? bestPlatform.AchievementsUnlocked ?? 0
+          } else {
+            achievementsTotal.value = gameData.achievementsTotal ?? gameData.AchievementsTotal ?? 0
+            achievementsUnlocked.value = gameData.achievementsUnlocked ?? gameData.AchievementsUnlocked ?? 0
+          }
+        } else {
+          // 没有平台成就数据，使用游戏的总成就数
+          achievementsTotal.value = gameData.achievementsTotal ?? gameData.AchievementsTotal ?? 0
+          achievementsUnlocked.value = gameData.achievementsUnlocked ?? gameData.AchievementsUnlocked ?? 0
+        }
+      } else {
+        achievementsTotal.value = 0
+      }
+    }
+  } catch (err) {
+    console.error('加载平台成就统计数据失败:', err)
+    achievementsTotal.value = 0
+  }
+}
+
+// 加载成就数据
+const loadAchievements = async () => {
+  if (!game.value) return
+  
+  achievementsLoading.value = true
+  try {
+    const gameId = game.value.id || route.params.id
+    console.log('加载成就数据，游戏ID:', gameId)
+    
+    const response = await achievementApi.getUserGameAchievements(gameId)
+    console.log('成就API响应:', response)
+    
+    if (response.success && response.data) {
+      const data = response.data
+      // 标准结构：{ gameId, gameName, achievements: [] }
+      const list = Array.isArray(data)
+        ? data
+        : (data.achievements && Array.isArray(data.achievements) ? data.achievements : [])
+
+      achievements.value = list.map(a => {
+        const unlocked = a.unlocked ?? a.Unlocked
+        const unlockTime = a.unlockTime ?? a.UnlockTime
+        const hidden = a.hidden ?? a.Hidden ?? false
+        const platformId = a.platformId ?? a.PlatformId ?? 1
+        const platformName = a.platformName ?? a.PlatformName
+
+        return {
+          id: a.id || a.achievementId || a.AchievementId,
+          name: a.displayName || a.DisplayName || a.name || a.achievementName || a.AchievementName,
+          description: a.description || a.achievementDescription || a.Description,
+          iconUnlocked: a.iconUnlocked || a.IconUnlocked || a.icon,
+          iconLocked: a.iconLocked || a.IconLocked,
+          isUnlocked: unlocked !== undefined ? unlocked : (unlockTime != null),
+          unlockTime,
+          hidden,
+          platformId,
+          platformName
+        }
+      })
+      console.log('处理后的成就数据:', achievements.value.length, achievements.value)
+    }
+  } catch (err) {
+    console.error('加载成就失败:', err)
+    // 不显示错误，只是没有成就数据
+    achievements.value = []
+  } finally {
+    achievementsLoading.value = false
+  }
+}
+
+// 加载游戏详情
+const loadGameDetail = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const gameId = route.params.id
+    console.log('加载游戏详情，游戏ID:', gameId)
+
+    // 1. 检查用户是否拥有该游戏
+    try {
+      const libraryResponse = await libraryApi.getGames({ gameId, page: 1, pageSize: 1 })
+      console.log('游戏库个人数据响应:', libraryResponse)
+      if (libraryResponse.success && libraryResponse.data) {
+        const data = libraryResponse.data
+        const items = data.items ?? data.Items ?? []
+        if (items.length > 0) {
+          // 用户拥有该游戏
+          isGameOwned.value = true
+          const libraryGame = items[0]
+          
+          // 保存玩家游戏数据
+          playerGameData.value = {
+            playtimeMinutes: libraryGame.playtimeMinutes ?? libraryGame.PlaytimeMinutes ?? 0,
+            achievementsUnlocked: libraryGame.achievementsUnlocked ?? libraryGame.AchievementsUnlocked ?? 0,
+            achievementsTotal: libraryGame.achievementsTotal ?? libraryGame.AchievementsTotal ?? 0
+          }
+          
+          // 设置已解锁成就数
+          achievementsUnlocked.value = playerGameData.value.achievementsUnlocked
+          
+          // 注意：不在这里设置 platforms，因为 libraryGame.platforms 只包含用户拥有的平台
+          // 我们应该使用游戏详情 API 返回的所有支持的平台
+        } else {
+          isGameOwned.value = false
+          playerGameData.value = null
+        }
+      }
+    } catch (libErr) {
+      console.log('从游戏库获取失败:', libErr)
+      isGameOwned.value = false
+      playerGameData.value = null
+    }
+
+    // 2. 使用通用游戏API获取"公共详情"（题材/开发商/系统需求等）
+    const gameResponse = await gameApi.getGame(gameId)
+    console.log('通用游戏详情响应:', gameResponse)
+    if (gameResponse.success && gameResponse.data) {
+      const detail = gameResponse.data
+
+      // 提取分类、类型和语言数据（支持多种命名格式）
+      const categories = detail.categories ?? detail.Categories ?? []
+      const genres = detail.genres ?? detail.Genres ?? []
+      const languages = detail.languages ?? detail.Languages ?? []
+      
+      // 格式化数据为统一格式
+      const formattedCategories = Array.isArray(categories) ? categories : []
+      const formattedGenres = Array.isArray(genres) ? genres : []
+      const formattedLanguages = Array.isArray(languages) ? languages : []
+
+      if (!game.value) {
+        // 如果游戏库里没有记录，就完全使用公共详情
+        const genreNames = formattedGenres.map(g => g.name ?? g.Name ?? g)
+        const developers = detail.developers ?? detail.Developers ?? []
+        const publishers = detail.publishers ?? detail.Publishers ?? []
+
+        game.value = {
+          id: detail.gameId ?? detail.GameId,
+          name: detail.name ?? detail.Name,
+          headerImage: detail.media?.headerImage ?? detail.Media?.HeaderImage,
+          description: detail.shortDescription ?? detail.ShortDescription ?? detail.detailedDescription ?? detail.DetailedDescription,
+          // 不再使用 platform 字段存储操作系统信息
+          // platforms 字段用于存储游戏平台ID数组（Steam、Xbox等）
+          platforms: detail.platformIds ?? detail.PlatformIds ?? [],
+          genre: genreNames.join(' / '),
+          isFree: detail.isFree ?? detail.IsFree ?? null,
+          releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? '',
+          requireAge: detail.requireAge ?? detail.RequireAge ?? null,
+          shortDescription: detail.shortDescription ?? detail.ShortDescription,
+          detailedDescription: detail.detailedDescription ?? detail.DetailedDescription,
+          requirements: detail.requirements ?? detail.Requirements,
+          reviews: detail.reviews ?? detail.Reviews,
+          developers,
+          publishers,
+          categories: formattedCategories,
+          genres: formattedGenres,
+          languages: formattedLanguages,
+          playtimeMinutes: 0,
+          lastPlayed: null,
+          achievementsUnlocked: 0,
+          achievementsTotal: 0
+        }
+      } else {
+        // 合并个人数据与公共详情
+        const genreNames = formattedGenres.map(g => g.name ?? g.Name ?? g)
+        const developers = detail.developers ?? detail.Developers ?? game.value.developers ?? []
+        const publishers = detail.publishers ?? detail.Publishers ?? game.value.publishers ?? []
+
+        game.value = {
+          ...game.value,
+          name: detail.name || detail.Name || game.value.name,
+          headerImage: game.value.headerImage || detail.media?.headerImage || detail.Media?.HeaderImage,
+          description: game.value.description || detail.shortDescription || detail.ShortDescription || detail.detailedDescription || detail.DetailedDescription,
+          // platform 字段不再用于显示操作系统，改为存储游戏平台ID数组
+          // 优先使用游戏详情 API 返回的所有支持的平台，而不是用户拥有的平台
+          platforms: (detail.platformIds ?? detail.PlatformIds ?? detail.platforms ?? []) || game.value.platforms || [],
+          genre: genreNames.join(' / ') || game.value.genre,
+          isFree: detail.isFree ?? detail.IsFree ?? game.value.isFree,
+          releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? game.value.releaseDate,
+          requireAge: detail.requireAge ?? detail.RequireAge ?? game.value.requireAge,
+          shortDescription: detail.shortDescription ?? detail.ShortDescription ?? game.value.shortDescription,
+          detailedDescription: detail.detailedDescription ?? detail.DetailedDescription ?? game.value.detailedDescription,
+          requirements: detail.requirements ?? detail.Requirements ?? game.value.requirements,
+          reviews: detail.reviews ?? detail.Reviews ?? game.value.reviews,
+          developers,
+          publishers,
+          categories: formattedCategories.length > 0 ? formattedCategories : (game.value.categories ?? []),
+          genres: formattedGenres.length > 0 ? formattedGenres : (game.value.genres ?? []),
+          languages: formattedLanguages.length > 0 ? formattedLanguages : (game.value.languages ?? [])
+        }
+      }
+    }
+
+    if (!game.value) {
+      throw new Error('未找到游戏信息')
+    }
+    
+    // 加载价格数据
+    await loadPriceData()
+    
+    // 加载平台成就统计数据（用于计算成就总数）
+    await loadPlatformAchievements()
+    
+    // 加载成就数据
+    await loadAchievements()
+    
+    // 生成背景成就图标的随机位置
+    generateAchievementBackgroundPositions()
+  } catch (err) {
+    console.error('加载游戏详情失败:', err)
+    error.value = '加载游戏详情失败: ' + (err.message || '未知错误')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 生成背景成就图标的随机位置
+const generateAchievementBackgroundPositions = () => {
+  if (achievements.value.length === 0) {
+    achievementBackgroundPositions.value = []
+    return
+  }
+  
+  // 使用更多成就图标铺满背景（至少30个，如果成就数量足够的话）
+  const iconCount = Math.min(Math.max(achievements.value.length, 30), 50)
+  const positions = []
+  
+  for (let i = 0; i < iconCount; i++) {
+    // 位置生成：按照指定比例分配到三个区域
+    // 左侧1/4到2/4（25%到50%）：20%的成就图标
+    // 左侧2/4到3/4（50%到75%）：35%的成就图标
+    // 左侧3/4到4/4（75%到100%）：45%的成就图标
+    
+    const random = Math.random()
+    let x
+    
+    if (random < 0.2) {
+      // 20%的概率：25%到50%
+      x = 25 + Math.random() * 25
+    } else if (random < 0.55) {
+      // 35%的概率：50%到75%
+      x = 50 + Math.random() * 25
+    } else {
+      // 45%的概率：75%到100%
+      x = 75 + Math.random() * 25
+    }
+    
+    // Y坐标均匀分布，留出上下边距
+    const y = 5 + Math.random() * 90 // 5% 到 95%
+    
+    // 随机旋转角度（-45度到45度，营造自然散落的感觉）
+    const rotation = -45 + Math.random() * 90
+    
+    // 随机延迟时间（0到0.5秒，营造依次掉落的感觉）
+    const delay = Math.random() * 0.5
+    
+    // 循环使用成就图标
+    const achievement = achievements.value[i % achievements.value.length]
+    
+    positions.push({
+      x,
+      y,
+      rotation,
+      delay,
+      icon: achievement.iconUnlocked || achievement.iconLocked || null,
+      name: achievement.name || ''
+    })
+  }
+  
+  achievementBackgroundPositions.value = positions
+}
+
+
+
+// 将平台支持对象格式化为字符串
+const formatPlatforms = (platforms) => {
+  const list = []
+  if (platforms.windows) list.push('Windows')
+  if (platforms.mac) list.push('Mac')
+  if (platforms.linux) list.push('Linux')
+  return list.join(' / ')
+}
+
+// 格式化游戏分类
+const formatGameCategories = (categories) => {
+  if (!categories || !Array.isArray(categories) || categories.length === 0) return ''
+  return categories.map(cat => {
+    if (typeof cat === 'string') return cat
+    return cat.name ?? cat.Name ?? cat.description ?? cat.Description ?? cat.id ?? cat.Id ?? ''
+  }).filter(Boolean).join('，')
+}
+
+// 格式化游戏类型
+const formatGameGenres = (genres) => {
+  if (!genres || !Array.isArray(genres) || genres.length === 0) return ''
+  return genres.map(genre => {
+    if (typeof genre === 'string') return genre
+    return genre.name ?? genre.Name ?? genre.description ?? genre.Description ?? genre.id ?? genre.Id ?? ''
+  }).filter(Boolean).join('，')
+}
+
+// 加载游戏新闻
+const loadGameNews = async (reset = false) => {
+  // 尝试多种方式获取 gameId
+  const gameId = game.value?.gameId || game.value?.GameId || game.value?.id || route.params.id
+  
+  if (!gameId) {
+    console.warn('无法获取游戏ID，跳过加载新闻')
+    return
+  }
+  
+  console.log('加载游戏新闻，gameId:', gameId, 'game.value:', game.value)
+  newsLoading.value = true
+  
+  try {
+    if (reset) {
+      newsPage.value = 1
+      gameNews.value = []
+      
+      // 先尝试同步Steam新闻（静默失败，不影响后续获取）
+      try {
+        console.log('尝试同步游戏新闻:', gameId)
+        await newsApi.syncSteamNews(gameId, 20)
+        console.log('游戏新闻同步成功')
+      } catch (syncErr) {
+        console.warn('同步游戏新闻失败（继续尝试获取已有新闻）:', syncErr)
+        // 同步失败不影响后续获取，继续执行
+      }
+    }
+    
+    const params = {
+      page: newsPage.value,
+      pageSize: newsPageSize.value
+    }
+    
+    console.log('获取游戏新闻:', gameId, params)
+    const response = await newsApi.getGameNews(gameId, params)
+    console.log('游戏新闻响应:', response)
+    
+    if (response.success && response.data) {
+      const data = response.data
+      const newsItems = data.news || data.News || []
+      
+      console.log('获取到新闻数量:', newsItems.length)
+      
+      if (reset) {
+        gameNews.value = newsItems
+      } else {
+        gameNews.value.push(...newsItems)
+      }
+      
+      const meta = data.meta || data.Meta
+      if (meta) {
+        newsTotal.value = meta.total || meta.Total || 0
+        console.log('新闻总数:', newsTotal.value)
+      }
+    } else {
+      console.warn('获取游戏新闻失败，响应:', response)
+      if (reset) {
+        gameNews.value = []
+      }
+    }
+  } catch (err) {
+    console.error('加载游戏新闻失败，错误详情:', err)
+    console.error('错误响应:', err.response)
+    console.error('错误消息:', err.message)
+    // 不显示错误，只是没有新闻数据
+    if (reset) {
+      gameNews.value = []
+    }
+  } finally {
+    newsLoading.value = false
+  }
+}
+
+// 加载更多新闻
+const loadMoreNews = () => {
+  newsPage.value++
+  loadGameNews(false)
+}
+
+// 格式化新闻日期
+const formatNewsDate = (timestamp) => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp * 1000) // Steam 日期是 Unix 时间戳（秒）
+  const now = new Date()
+  const diff = now - date
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  
+  if (days === 0) {
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    if (hours === 0) {
+      const minutes = Math.floor(diff / (1000 * 60))
+      return minutes <= 0 ? '刚刚' : `${minutes} 分钟前`
+    }
+    return `${hours} 小时前`
+  } else if (days < 7) {
+    return `${days} 天前`
+  } else {
+    return date.toLocaleDateString('zh-CN', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    })
+  }
+}
+
+// 格式化新闻内容（截取前200字符，保留 HTML 格式）
+const formatNewsContent = (content) => {
+  if (!content) return ''
+  // 移除 HTML 标签，只保留文本用于预览
+  const text = content.replace(/<[^>]*>/g, '')
+  // 截取前200字符
+  if (text.length > 200) {
+    return text.substring(0, 200) + '...'
+  }
+  return text
+}
+
+// 打开新闻详情弹窗
+const openNewsModal = async (news) => {
+  currentNews.value = news
+  showNewsModal.value = true
+  newsDetailLoading.value = true
+  newsDetailContent.value = ''
+  
+  try {
+    // 尝试获取新闻详情（如果有 newsId）
+    const newsId = news.newsId || news.NewsId
+    if (newsId) {
+      const response = await newsApi.getNewsDetail(newsId)
+      if (response.success && response.data) {
+        const data = response.data
+        newsDetailContent.value = data.contents || data.Contents || news.contents || news.Contents || ''
+        // 更新当前新闻数据（包含相关游戏等信息）
+        if (data.relatedGames) {
+          currentNews.value = { ...currentNews.value, relatedGames: data.relatedGames }
+        }
+      } else {
+        // 如果获取详情失败，使用列表中的内容
+        newsDetailContent.value = news.contents || news.Contents || ''
+      }
+    } else {
+      // 没有 newsId，直接使用列表中的内容
+      newsDetailContent.value = news.contents || news.Contents || ''
+    }
+  } catch (err) {
+    console.error('加载新闻详情失败:', err)
+    // 失败时使用列表中的内容
+    newsDetailContent.value = news.contents || news.Contents || ''
+  } finally {
+    newsDetailLoading.value = false
+  }
+}
+
+// 关闭新闻详情弹窗
+const closeNewsModal = () => {
+  showNewsModal.value = false
+  currentNews.value = null
+  newsDetailContent.value = ''
+}
+
+// 打开原文链接
+const openOriginalNews = () => {
+  const url = currentNews.value?.newsUrl || currentNews.value?.NewsUrl
+  if (url) {
+    window.open(url, '_blank')
+  }
+}
+
+// 格式化游戏语言
+const formatGameLanguages = (languages) => {
+  if (!languages || !Array.isArray(languages) || languages.length === 0) return ''
+  return languages.map(lang => {
+    if (typeof lang === 'string') return lang
+    // 语言可能有 name、description、languageName 等字段
+    return lang.name ?? lang.Name ?? lang.languageName ?? lang.LanguageName ?? lang.description ?? lang.Description ?? lang.id ?? lang.Id ?? ''
+  }).filter(Boolean).join('，')
+}
+
+// 格式化日期（中国时区）
+const formatDate = (date) => {
+  if (!date) return ''
+  try {
+    const d = new Date(date)
+    // 转换为中国时区（UTC+8）
+    const chinaTime = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+    
+    // 格式化显示：年月日 时分
+    const year = chinaTime.getFullYear()
+    const month = String(chinaTime.getMonth() + 1).padStart(2, '0')
+    const day = String(chinaTime.getDate()).padStart(2, '0')
+    const hour = String(chinaTime.getHours()).padStart(2, '0')
+    const minute = String(chinaTime.getMinutes()).padStart(2, '0')
+    
+    return `${year}-${month}-${day} ${hour}:${minute}`
+  } catch {
+    return date
+  }
+}
+
+// 图片加载错误处理
+const handleImageError = (event) => {
+  event.target.src = noCoverImage
+}
+
+// 处理隐藏成就点击
+const handleHiddenAchievementClick = (achievement) => {
+  if (achievement.hidden && !achievement.isUnlocked && !revealedHiddenAchievements.value.has(achievement.id)) {
+    // 只允许显示一次，不允许再次隐藏
+    revealedHiddenAchievements.value.add(achievement.id)
+  }
+}
+
+
+// 加载价格数据
+const loadPriceData = async () => {
+  if (!game.value) return
+  
+  const gameId = game.value.id || route.params.id
+  priceLoading.value = true
+  priceError.value = null
+  
+  try {
+    // 获取价格历史
+    const historyResponse = await priceApi.getPriceHistory(gameId)
+    if (historyResponse.success && historyResponse.data) {
+      const data = historyResponse.data
+      
+      // 更新价格信息（适配后端返回的数据结构）
+      priceInfo.value = {
+        currentPrice: data.currentPrice ?? data.CurrentPrice ?? null,
+        originalPrice: data.originalPrice ?? data.OriginalPrice ?? null,
+        discountRate: data.discount ?? data.discountRate ?? data.Discount ?? data.DiscountRate ?? 0,
+        isDiscount: data.isDiscount ?? data.IsDiscount ?? false,
+        lowestPrice: data.lowestPrice ?? data.LowestPrice ?? null,
+        lowestDate: data.lowestDate ?? data.LowestDate ?? null
+      }
+      
+      // 如果没有当前价格，尝试从历史记录中获取最新的
+      if (priceInfo.value.currentPrice === null && data.priceHistory && Array.isArray(data.priceHistory) && data.priceHistory.length > 0) {
+        const latest = data.priceHistory[0]
+        priceInfo.value.currentPrice = latest.CurrentPrice ?? latest.currentPrice ?? null
+        priceInfo.value.originalPrice = latest.OriginalPrice ?? latest.originalPrice ?? priceInfo.value.originalPrice
+        priceInfo.value.discountRate = latest.Discount ?? latest.discount ?? priceInfo.value.discountRate
+        priceInfo.value.isDiscount = latest.IsDiscount ?? latest.isDiscount ?? priceInfo.value.isDiscount
+      }
+      
+      // 处理价格历史数据
+      if (data.priceHistory && Array.isArray(data.priceHistory)) {
+        priceHistory.value = data.priceHistory.map(item => ({
+          date: item.Date ?? item.date,
+          currentPrice: item.CurrentPrice ?? item.currentPrice ?? 0,
+          originalPrice: item.OriginalPrice ?? item.originalPrice ?? 0,
+          discount: item.Discount ?? item.discount ?? item.DiscountRate ?? item.discountRate ?? 0,
+          isDiscount: item.IsDiscount ?? item.isDiscount ?? false
+        }))
+      }
+    }
+    
+    // 检查是否已有价格提醒
+    await checkPriceAlert()
+  } catch (err) {
+    console.error('加载价格数据失败:', err)
+    priceError.value = '加载价格数据失败'
+  } finally {
+    priceLoading.value = false
+  }
+}
+
+// 检查是否已有价格提醒
+const checkPriceAlert = async () => {
+  try {
+    const response = await priceApi.getSubscriptions()
+    if (response.success && response.data) {
+      const subscriptions = response.data.subscriptions || response.data.items || []
+      const gameId = parseInt(game.value?.id || route.params.id)
+      
+      // 查找当前游戏的订阅
+      currentSubscription.value = subscriptions.find(sub => 
+        parseInt(sub.gameId) === gameId
+      ) || null
+      
+      // 检查是否有活跃的订阅
+      hasPriceAlert.value = currentSubscription.value !== null
+    }
+  } catch (err) {
+    console.error('检查价格提醒失败:', err)
+  }
+}
+
+// 计算图表柱状图高度
+const getChartBarHeight = (price) => {
+  if (!price || priceHistory.value.length === 0) return 0
+  const prices = priceHistory.value.map(p => p.currentPrice).filter(p => p > 0)
+  if (prices.length === 0) return 0
+  const maxPrice = Math.max(...prices)
+  const minPrice = Math.min(...prices)
+  if (maxPrice === minPrice) return 50
+  return ((price - minPrice) / (maxPrice - minPrice)) * 80 + 10
+}
+
+// 格式化图表日期
+const formatChartDate = (dateString) => {
+  if (!dateString) return ''
+  try {
+    const date = new Date(dateString)
+    const month = date.getMonth() + 1
+    const day = date.getDate()
+    return `${month}/${day}`
+  } catch {
+    return dateString
+  }
+}
+
+// 显示价格提醒对话框
+const showPriceAlertDialog = async () => {
+  // 确保先加载最新的订阅信息
+  await checkPriceAlert()
+  
+  showAlertDialog.value = true
+  
+  // 如果有现有订阅，加载其设置
+  if (currentSubscription.value) {
+    if (currentSubscription.value.targetPrice !== null && currentSubscription.value.targetPrice !== undefined) {
+      alertType.value = 'price'
+      targetPrice.value = currentSubscription.value.targetPrice
+      targetDiscount.value = null
+    } else if (currentSubscription.value.targetDiscount !== null && currentSubscription.value.targetDiscount !== undefined) {
+      alertType.value = 'discount'
+      targetDiscount.value = currentSubscription.value.targetDiscount
+      targetPrice.value = null
+    } else {
+      alertType.value = 'price'
+      targetPrice.value = null
+      targetDiscount.value = null
+    }
+  } else {
+    // 重置表单
+    alertType.value = 'price'
+    targetPrice.value = null
+    targetDiscount.value = null
+  }
+}
+
+// 关闭价格提醒对话框
+const closeAlertDialog = () => {
+  showAlertDialog.value = false
+  // 重置表单
+  alertType.value = 'price'
+  targetPrice.value = null
+  targetDiscount.value = null
+}
+
+// 保存价格提醒
+const savePriceAlert = async () => {
+  if (!game.value) return
+  
+  // 验证输入
+  if (alertType.value === 'price' && (!targetPrice.value || targetPrice.value <= 0)) {
+    alert('请输入有效的目标价格')
+    return
+  }
+  if (alertType.value === 'discount' && (!targetDiscount.value || targetDiscount.value < 0 || targetDiscount.value > 100)) {
+    alert('请输入有效的折扣百分比（0-100）')
+    return
+  }
+  
+  savingAlert.value = true
+  try {
+    const gameId = parseInt(game.value.id || route.params.id)
+    // 获取平台ID，默认为Steam (1)
+    const platformId = 1 // 可以根据实际情况获取
+    
+    const data = {
+      gameId: gameId,
+      platformId: platformId,
+      targetPrice: alertType.value === 'price' ? targetPrice.value : null,
+      targetDiscount: alertType.value === 'discount' ? targetDiscount.value : null
+    }
+    
+    let response
+    if (currentSubscription.value) {
+      // 更新现有订阅
+      response = await priceApi.updateSubscription(currentSubscription.value.subscriptionId, data)
+    } else {
+      // 创建新订阅
+      response = await priceApi.trackPrice(data)
+    }
+    
+    if (response.success) {
+      // 刷新订阅信息
+      await checkPriceAlert()
+      closeAlertDialog()
+    } else {
+      alert(response.message || '操作失败，请重试')
+    }
+  } catch (err) {
+    console.error('保存价格提醒失败:', err)
+    alert('操作失败: ' + (err.message || '未知错误'))
+  } finally {
+    savingAlert.value = false
+  }
+}
+
+// 删除价格提醒
+const deletePriceAlert = async () => {
+  if (!currentSubscription.value) return
+  
+  if (!confirm('确定要删除这个价格提醒吗？')) return
+  
+  savingAlert.value = true
+  try {
+    const response = await priceApi.unsubscribeAlert(currentSubscription.value.subscriptionId)
+    if (response.success) {
+      // 刷新订阅信息
+      await checkPriceAlert()
+      closeAlertDialog()
+    } else {
+      alert(response.message || '删除失败，请重试')
+    }
+  } catch (err) {
+    console.error('删除价格提醒失败:', err)
+    alert('删除失败: ' + (err.message || '未知错误'))
+  } finally {
+    savingAlert.value = false
+  }
+}
+
+// Mod 管理处理 - 跳转到 Mod 与存档页面
+const handleManageMods = () => {
+  router.push({ name: 'Mods' })
+}
+
+// 浏览 Mod 商店 - 跳转到 Mod 探索页面
+const handleBrowseMods = () => {
+  const gameId = game.value?.id || route.params.id
+  router.push({ name: 'ModExplore', query: { gameId } })
+}
+
+// 格式化下载数
+const formatDownloads = (num) => {
+  if (!num) return '0'
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+  return num.toString()
+}
+
+// 切换 Mod 启用状态（预留）
+const handleToggleMod = (mod) => {
+  console.log('切换 Mod 状态:', mod.name, mod.enabled)
+  // TODO: 实现 Mod 启用/禁用功能
+}
+
+// 监听游戏ID变化，重新加载价格数据和新闻
+watch(() => route.params.id, () => {
+  if (route.params.id) {
+    loadPriceData()
+    loadGameNews(true)
+  }
+})
+
+// 监听游戏数据加载完成，然后加载新闻
+watch(() => game.value?.id || game.value?.gameId || game.value?.GameId, (newId) => {
+  if (newId && !newsLoading.value && gameNews.value.length === 0) {
+    console.log('游戏数据已加载，开始加载新闻，gameId:', newId)
+    loadGameNews(true)
+  }
+})
+
+onMounted(() => {
+  loadGameDetail()
+  // 延迟加载游戏新闻，确保游戏数据先加载完成
+  setTimeout(() => {
+    const gameId = game.value?.gameId || game.value?.GameId || game.value?.id || route.params.id
+    if (gameId) {
+      loadGameNews(true)
+    }
+  }, 1000)
+})
+</script>
+
+<style scoped>
+.game-detail-container {
+  min-height: 100vh;
+  background: #0f0f13;
+  color: #f8fafc;
+  padding: 24px;
+}
+
+/* 加载和错误状态 */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(139, 92, 246, 0.2);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(139, 92, 246, 0.2);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-small {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  color: #94a3b8;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  text-align: center;
+  padding: 60px 20px;
+  color: #ef4444;
+}
+
+.retry-btn {
+  margin-top: 16px;
+  padding: 10px 20px;
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.retry-btn:hover {
+  background: #7c3aed;
+}
+
+/* 返回按钮 */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-bottom: 24px;
+  background: rgba(20, 20, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  backdrop-filter: blur(20px);
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: rgba(30, 30, 35, 0.9);
+  color: #f8fafc;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+/* Hero 区域 */
+.hero-section {
+  position: relative;
+  margin-bottom: 32px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.hero-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 500px;
+  z-index: 0;
+}
+
+.hero-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.4;
+}
+
+.hero-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, #0f0f13 10%, transparent 100%);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 32px;
+  padding: 64px 32px 32px;
+  align-items: flex-end;
+}
+
+.game-cover-wrapper {
+  flex-shrink: 0;
+}
+
+.game-cover {
+  width: 192px;
+  height: 256px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+
+.game-cover-wrapper {
+  position: relative;
+}
+
+.owned-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(34, 197, 94, 0.9);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.game-header-info {
+  flex: 1;
+  padding-bottom: 8px;
+}
+
+.game-badges {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.platform-badge,
+.genre-badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.platform-badge {
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.genre-badge {
+  background: rgba(20, 20, 23, 0.8);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.game-title {
+  font-size: 48px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.game-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.stat-icon {
+  color: #8b5cf6;
+}
+
+.game-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #8b5cf6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #7c3aed;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+}
+
+.btn-secondary {
+  background: rgba(20, 20, 23, 0.75);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px;
+}
+
+.btn-secondary:hover {
+  background: rgba(30, 30, 35, 0.9);
+  color: #f8fafc;
+}
+
+/* 内容网格 */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 卡片样式 */
+.section-card {
+  background: rgba(20, 20, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 24px;
+  backdrop-filter: blur(20px);
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #f8fafc;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.achievement-progress {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+/* 平台筛选器 */
+.platform-filter {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.platform-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(20, 20, 23, 0.75);
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(20px);
+}
+
+.platform-filter-btn:hover {
+  background: rgba(30, 30, 35, 0.9);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+}
+
+.platform-filter-btn.active {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+}
+
+.platform-filter .platform-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 2px 8px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
+/* 游戏介绍 */
+.game-description {
+  line-height: 1.6;
+  transition: all 0.3s ease;
+}
+
+.description-content {
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
+}
+
+.description-text {
+  color: #cbd5e1;
+  font-size: 15px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.description-text.text-muted {
+  color: #64748b;
+  font-style: italic;
+}
+
+/* HTML 格式的描述内容样式 */
+.description-html {
+  color: #cbd5e1;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.description-html :deep(p) {
+  margin-bottom: 12px;
+  color: #cbd5e1;
+}
+
+.description-html :deep(h1),
+.description-html :deep(h2),
+.description-html :deep(h3),
+.description-html :deep(h4),
+.description-html :deep(h5),
+.description-html :deep(h6) {
+  color: #f8fafc;
+  font-weight: 600;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.description-html :deep(strong),
+.description-html :deep(b) {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.description-html :deep(em),
+.description-html :deep(i) {
+  font-style: italic;
+}
+
+.description-html :deep(ul),
+.description-html :deep(ol) {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.description-html :deep(li) {
+  margin-bottom: 6px;
+}
+
+.description-html :deep(a) {
+  color: #8b5cf6;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.description-html :deep(a:hover) {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+.description-html :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.description-html :deep(blockquote) {
+  border-left: 3px solid rgba(139, 92, 246, 0.5);
+  padding-left: 16px;
+  margin: 12px 0;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.description-html :deep(code) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #c4b5fd;
+}
+
+.description-html :deep(pre) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.description-html :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #cbd5e1;
+}
+
+.show-details-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: all 0.2s;
+  text-align: left;
+  font-weight: 500;
+}
+
+.show-details-btn:hover {
+  color: #8b5cf6;
+}
+
+/* 游戏新闻 */
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.news-item {
+  padding: 16px;
+  background: rgba(20, 20, 23, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.news-item:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+  background: rgba(20, 20, 23, 0.7);
+}
+
+.news-header {
+  margin-bottom: 12px;
+}
+
+.news-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.news-link {
+  color: #f8fafc;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.news-link:hover {
+  color: #8b5cf6;
+}
+
+.news-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.news-author {
+  color: #94a3b8;
+}
+
+.news-date {
+  color: #64748b;
+}
+
+.news-content {
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.show-more-news-btn {
+  margin-top: 8px;
+  padding: 12px 24px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.show-more-news-btn:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #8b5cf6;
+}
+
+.related-games {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.game-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 4px;
+  margin-left: 8px;
+  color: #c4b5fd;
+  font-size: 12px;
+}
+
+/* 基本信息 */
+.basic-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.basic-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.basic-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.basic-value {
+  font-size: 14px;
+  color: #e5e7eb;
+}
+
+/* 成就网格 */
+.achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.achievement-card {
+  background: rgba(15, 15, 19, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  transition: all 0.2s;
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.achievement-card:hover {
+  background: rgba(20, 20, 23, 0.8);
+  border-color: rgba(139, 92, 246, 0.3);
+  transform: translateY(-2px);
+}
+
+.achievement-card.unlocked {
+  border-color: rgba(234, 179, 8, 0.3);
+}
+
+.achievement-card.hidden {
+  cursor: pointer;
+}
+
+.achievement-card.hidden:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+/* 成就卡片出场动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.achievement-icon-wrapper {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+}
+
+.achievement-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.achievement-icon.locked {
+  filter: grayscale(100%);
+  opacity: 0.5;
+}
+
+.achievement-icon-placeholder {
+  width: 100%;
+  height: 100%;
+  background: rgba(20, 20, 23, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.achievement-icon-placeholder.hidden-icon {
+  background: rgba(30, 30, 35, 0.9);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.question-mark {
+  font-size: 32px;
+  font-weight: bold;
+  color: #64748b;
+  user-select: none;
+}
+
+.placeholder-icon {
+  color: #64748b;
+}
+
+.achievement-card.unlocked .placeholder-icon {
+  color: #eab308;
+}
+
+.achievement-info {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.achievement-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #f8fafc;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.achievement-card:not(.unlocked) .achievement-name {
+  color: #64748b;
+}
+
+.achievement-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  line-height: 1.4;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* 渐变消失效果 */
+.fade-out {
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+}
+
+/* 渐变出现效果 */
+.fade-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 隐藏成就显示原内容的渐变动画 */
+.reveal-fade-in {
+  animation: revealFadeIn 0.5s ease-out forwards;
+}
+
+@keyframes revealFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 隐藏成就的剧透提示 */
+.achievement-spoiler-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  color: #94a3b8;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.achievement-spoiler-hint.fade-in {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+
+.achievement-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.unlock-time {
+  color: #8b5cf6;
+}
+
+.unlock-rate {
+  color: #94a3b8;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+}
+
+.empty-icon {
+  margin-bottom: 12px;
+  opacity: 0.3;
+}
+
+/* 价格监控 */
+.sidebar-title {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+  margin-bottom: 16px;
+}
+
+.sidebar-title.clickable-title {
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.sidebar-title.clickable-title:hover {
+  color: #8b5cf6;
+  transform: translateX(2px);
+}
+
+/* 我的游戏数据栏目 */
+.my-game-data-section {
+  position: relative;
+  overflow: hidden;
+}
+
+.my-game-data-content {
+  position: relative;
+  z-index: 2;
+}
+
+.achievement-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+  clip-path: inset(0); /* 确保成就图标不超出外框 */
+}
+
+.achievement-bg-icon {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  left: var(--offset-x);
+  top: var(--offset-y);
+  transform: rotate(var(--rotation));
+  opacity: 0;
+  animation: dropIn 0.6s ease-out var(--delay) forwards;
+}
+
+@keyframes dropIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-100px) rotate(calc(var(--rotation) - 180deg)) scale(0.5);
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0.5;
+    transform: translateY(0) rotate(var(--rotation)) scale(1);
+  }
+}
+
+.achievement-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  filter: grayscale(20%) brightness(1.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.achievement-bg-placeholder {
+  width: 100%;
+  height: 100%;
+  background: rgba(139, 92, 246, 0.4);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.bg-placeholder-icon {
+  color: rgba(139, 92, 246, 0.7);
+}
+
+.my-game-data-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.data-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.data-stat-label {
+  font-size: 12px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.data-stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.price-monitor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.price-current {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.price-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.price-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #f8fafc;
+}
+
+  .price-loading,
+  .price-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 20px;
+    color: #94a3b8;
+    font-size: 14px;
+  }
+
+  .price-error {
+    color: #ef4444;
+  }
+
+  .price-display {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .discount-badge {
+    padding: 2px 8px;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .price-original {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+
+  .original-price {
+    color: #64748b;
+    text-decoration: line-through;
+  }
+
+  .savings {
+    color: #10b981;
+    font-weight: 600;
+  }
+
+  .price-lowest {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .lowest-label {
+    color: #8b5cf6;
+  }
+
+  .price-chart-container {
+    height: 120px;
+    background: rgba(15, 15, 19, 0.6);
+    border-radius: 8px;
+    padding: 12px 8px 8px;
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .price-chart-empty {
+    height: 80px;
+    background: rgba(15, 15, 19, 0.6);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .chart-bars {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+    gap: 4px;
+  }
+
+  .chart-bar-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    gap: 4px;
+  }
+
+  .chart-bar {
+    width: 100%;
+    background: linear-gradient(to top, #8b5cf6, #a78bfa);
+    border-radius: 2px 2px 0 0;
+    min-height: 10%;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .chart-bar:hover {
+    background: linear-gradient(to top, #7c3aed, #8b5cf6);
+    opacity: 0.9;
+  }
+
+  .chart-label {
+    font-size: 10px;
+    color: #64748b;
+    white-space: nowrap;
+  }
+
+  /* 价格提醒对话框 */
+  .dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .dialog-content {
+    background: rgba(20, 20, 23, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    backdrop-filter: blur(20px);
+  }
+
+  .dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .dialog-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f8fafc;
+  }
+
+  .dialog-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .dialog-close:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #f8fafc;
+  }
+
+  .dialog-body {
+    padding: 24px;
+  }
+
+  .game-info-preview {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(15, 15, 19, 0.6);
+    border-radius: 8px;
+    margin-bottom: 24px;
+  }
+
+  .preview-image {
+    width: 60px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  .preview-info {
+    flex: 1;
+  }
+
+  .preview-info h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #f8fafc;
+  }
+
+  .preview-price {
+    font-size: 14px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .preview-original {
+    font-size: 12px;
+    color: #64748b;
+    text-decoration: line-through;
+    margin-top: 4px;
+  }
+
+  .discount-badge-small {
+    padding: 2px 6px;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .subscription-inactive-notice {
+    padding: 12px;
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #fbbf24;
+  }
+
+  .alert-options {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .option-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #e5e7eb;
+    cursor: pointer;
+  }
+
+  .radio-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+
+  .option-input {
+    margin-left: 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .input-field {
+    padding: 10px 12px;
+    background: rgba(15, 15, 19, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: #f8fafc;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: #8b5cf6;
+    background: rgba(20, 20, 23, 0.9);
+  }
+
+  .input-hint {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 20px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .btn-danger {
+    padding: 10px 20px;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #f87171;
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+.price-actions {
+  margin-top: 8px;
+}
+
+/* 成就预览 */
+.achievement-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.achievement-count {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 8px;
+}
+
+.count-label {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.count-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.achievement-icons-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.achievement-icon-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.achievement-icon-preview:hover {
+  transform: scale(1.1);
+  border-color: rgba(139, 92, 246, 0.5);
+  z-index: 10;
+}
+
+.achievement-icon-preview.unlocked {
+  border-color: rgba(234, 179, 8, 0.3);
+}
+
+.achievement-icon-preview.locked {
+  opacity: 0.6;
+}
+
+.achievement-icon-preview.more-achievements {
+  background: rgba(20, 20, 23, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.achievement-icon-preview.more-achievements:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.more-icon {
+  font-size: 32px;
+  font-weight: bold;
+  color: #94a3b8;
+  line-height: 1;
+}
+
+.achievement-icon-small {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.achievement-icon-small.locked {
+  filter: grayscale(100%);
+  opacity: 0.5;
+}
+
+.achievement-icon-placeholder-small {
+  width: 100%;
+  height: 100%;
+  background: rgba(20, 20, 23, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.achievement-icon-placeholder-small.hidden-icon {
+  background: rgba(30, 30, 35, 0.9);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.question-mark-small {
+  font-size: 20px;
+  font-weight: bold;
+  color: #64748b;
+  user-select: none;
+}
+
+.placeholder-icon-small {
+  color: #64748b;
+}
+
+.achievement-icon-preview.unlocked .placeholder-icon-small {
+  color: #eab308;
+}
+
+.empty-state-small {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* 所有成就弹窗 */
+.achievements-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.achievements-modal {
+  background: #1a1a1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease-out;
+}
+
+.achievements-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.achievements-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin: 0;
+}
+
+.achievements-modal-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.achievements-modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.achievements-modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.achievement-platform-group {
+  margin-bottom: 32px;
+}
+
+.achievement-platform-group:last-child {
+  margin-bottom: 0;
+}
+
+.platform-group-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid rgba(139, 92, 246, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-group-count {
+  font-size: 14px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.achievements-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.achievement-modal-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(15, 15, 19, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.achievement-modal-item:hover {
+  background: rgba(20, 20, 23, 0.8);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.achievement-modal-item.unlocked {
+  border-color: rgba(234, 179, 8, 0.3);
+}
+
+.achievement-modal-item.hidden {
+  cursor: pointer;
+}
+
+.achievement-modal-icon-wrapper {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+}
+
+.achievement-icon-modal {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.achievement-icon-modal.locked {
+  filter: grayscale(100%);
+  opacity: 0.5;
+}
+
+.achievement-icon-placeholder-modal {
+  width: 100%;
+  height: 100%;
+  background: rgba(20, 20, 23, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.achievement-icon-placeholder-modal.hidden-icon {
+  background: rgba(30, 30, 35, 0.9);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.question-mark-modal {
+  font-size: 24px;
+  font-weight: bold;
+  color: #64748b;
+  user-select: none;
+}
+
+.placeholder-icon-modal {
+  color: #64748b;
+}
+
+.achievement-modal-item.unlocked .placeholder-icon-modal {
+  color: #eab308;
+}
+
+.achievement-modal-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.achievement-modal-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.achievement-modal-item:not(.unlocked) .achievement-modal-name {
+  color: #64748b;
+}
+
+.achievement-modal-time {
+  font-size: 12px;
+  color: #8b5cf6;
+}
+
+.achievements-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  justify-content: flex-end;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mod-status {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: rgba(100, 116, 139, 0.3);
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.mod-status.enabled {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.mod-thumbnail {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.mod-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mod-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mod-meta {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  gap: 8px;
+}
+
+.mod-downloads {
+  color: #818cf8;
+}
+
+.mod-version {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.mod-toggle {
+  position: relative;
+}
+
+.toggle-switch {
+  display: none;
+}
+
+.toggle-label {
+  display: block;
+  width: 44px;
+  height: 24px;
+  background: rgba(20, 20, 23, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.toggle-label::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: #64748b;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.toggle-switch:checked + .toggle-label {
+  background: #8b5cf6;
+  border-color: #8b5cf6;
+}
+
+.toggle-switch:checked + .toggle-label::after {
+  left: 22px;
+  background: white;
+}
+
+/* 按钮样式 */
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-outline:hover {
+  background: rgba(20, 20, 23, 0.8);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #f8fafc;
+}
+
+.btn-outline.full-width {
+  width: 100%;
+  justify-content: center;
+}
+
+.icon {
+  flex-shrink: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .game-cover {
+    width: 160px;
+    height: 213px;
+  }
+
+  .game-title {
+    font-size: 36px;
+  }
+}
+
+@media (max-width: 768px) {
+  .game-detail-container {
+    padding: 16px;
+  }
+
+  .achievements-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .game-stats {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* 新闻详情弹窗 */
+.news-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.news-modal {
+  background: #1a1a1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease-out;
+}
+
+.news-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.news-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin: 0;
+  flex: 1;
+  padding-right: 16px;
+}
+
+.news-modal-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.news-modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.news-modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.news-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.news-detail-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 14px;
+  color: #94a3b8;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.news-detail-author,
+.news-detail-date {
+  color: #94a3b8;
+}
+
+.news-detail-body {
+  color: #cbd5e1;
+  font-size: 15px;
+  line-height: 1.8;
+  word-wrap: break-word;
+}
+
+.news-detail-body :deep(p) {
+  margin-bottom: 12px;
+  color: #cbd5e1;
+}
+
+.news-detail-body :deep(h1),
+.news-detail-body :deep(h2),
+.news-detail-body :deep(h3),
+.news-detail-body :deep(h4),
+.news-detail-body :deep(h5),
+.news-detail-body :deep(h6) {
+  color: #f8fafc;
+  font-weight: 600;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.news-detail-body :deep(h1) {
+  font-size: 24px;
+}
+
+.news-detail-body :deep(h2) {
+  font-size: 20px;
+}
+
+.news-detail-body :deep(h3) {
+  font-size: 18px;
+}
+
+.news-detail-body :deep(strong),
+.news-detail-body :deep(b) {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.news-detail-body :deep(em),
+.news-detail-body :deep(i) {
+  font-style: italic;
+}
+
+.news-detail-body :deep(ul),
+.news-detail-body :deep(ol) {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.news-detail-body :deep(li) {
+  margin-bottom: 6px;
+  color: #cbd5e1;
+}
+
+.news-detail-body :deep(a) {
+  color: #8b5cf6;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.news-detail-body :deep(a:hover) {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+.news-detail-body :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 12px 0;
+  display: block;
+}
+
+.news-detail-body :deep(blockquote) {
+  border-left: 3px solid rgba(139, 92, 246, 0.5);
+  padding-left: 16px;
+  margin: 12px 0;
+  color: #94a3b8;
+  font-style: italic;
+  background: rgba(20, 20, 23, 0.5);
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+
+.news-detail-body :deep(code) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #c4b5fd;
+}
+
+.news-detail-body :deep(pre) {
+  background: rgba(20, 20, 23, 0.8);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.news-detail-body :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #cbd5e1;
+}
+
+.news-detail-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.news-detail-body :deep(table th),
+.news-detail-body :deep(table td) {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+}
+
+.news-detail-body :deep(table th) {
+  background: rgba(139, 92, 246, 0.1);
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.news-detail-body :deep(table tr:nth-child(even)) {
+  background: rgba(20, 20, 23, 0.3);
+}
+
+.news-detail-body :deep(hr) {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 16px 0;
+}
+
+.news-detail-body :deep(br) {
+  line-height: 1.8;
+}
+
+.news-detail-related {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.news-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  justify-content: flex-end;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>
