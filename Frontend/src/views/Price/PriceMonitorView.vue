@@ -268,7 +268,7 @@ const loadSubscriptions = async () => {
 
 // 跳转到游戏详情页
 const goToGameDetail = (gameId) => {
-  router.push(`/app/game/${gameId}`)
+  router.push({ name: 'StoreDetail', params: { id: gameId } })
 }
 
 // 编辑价格订阅策略

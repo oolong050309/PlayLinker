@@ -35,7 +35,7 @@
 
       <div v-else class="recommendations-grid">
         <div v-for="item in aiItems" :key="item.recommendationId" class="game-card ai-game-card" :style="{ animationDelay: `0.1s` }">
-          <div class="game-card-image" @click="$router.push({ name: 'GameDetail', params: { id: item.gameId } })">
+          <div class="game-card-image" @click="$router.push({ name: 'StoreDetail', params: { id: item.gameId } })">
             <img :src="item.headerImage || noCoverImage" :alt="item.gameName" @error="handleImageError" />
             <div class="game-card-overlay">
               <div class="ai-badge"><span>AI 甄选</span></div>
@@ -74,7 +74,7 @@
 
       <div v-else class="recommendations-grid">
         <div v-for="item in ruleItems" :key="item.recommendationId" class="game-card rule-game-card">
-          <div class="game-card-image" @click="$router.push({ name: 'GameDetail', params: { id: item.gameId } })">
+          <div class="game-card-image" @click="$router.push({ name: 'StoreDetail', params: { id: item.gameId } })">
             <img :src="item.headerImage || noCoverImage" :alt="item.gameName" @error="handleImageError" />
           </div>
           <div class="game-card-content">

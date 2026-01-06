@@ -224,6 +224,7 @@ public class GamesController : ControllerBase
                 .Include(g => g.GamePublishers).ThenInclude(gp => gp.Publisher)
                 .Include(g => g.GameCategories).ThenInclude(gc => gc.Category)
                 .Include(g => g.GameLanguages).ThenInclude(gl => gl.Language)
+                .Include(g => g.GamePlatforms).ThenInclude(gp => gp.Platform)
                 .FirstOrDefaultAsync(g => g.GameId == id);
 
             if (game == null)
@@ -262,6 +263,7 @@ public class GamesController : ControllerBase
                 Categories = game.GameCategories.Select(gc => new CategoryDto { CategoryId = gc.Category?.CategoryId ?? 0, Name = gc.Category?.Name ?? "" }).ToList(),
                 Languages = game.GameLanguages.Select(gl => new LanguageDto { LanguageId = gl.Language?.LanguageId ?? 0, Name = gl.Language?.LanguageName ?? "" }).ToList(),
                 Platforms = new PlatformSupportDto { Windows = game.Windows, Mac = game.Mac, Linux = game.Linux },
+                PlatformIds = game.GamePlatforms.Select(gp => gp.PlatformId).Distinct().ToList(), // 获取所有支持的平台ID
                 ReleaseDate = game.ReleaseDate.ToString("yyyy-MM-dd"),
                 Reviews = new GameReviewsDto { Score = game.ReviewScore, ScoreDesc = game.ReviewScoreDesc, TotalReviews = game.NumReviews, TotalPositive = game.TotalPositive }
             };

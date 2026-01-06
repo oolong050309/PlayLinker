@@ -77,6 +77,12 @@ builder.Services.AddScoped<IAliyunOssService, AliyunOssService>();
 builder.Services.AddHttpClient(); // 通用 HttpClient
 builder.Services.AddScoped<IAiService, AiService>();
 
+// --- Mod 探索服务 ---
+builder.Services.AddScoped<IModExploreService, ModExploreService>();
+
+// --- 用户报表服务 ---
+builder.Services.AddScoped<IUserReportService, UserReportService>();
+
 // --- 价格监控后台服务 ---
 builder.Services.AddHttpClient<PriceMonitoringService>();
 builder.Services.AddHostedService<PriceMonitoringService>();

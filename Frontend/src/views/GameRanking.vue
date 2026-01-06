@@ -81,9 +81,9 @@ const formatNumber = (num) => {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
-// [修复] 使用命名路由跳转，确保匹配 /game/:id
+// 跳转到游戏商店详情页
 const goToDetail = (id) => {
-  router.push({ name: 'GameDetail', params: { id } })
+  router.push({ name: 'StoreDetail', params: { id } })
 }
 
 const handleImageError = (e) => {

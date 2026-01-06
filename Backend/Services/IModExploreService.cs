@@ -26,4 +26,9 @@ public interface IModExploreService
     /// 搜索 Mod
     /// </summary>
     Task<ModExploreResponse> SearchModsAsync(string source, string query, string? domain = null, int page = 1);
+
+    /// <summary>
+    /// 搜索有 Mod 来源的游戏
+    /// </summary>
+    Task<ModGameSearchResponse> SearchModGamesAsync(string query, int page = 1, int pageSize = 10);
 }

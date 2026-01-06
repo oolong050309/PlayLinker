@@ -15,12 +15,6 @@
         </p>
       </div>
       <div class="header-right">
-        <select v-model="selectedPeriod" class="period-select" @change="handlePeriodChange">
-          <option value="week">最近7天</option>
-          <option value="month">最近30天</option>
-          <option value="year">今年</option>
-          <option value="all">全部</option>
-        </select>
         <button class="btn-export" @click="showExportDialog = true">
           <Download class="icon" />
           导出报表
@@ -54,20 +48,6 @@
             <h2 class="profile-name">{{ profile.steamProfileName || profile.username }}</h2>
             <p class="profile-id" v-if="profile.steamId">Steam ID: {{ profile.steamId }}</p>
           </div>
-          <div class="profile-stats">
-            <div class="profile-stat">
-              <span class="stat-value">{{ profile.steamLevel }}</span>
-              <span class="stat-label">等级</span>
-            </div>
-            <div class="profile-stat">
-              <span class="stat-value">{{ profile.badgeCount }}</span>
-              <span class="stat-label">徽章</span>
-            </div>
-            <div class="profile-stat">
-              <span class="stat-value">{{ profile.friendCount }}</span>
-              <span class="stat-label">好友</span>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -92,7 +72,29 @@
             </div>
           </div>
           <div class="stat-value">{{ gameLibrary.totalPlaytimeFormatted }}</div>
-          <div class="stat-desc">最近2周 {{ formatMinutes(gameLibrary.recentPlaytimeMinutes) }}</div>
+          <div class="stat-desc">日均 {{ formatMinutes(gameLibrary.dailyAverageMinutes) }}</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">本周时长</span>
+            <div class="stat-icon cyan">
+              <TrendingUp class="icon" />
+            </div>
+          </div>
+          <div class="stat-value">{{ formatMinutes(gameLibrary.thisWeekPlaytimeMinutes) }}</div>
+          <div class="stat-desc">本月 {{ formatMinutes(gameLibrary.thisMonthPlaytimeMinutes) }}</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">绑定平台</span>
+            <div class="stat-icon blue">
+              <Layers class="icon" />
+            </div>
+          </div>
+          <div class="stat-value">{{ gameLibrary.boundPlatformCount }} 个</div>
+          <div class="stat-desc">跨平台游戏 {{ gameLibrary.crossPlatformGames }} 款</div>
         </div>
 
         <div class="stat-card">
@@ -115,6 +117,71 @@
           </div>
           <div class="stat-value">{{ wishlist.totalItems }}</div>
           <div class="stat-desc">{{ wishlist.onSaleCount }} 款在打折</div>
+        </div>
+      </div>
+
+      <!-- Playtime Trend Chart -->
+      <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="trend-section">
+        <h3 class="section-title">📈 游戏时长趋势（最近14天）</h3>
+        <div class="trend-chart-container">
+          <canvas ref="trendChartRef"></canvas>
+        </div>
+        <!-- 趋势分析摘要 -->
+        <div class="trend-summary">
+          <div class="trend-stat">
+            <span class="trend-stat-label">日均时长</span>
+            <span class="trend-stat-value">{{ dailyAverageFormatted }}</span>
+          </div>
+          <div class="trend-stat">
+            <span class="trend-stat-label">最高单日</span>
+            <span class="trend-stat-value">{{ maxDayPlaytimeFormatted }}</span>
+          </div>
+          <div class="trend-stat">
+            <span class="trend-stat-label">活跃天数</span>
+            <span class="trend-stat-value">{{ activeDaysCount }} 天</span>
+          </div>
+          <div class="trend-stat" :class="trendDirection">
+            <span class="trend-stat-label">趋势</span>
+            <span class="trend-stat-value">{{ trendDirectionText }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weekly Comparison Chart -->
+      <div v-if="gameLibrary.dailyPlaytimeTrend?.length >= 7" class="weekly-section">
+        <h3 class="section-title">📊 周游戏时长对比</h3>
+        <div class="weekly-chart-container">
+          <canvas ref="weeklyChartRef"></canvas>
+        </div>
+      </div>
+
+      <!-- Activity Heatmap -->
+      <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="heatmap-section">
+        <h3 class="section-title">🔥 游戏活跃度</h3>
+        <div class="heatmap-container">
+          <div class="heatmap-weekdays">
+            <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+          </div>
+          <div class="heatmap-grid">
+            <div 
+              v-for="(day, index) in heatmapData" 
+              :key="index" 
+              class="heatmap-cell"
+              :class="getHeatmapClass(day.playtimeMinutes)"
+              :title="`${day.date}: ${formatMinutes(day.playtimeMinutes)}`"
+            >
+              <span class="heatmap-date">{{ day.dayOfMonth }}</span>
+            </div>
+          </div>
+          <div class="heatmap-legend">
+            <span class="legend-label">少</span>
+            <div class="legend-cell level-0"></div>
+            <div class="legend-cell level-1"></div>
+            <div class="legend-cell level-2"></div>
+            <div class="legend-cell level-3"></div>
+            <div class="legend-cell level-4"></div>
+            <span class="legend-label">多</span>
+          </div>
         </div>
       </div>
 
@@ -171,16 +238,11 @@
           <div class="chart-card">
             <h3 class="chart-title">最常玩的游戏</h3>
             <div v-if="gameLibrary.topPlayedGames?.length" class="games-list">
-              <div v-for="(game, index) in gameLibrary.topPlayedGames" :key="game.gameId" class="game-item">
+              <div v-for="(game, index) in gameLibrary.topPlayedGames" :key="game.gameId" class="game-item clickable" @click="goToGameDetail(game.gameId)">
                 <div class="game-rank" :class="getRankClass(index)">{{ index + 1 }}</div>
                 <img :src="game.headerImage || noCoverImage" class="game-image" @error="handleImageError" />
                 <div class="game-info">
                   <h4 class="game-name">{{ game.gameName }}</h4>
-                  <p class="game-meta">
-                    <span v-if="game.achievementsUnlocked !== null">
-                      成就 {{ game.achievementsUnlocked }}/{{ game.achievementsTotal }}
-                    </span>
-                  </p>
                 </div>
                 <div class="game-playtime">
                   <span class="playtime-value">{{ game.playtimeFormatted }}</span>
@@ -245,7 +307,7 @@
           <div class="chart-card">
             <h3 class="chart-title">最近游玩</h3>
             <div v-if="recentPlayed.length" class="recent-list">
-              <div v-for="game in recentPlayed.slice(0, 5)" :key="game.gameId" class="recent-item">
+              <div v-for="game in recentPlayed.slice(0, 5)" :key="game.gameId" class="recent-item clickable" @click="goToGameDetail(game.gameId)">
                 <img :src="game.headerImage || noCoverImage" class="recent-image" @error="handleImageError" />
                 <div class="recent-info">
                   <h4 class="recent-name">{{ game.gameName }}</h4>
@@ -315,13 +377,38 @@
               <h3 class="report-title">月度游戏报告</h3>
               <p class="report-desc">游戏时长、成就、消费等统计</p>
               <div class="report-options">
-                <div class="date-selector">
-                  <select v-model="monthlyYear" class="date-select">
-                    <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-                  </select>
-                  <select v-model="monthlyMonth" class="date-select">
-                    <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
-                  </select>
+                <!-- 月份选择器 -->
+                <div class="month-picker" @click="showMonthPicker = !showMonthPicker">
+                  <Calendar class="picker-icon" />
+                  <span class="picker-value">{{ monthlyYear }}年{{ monthlyMonth }}月</span>
+                  <ChevronDown class="picker-arrow" :class="{ 'rotate': showMonthPicker }" />
+                </div>
+                <!-- 月份选择弹窗 -->
+                <div v-if="showMonthPicker" class="month-picker-dropdown" @click.stop>
+                  <div class="picker-header">
+                    <button class="picker-nav" @click="pickerYear--" :disabled="pickerYear <= currentYear - 4">
+                      <ChevronLeft class="nav-icon" />
+                    </button>
+                    <span class="picker-year">{{ pickerYear }}年</span>
+                    <button class="picker-nav" @click="pickerYear++" :disabled="pickerYear >= currentYear">
+                      <ChevronRight class="nav-icon" />
+                    </button>
+                  </div>
+                  <div class="picker-months">
+                    <button 
+                      v-for="m in 12" 
+                      :key="m" 
+                      class="picker-month"
+                      :class="{ 
+                        'selected': monthlyYear === pickerYear && monthlyMonth === m,
+                        'disabled': isMonthDisabled(pickerYear, m)
+                      }"
+                      :disabled="isMonthDisabled(pickerYear, m)"
+                      @click="selectMonth(pickerYear, m)"
+                    >
+                      {{ m }}月
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -347,16 +434,34 @@
               <h3 class="report-title">年度总结报告</h3>
               <p class="report-desc">年度游戏数据全面分析</p>
               <div class="report-options">
-                <div class="date-selector">
-                  <select v-model="yearlyYear" class="date-select">
-                    <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-                  </select>
+                <!-- 年份选择器 -->
+                <div class="year-picker" @click="showYearPicker = !showYearPicker">
+                  <Calendar class="picker-icon" />
+                  <span class="picker-value">{{ yearlyYear }}年</span>
+                  <ChevronDown class="picker-arrow" :class="{ 'rotate': showYearPicker }" />
+                </div>
+                <!-- 年份选择弹窗 -->
+                <div v-if="showYearPicker" class="year-picker-dropdown" @click.stop>
+                  <div class="picker-years">
+                    <button 
+                      v-for="y in yearlyYearOptions" 
+                      :key="y" 
+                      class="picker-year-btn"
+                      :class="{ 'selected': yearlyYear === y }"
+                      @click="selectYear(y)"
+                    >
+                      {{ y }}年
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
             <div class="report-actions">
               <button class="btn-report pdf" @click="generateYearlyReport('pdf')" :disabled="generating.yearly">
                 <FileText class="btn-icon" /> PDF
+              </button>
+              <button class="btn-report csv" @click="generateYearlyReport('csv')" :disabled="generating.yearly">
+                <FileSpreadsheet class="btn-icon" /> CSV
               </button>
               <button class="btn-report html" @click="generateYearlyReport('html')" :disabled="generating.yearly">
                 <Globe class="btn-icon" /> HTML
@@ -446,21 +551,63 @@
           
           <div class="form-group" v-if="exportForm.type === 'monthly'">
             <label>选择月份</label>
-            <div class="date-row">
-              <select v-model="exportForm.year" class="form-select">
-                <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-              </select>
-              <select v-model="exportForm.month" class="form-select">
-                <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
-              </select>
+            <div class="dialog-picker-wrapper">
+              <div class="month-picker dialog-picker" @click="showExportMonthPicker = !showExportMonthPicker">
+                <Calendar class="picker-icon" />
+                <span class="picker-value">{{ exportForm.year }}年{{ exportForm.month }}月</span>
+                <ChevronDown class="picker-arrow" :class="{ 'rotate': showExportMonthPicker }" />
+              </div>
+              <div v-if="showExportMonthPicker" class="month-picker-dropdown dialog-dropdown" @click.stop>
+                <div class="picker-header">
+                  <button class="picker-nav" @click="exportPickerYear--" :disabled="exportPickerYear <= currentYear - 4">
+                    <ChevronLeft class="nav-icon" />
+                  </button>
+                  <span class="picker-year">{{ exportPickerYear }}年</span>
+                  <button class="picker-nav" @click="exportPickerYear++" :disabled="exportPickerYear >= currentYear">
+                    <ChevronRight class="nav-icon" />
+                  </button>
+                </div>
+                <div class="picker-months">
+                  <button 
+                    v-for="m in 12" 
+                    :key="m" 
+                    class="picker-month"
+                    :class="{ 
+                      'selected': exportForm.year === exportPickerYear && exportForm.month === m,
+                      'disabled': isMonthDisabled(exportPickerYear, m)
+                    }"
+                    :disabled="isMonthDisabled(exportPickerYear, m)"
+                    @click="selectExportMonth(exportPickerYear, m)"
+                  >
+                    {{ m }}月
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           
           <div class="form-group" v-if="exportForm.type === 'yearly'">
             <label>选择年份</label>
-            <select v-model="exportForm.year" class="form-select">
-              <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-            </select>
+            <div class="dialog-picker-wrapper">
+              <div class="year-picker dialog-picker" @click="showExportYearPicker = !showExportYearPicker">
+                <Calendar class="picker-icon" />
+                <span class="picker-value">{{ exportForm.year }}年</span>
+                <ChevronDown class="picker-arrow" :class="{ 'rotate': showExportYearPicker }" />
+              </div>
+              <div v-if="showExportYearPicker" class="year-picker-dropdown dialog-dropdown" @click.stop>
+                <div class="picker-years">
+                  <button 
+                    v-for="y in yearlyYearOptions" 
+                    :key="y" 
+                    class="picker-year-btn"
+                    :class="{ 'selected': exportForm.year === y }"
+                    @click="selectExportYear(y)"
+                  >
+                    {{ y }}年
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div class="form-group">
@@ -487,10 +634,11 @@
 
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { 
   RefreshCw, AlertCircle, User, Gamepad2, Clock, Trophy, Heart,
-  Calendar, Award, Package, FileText, FileSpreadsheet, Globe, Download, Trash2
+  Calendar, Award, Package, FileText, FileSpreadsheet, Globe, Download, Trash2,
+  TrendingUp, Activity, Layers, ChevronDown, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
 import Chart from 'chart.js/auto'
 import noCoverImage from '@/assets/no_cover.png'
@@ -503,6 +651,10 @@ import {
   downloadReport,
   openHtmlReport
 } from '@/api/userReport'
+import { useRouter } from 'vue-router'
+
+// Router
+const router = useRouter()
 
 // Cache key
 const CACHE_KEY = 'user_report_cache'
@@ -510,7 +662,11 @@ const CACHE_EXPIRY = 30 * 60 * 1000 // 30 minutes
 
 // Refs
 const genreChartRef = ref(null)
+const trendChartRef = ref(null)
+const weeklyChartRef = ref(null)
 let genreChart = null
+let trendChart = null
+let weeklyChart = null
 
 const loading = ref(true)
 const refreshing = ref(false)
@@ -518,9 +674,6 @@ const error = ref(null)
 const syncing = ref(false)
 const hasCachedData = ref(false)
 const lastUpdateTime = ref('')
-
-// Time period selector
-const selectedPeriod = ref('all')
 
 // Report generation state
 const generating = ref({
@@ -532,22 +685,94 @@ const generating = ref({
 // Export dialog
 const showExportDialog = ref(false)
 const exporting = ref(false)
-const exportForm = ref({
-  type: 'monthly',
-  year: new Date().getFullYear(),
-  month: new Date().getMonth() + 1,
-  format: 'pdf'
-})
 
 // Report date selectors
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth() + 1
-const monthlyYear = ref(currentYear)
-const monthlyMonth = ref(currentMonth)
-const yearlyYear = ref(currentYear)
 
-// Year options (last 5 years)
-const yearOptions = computed(() => {
+// 获取上个月的年份和月份
+const getLastMonthYearAndMonth = () => {
+  const now = new Date()
+  now.setMonth(now.getMonth() - 1)
+  return {
+    year: now.getFullYear(),
+    month: now.getMonth() + 1
+  }
+}
+
+const lastMonth = getLastMonthYearAndMonth()
+
+const monthlyYear = ref(lastMonth.year)
+const monthlyMonth = ref(lastMonth.month)
+const yearlyYear = ref(currentYear - 1) // 默认选择去年
+
+// 月份/年份选择器状态
+const showMonthPicker = ref(false)
+const showYearPicker = ref(false)
+const pickerYear = ref(lastMonth.year)
+
+// 导出对话框的选择器状态
+const showExportMonthPicker = ref(false)
+const showExportYearPicker = ref(false)
+const exportPickerYear = ref(lastMonth.year)
+
+// 判断月份是否禁用（未完成的月份）
+const isMonthDisabled = (year, month) => {
+  if (year > currentYear) return true
+  if (year === currentYear && month >= currentMonth) return true
+  return false
+}
+
+// 选择月份
+const selectMonth = (year, month) => {
+  monthlyYear.value = year
+  monthlyMonth.value = month
+  exportForm.value.year = year
+  exportForm.value.month = month
+  showMonthPicker.value = false
+}
+
+// 导出对话框选择月份
+const selectExportMonth = (year, month) => {
+  exportForm.value.year = year
+  exportForm.value.month = month
+  showExportMonthPicker.value = false
+}
+
+// 导出对话框选择年份
+const selectExportYear = (year) => {
+  exportForm.value.year = year
+  showExportYearPicker.value = false
+}
+
+// 选择年份
+const selectYear = (year) => {
+  yearlyYear.value = year
+  exportForm.value.year = year
+  showYearPicker.value = false
+}
+
+// 点击外部关闭选择器
+const closePickersOnClickOutside = (e) => {
+  if (!e.target.closest('.month-picker') && !e.target.closest('.month-picker-dropdown')) {
+    showMonthPicker.value = false
+    showExportMonthPicker.value = false
+  }
+  if (!e.target.closest('.year-picker') && !e.target.closest('.year-picker-dropdown')) {
+    showYearPicker.value = false
+    showExportYearPicker.value = false
+  }
+}
+
+const exportForm = ref({
+  type: 'monthly',
+  year: lastMonth.year,
+  month: lastMonth.month,
+  format: 'pdf'
+})
+
+// Year options for monthly report (last 5 years)
+const monthlyYearOptions = computed(() => {
   const years = []
   for (let i = currentYear; i >= currentYear - 4; i--) {
     years.push(i)
@@ -555,11 +780,58 @@ const yearOptions = computed(() => {
   return years
 })
 
+// Month options for monthly report (only completed months)
+const monthlyMonthOptions = computed(() => {
+  const months = []
+  const maxMonth = monthlyYear.value === currentYear ? currentMonth - 1 : 12
+  for (let m = 1; m <= maxMonth; m++) {
+    months.push(m)
+  }
+  return months
+})
+
+// Year options for yearly report (only completed years, excluding current year)
+const yearlyYearOptions = computed(() => {
+  const years = []
+  for (let i = currentYear - 1; i >= currentYear - 5; i--) {
+    years.push(i)
+  }
+  return years
+})
+
+// Watch for monthly year change to reset month if needed
+watch(() => monthlyYear.value, (newYear) => {
+  const maxMonth = newYear === currentYear ? currentMonth - 1 : 12
+  if (monthlyMonth.value > maxMonth) {
+    monthlyMonth.value = maxMonth
+  }
+  // 同步到 exportForm
+  exportForm.value.year = newYear
+  exportForm.value.month = monthlyMonth.value
+})
+
+// Watch for monthly month change
+watch(() => monthlyMonth.value, (newMonth) => {
+  exportForm.value.month = newMonth
+})
+
+// Watch for yearly year change
+watch(() => yearlyYear.value, (newYear) => {
+  exportForm.value.year = newYear
+})
+
+// Watch for report type change to reset year
+watch(() => exportForm.value.type, (newType) => {
+  if (newType === 'yearly') {
+    exportForm.value.year = yearlyYear.value
+  } else if (newType === 'monthly') {
+    exportForm.value.year = monthlyYear.value
+    exportForm.value.month = monthlyMonth.value
+  }
+})
+
 // Available formats based on report type
 const availableFormats = computed(() => {
-  if (exportForm.value.type === 'yearly') {
-    return ['pdf', 'html']
-  }
   return ['pdf', 'csv', 'html']
 })
 
@@ -572,8 +844,15 @@ const gameLibrary = ref({
   playedGames: 0,
   neverPlayedGames: 0,
   recentPlaytimeMinutes: 0,
+  thisWeekPlaytimeMinutes: 0,
+  thisMonthPlaytimeMinutes: 0,
+  dailyAverageMinutes: 0,
+  boundPlatformCount: 0,
+  crossPlatformGames: 0,
+  dailyPlaytimeTrend: [],
   playtimeByGenre: [],
-  topPlayedGames: []
+  topPlayedGames: [],
+  platformStats: []
 })
 const achievements = ref({
   totalAchievements: 0,
@@ -601,6 +880,66 @@ const chartColors = [
   '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
   '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'
 ]
+
+// 趋势分析计算属性
+const dailyAverageFormatted = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return '0分钟'
+  const total = trend.reduce((sum, d) => sum + d.playtimeMinutes, 0)
+  const avg = Math.round(total / trend.length)
+  return formatMinutes(avg)
+})
+
+const maxDayPlaytimeFormatted = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return '0分钟'
+  const max = Math.max(...trend.map(d => d.playtimeMinutes))
+  return formatMinutes(max)
+})
+
+const activeDaysCount = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return 0
+  return trend.filter(d => d.playtimeMinutes > 0).length
+})
+
+const trendDirection = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length || trend.length < 7) return ''
+  const firstHalf = trend.slice(0, Math.floor(trend.length / 2))
+  const secondHalf = trend.slice(Math.floor(trend.length / 2))
+  const firstAvg = firstHalf.reduce((s, d) => s + d.playtimeMinutes, 0) / firstHalf.length
+  const secondAvg = secondHalf.reduce((s, d) => s + d.playtimeMinutes, 0) / secondHalf.length
+  if (secondAvg > firstAvg * 1.1) return 'trend-up'
+  if (secondAvg < firstAvg * 0.9) return 'trend-down'
+  return 'trend-stable'
+})
+
+const trendDirectionText = computed(() => {
+  const dir = trendDirection.value
+  if (dir === 'trend-up') return '📈 上升'
+  if (dir === 'trend-down') return '📉 下降'
+  return '➡️ 平稳'
+})
+
+// 热力图数据
+const heatmapData = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return []
+  return trend.map(d => ({
+    date: new Date(d.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
+    dayOfMonth: new Date(d.date).getDate(),
+    playtimeMinutes: d.playtimeMinutes
+  }))
+})
+
+const getHeatmapClass = (minutes) => {
+  if (minutes === 0) return 'level-0'
+  if (minutes < 30) return 'level-1'
+  if (minutes < 60) return 'level-2'
+  if (minutes < 120) return 'level-3'
+  return 'level-4'
+}
 
 // Cache functions
 const saveToCache = (data) => {
@@ -645,6 +984,13 @@ const formatCacheTime = (timestamp) => {
 // 处理图片加载错误
 const handleImageError = (e) => {
   e.target.src = noCoverImage
+}
+
+// 跳转到游戏详情页面
+const goToGameDetail = (gameId) => {
+  if (gameId) {
+    router.push({ name: 'GameDetail', params: { id: gameId } })
+  }
 }
 
 const applyData = (data) => {
@@ -770,6 +1116,7 @@ const handleSync = async () => {
 }
 
 const initCharts = () => {
+  // 初始化类型分布饼图
   if (genreChartRef.value && gameLibrary.value.playtimeByGenre?.length > 0) {
     const ctx = genreChartRef.value.getContext('2d')
     
@@ -799,6 +1146,136 @@ const initCharts = () => {
                 const minutes = context.raw
                 const hours = Math.floor(minutes / 60)
                 return `${context.label}: ${hours}小时`
+              }
+            }
+          }
+        }
+      }
+    })
+  }
+
+  // 初始化时长趋势折线图
+  if (trendChartRef.value && gameLibrary.value.dailyPlaytimeTrend?.length > 0) {
+    const ctx = trendChartRef.value.getContext('2d')
+    
+    if (trendChart) trendChart.destroy()
+
+    const trendData = gameLibrary.value.dailyPlaytimeTrend
+    
+    trendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: trendData.map(d => {
+          const date = new Date(d.date)
+          return `${date.getMonth() + 1}/${date.getDate()}`
+        }),
+        datasets: [{
+          label: '游戏时长',
+          data: trendData.map(d => d.playtimeMinutes),
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const minutes = context.raw
+                const hours = Math.floor(minutes / 60)
+                const mins = minutes % 60
+                const dayData = trendData[context.dataIndex]
+                let label = hours > 0 ? `${hours}小时${mins}分钟` : `${mins}分钟`
+                if (dayData.gamesPlayed > 0) {
+                  label += ` (${dayData.gamesPlayed}款游戏)`
+                }
+                return label
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: (value) => {
+                const hours = Math.floor(value / 60)
+                return hours > 0 ? `${hours}h` : `${value}m`
+              }
+            }
+          }
+        }
+      }
+    })
+  }
+
+  // 初始化周对比柱状图
+  if (weeklyChartRef.value && gameLibrary.value.dailyPlaytimeTrend?.length >= 7) {
+    const ctx = weeklyChartRef.value.getContext('2d')
+    
+    if (weeklyChart) weeklyChart.destroy()
+
+    const trendData = gameLibrary.value.dailyPlaytimeTrend
+    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    
+    // 按星期几分组统计
+    const weekdayStats = Array(7).fill(0).map(() => ({ total: 0, count: 0 }))
+    trendData.forEach(d => {
+      const dayOfWeek = new Date(d.date).getDay()
+      weekdayStats[dayOfWeek].total += d.playtimeMinutes
+      weekdayStats[dayOfWeek].count++
+    })
+    
+    const avgByWeekday = weekdayStats.map(s => s.count > 0 ? Math.round(s.total / s.count) : 0)
+    // 重新排序：周一到周日
+    const reorderedAvg = [...avgByWeekday.slice(1), avgByWeekday[0]]
+    const reorderedLabels = [...weekdays.slice(1), weekdays[0]]
+    
+    weeklyChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: reorderedLabels,
+        datasets: [{
+          label: '平均游戏时长',
+          data: reorderedAvg,
+          backgroundColor: reorderedAvg.map((v, i) => {
+            const max = Math.max(...reorderedAvg)
+            const intensity = max > 0 ? v / max : 0
+            return `rgba(99, 102, 241, ${0.3 + intensity * 0.7})`
+          }),
+          borderColor: '#6366f1',
+          borderWidth: 1,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const minutes = context.raw
+                return formatMinutes(minutes)
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: (value) => {
+                const hours = Math.floor(value / 60)
+                return hours > 0 ? `${hours}h` : `${value}m`
               }
             }
           }
@@ -1003,13 +1480,6 @@ const getReportTypeIcon = (type) => {
 }
 
 // Period change handler (for future backend implementation)
-const handlePeriodChange = () => {
-  // TODO: 当后端实现差值计算后，这里会根据选择的时间范围重新加载数据
-  console.log('Selected period:', selectedPeriod.value)
-  // 目前只是UI展示，后端还没有实现按时间范围筛选
-  // loadData() // 未来启用
-}
-
 // Export dialog handler
 const handleExport = async () => {
   exporting.value = true
@@ -1050,10 +1520,14 @@ const handleExport = async () => {
 onMounted(() => {
   loadData()
   loadReportHistory()
+  // 添加点击外部关闭选择器的事件监听
+  document.addEventListener('click', closePickersOnClickOutside)
 })
 
 onUnmounted(() => {
   if (genreChart) genreChart.destroy()
+  // 移除事件监听
+  document.removeEventListener('click', closePickersOnClickOutside)
 })
 </script>
 
@@ -1307,9 +1781,191 @@ onUnmounted(() => {
 /* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+/* Trend Section */
+.trend-section {
+  margin-bottom: 24px;
+}
+
+.trend-chart-container {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+  height: 280px;
+}
+
+.trend-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.trend-stat {
+  background: rgba(24, 24, 27, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.trend-stat-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.trend-stat-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.trend-stat.trend-up .trend-stat-value {
+  color: #10b981;
+}
+
+.trend-stat.trend-down .trend-stat-value {
+  color: #ef4444;
+}
+
+.trend-stat.trend-stable .trend-stat-value {
+  color: #6366f1;
+}
+
+/* Weekly Section */
+.weekly-section {
+  margin-bottom: 24px;
+}
+
+.weekly-chart-container {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+  height: 220px;
+}
+
+/* Heatmap Section */
+.heatmap-section {
+  margin-bottom: 24px;
+}
+
+.heatmap-container {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.heatmap-weekdays {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+.heatmap-weekdays span {
+  width: 32px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.heatmap-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.heatmap-cell {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.1);
+}
+
+.heatmap-date {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.heatmap-cell.level-0 {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.heatmap-cell.level-1 {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.heatmap-cell.level-2 {
+  background: rgba(99, 102, 241, 0.4);
+}
+
+.heatmap-cell.level-3 {
+  background: rgba(99, 102, 241, 0.6);
+}
+
+.heatmap-cell.level-4 {
+  background: rgba(99, 102, 241, 0.9);
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.heatmap-legend .legend-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0 4px;
+}
+
+.heatmap-legend .legend-cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+}
+
+.heatmap-legend .legend-cell.level-0 {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.heatmap-legend .legend-cell.level-1 {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.heatmap-legend .legend-cell.level-2 {
+  background: rgba(99, 102, 241, 0.4);
+}
+
+.heatmap-legend .legend-cell.level-3 {
+  background: rgba(99, 102, 241, 0.6);
+}
+
+.heatmap-legend .legend-cell.level-4 {
+  background: rgba(99, 102, 241, 0.9);
 }
 
 /* Platform Stats Section */
@@ -1424,6 +2080,9 @@ onUnmounted(() => {
 .stat-icon.emerald { background: rgba(16, 185, 129, 0.2); color: #34d399; }
 .stat-icon.amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
 .stat-icon.rose { background: rgba(244, 63, 94, 0.2); color: #fb7185; }
+.stat-icon.cyan { background: rgba(6, 182, 212, 0.2); color: #22d3ee; }
+.stat-icon.purple { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+.stat-icon.blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
 
 .stat-icon .icon {
   width: 20px;
@@ -1526,6 +2185,14 @@ onUnmounted(() => {
 
 .game-item:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.game-item.clickable {
+  cursor: pointer;
+}
+
+.game-item.clickable:hover {
+  background: rgba(99, 102, 241, 0.15);
 }
 
 .game-rank {
@@ -1640,6 +2307,17 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.recent-item.clickable {
+  cursor: pointer;
+}
+
+.recent-item.clickable:hover {
+  background: rgba(99, 102, 241, 0.15);
 }
 
 .recent-image {
@@ -2036,7 +2714,7 @@ onUnmounted(() => {
 /* Responsive */
 @media (max-width: 1200px) {
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   
   .content-grid {
@@ -2055,11 +2733,15 @@ onUnmounted(() => {
   }
   
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
   
   .wishlist-grid {
     grid-template-columns: 1fr;
+  }
+  
+  .trend-chart-container {
+    height: 220px;
   }
 }
 
@@ -2138,6 +2820,186 @@ onUnmounted(() => {
 
 .report-options {
   margin-top: 8px;
+  position: relative;
+}
+
+/* 月份选择器样式 */
+.month-picker,
+.year-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.month-picker:hover,
+.year-picker:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--primary-color);
+}
+
+.picker-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--primary-color);
+}
+
+.picker-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.picker-arrow {
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.picker-arrow.rotate {
+  transform: rotate(180deg);
+}
+
+/* 月份选择弹窗 */
+.month-picker-dropdown,
+.year-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 100;
+  background: #1f1f23;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: dropdownFadeIn 0.2s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.picker-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.picker-nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.picker-nav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-primary);
+}
+
+.picker-year {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.picker-months {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 12px;
+}
+
+.picker-month {
+  padding: 10px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.picker-month:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.picker-month.selected {
+  background: var(--primary-color);
+  color: white;
+  font-weight: 500;
+}
+
+.picker-month.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* 年份选择弹窗 */
+.picker-years {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 12px;
+  min-width: 180px;
+}
+
+.picker-year-btn {
+  padding: 12px 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.picker-year-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.picker-year-btn.selected {
+  background: var(--primary-color);
+  color: white;
+  font-weight: 500;
 }
 
 .date-selector {
@@ -2315,6 +3177,53 @@ onUnmounted(() => {
 
 .date-row .form-select {
   flex: 1;
+}
+
+.dialog-picker-wrapper {
+  position: relative;
+}
+
+.dialog-picker {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 10px 14px;
+}
+
+.dialog-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  z-index: 1001;
+}
+
+.picker-years {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 12px;
+}
+
+.picker-year-btn {
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.picker-year-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.picker-year-btn.selected {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
 }
 
 .format-options {

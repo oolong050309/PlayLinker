@@ -55,6 +55,7 @@ public class GameDetailDto
     public List<CategoryDto> Categories { get; set; } = new();
     public List<LanguageDto> Languages { get; set; } = new();
     public PlatformSupportDto Platforms { get; set; } = new();
+    public List<int> PlatformIds { get; set; } = new(); // 游戏支持的所有平台ID（Steam、Xbox等）
     public string ReleaseDate { get; set; } = string.Empty;
     public GameReviewsDto Reviews { get; set; } = new();
 }

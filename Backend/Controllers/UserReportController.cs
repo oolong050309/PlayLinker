@@ -307,6 +307,28 @@ public class UserReportController : ControllerBase
     }
 
     /// <summary>
+    /// 生成年度报告 CSV
+    /// </summary>
+    [HttpGet("reports/yearly/csv")]
+    public async Task<IActionResult> GenerateYearlyReportCsv([FromQuery] int? year)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == 0) return Unauthorized();
+
+        try
+        {
+            var targetYear = year ?? DateTime.Now.Year;
+            var csv = await _reportGenerationService.GenerateYearlyReportCsv(userId, targetYear);
+            return File(csv, "text/csv; charset=utf-8", $"yearly_report_{targetYear}.csv");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "生成年度CSV报告失败");
+            return StatusCode(500, "生成报告失败");
+        }
+    }
+
+    /// <summary>
     /// 生成年度报告 HTML
     /// </summary>
     [HttpGet("reports/yearly/html")]

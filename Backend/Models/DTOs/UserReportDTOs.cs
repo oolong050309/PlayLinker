@@ -84,6 +84,36 @@ public class GameLibrarySummaryDto
     public int RecentPlaytimeMinutes { get; set; }
     
     /// <summary>
+    /// 本周游玩时长（分钟）
+    /// </summary>
+    public int ThisWeekPlaytimeMinutes { get; set; }
+    
+    /// <summary>
+    /// 本月游玩时长（分钟）
+    /// </summary>
+    public int ThisMonthPlaytimeMinutes { get; set; }
+    
+    /// <summary>
+    /// 日均游玩时长（分钟，基于最近30天）
+    /// </summary>
+    public int DailyAverageMinutes { get; set; }
+    
+    /// <summary>
+    /// 绑定的平台数量
+    /// </summary>
+    public int BoundPlatformCount { get; set; }
+    
+    /// <summary>
+    /// 跨平台游戏数（在多个平台拥有的游戏）
+    /// </summary>
+    public int CrossPlatformGames { get; set; }
+    
+    /// <summary>
+    /// 每日游戏时长趋势（最近14天）
+    /// </summary>
+    public List<DailyPlaytimeDto> DailyPlaytimeTrend { get; set; } = new();
+    
+    /// <summary>
     /// 游戏时长分布（按类型）
     /// </summary>
     public List<PlaytimeByGenreDto> PlaytimeByGenre { get; set; } = new();
@@ -97,6 +127,27 @@ public class GameLibrarySummaryDto
     /// 各平台统计
     /// </summary>
     public List<PlatformStatsDto> PlatformStats { get; set; } = new();
+}
+
+/// <summary>
+/// 每日游戏时长
+/// </summary>
+public class DailyPlaytimeDto
+{
+    /// <summary>
+    /// 日期 (yyyy-MM-dd)
+    /// </summary>
+    public string Date { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// 当日游玩时长（分钟）
+    /// </summary>
+    public int PlaytimeMinutes { get; set; }
+    
+    /// <summary>
+    /// 当日游玩的游戏数
+    /// </summary>
+    public int GamesPlayed { get; set; }
 }
 
 /// <summary>

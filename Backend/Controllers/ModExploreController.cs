@@ -116,6 +116,37 @@ public class ModExploreController : ControllerBase
     }
 
     /// <summary>
+    /// 搜索有 Mod 来源的游戏
+    /// </summary>
+    /// <param name="query">搜索关键词</param>
+    /// <param name="page">页码</param>
+    /// <param name="pageSize">每页数量</param>
+    /// <returns>游戏列表</returns>
+    [HttpGet("games/search")]
+    [ProducesResponseType(typeof(ApiResponse<ModGameSearchResponse>), 200)]
+    public async Task<ActionResult<ApiResponse<ModGameSearchResponse>>> SearchModGames(
+        [FromQuery] string query,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return Ok(ApiResponse<ModGameSearchResponse>.SuccessResponse(new ModGameSearchResponse()));
+            }
+
+            var result = await _modExploreService.SearchModGamesAsync(query, page, pageSize);
+            return Ok(ApiResponse<ModGameSearchResponse>.SuccessResponse(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching mod games with query {Query}", query);
+            return StatusCode(500, ApiResponse<ModGameSearchResponse>.ErrorResponse("ERR_INTERNAL", "搜索游戏失败"));
+        }
+    }
+
+    /// <summary>
     /// 搜索 Mod
     /// </summary>
     /// <param name="source">Mod来源</param>

@@ -46,9 +46,21 @@ export const searchMods = (source, query, domain = null, page = 1) => {
   return api.get('/mod-explore/search', { params: { source, query, domain, page } })
 }
 
+/**
+ * 搜索有 Mod 来源的游戏
+ * @param {string} query 搜索关键词
+ * @param {number} page 页码
+ * @param {number} pageSize 每页数量
+ * @returns {Promise}
+ */
+export const searchModGames = (query, page = 1, pageSize = 10) => {
+  return api.get('/mod-explore/games/search', { params: { query, page, pageSize } })
+}
+
 export default {
   getGameModSources,
   getModList,
   getModDetail,
-  searchMods
+  searchMods,
+  searchModGames
 }

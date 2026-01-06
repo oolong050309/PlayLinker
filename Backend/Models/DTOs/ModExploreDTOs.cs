@@ -88,3 +88,25 @@ public class ModSourceInfo
     public string DisplayName { get; set; } = string.Empty;
     public string IconUrl { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// 有 Mod 来源的游戏搜索结果
+/// </summary>
+public class ModGameSearchResponse
+{
+    public List<ModGameItemDto> Items { get; set; } = new();
+    public int Total { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+/// <summary>
+/// 有 Mod 来源的游戏项
+/// </summary>
+public class ModGameItemDto
+{
+    public long GameId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? HeaderImage { get; set; }
+    public List<string> ModSources { get; set; } = new();
+}

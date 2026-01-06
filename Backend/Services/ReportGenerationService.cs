@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PlayLinker.Data;
+using PlayLinker.Models.Entities;
 using System.Text;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -19,35 +20,137 @@ public class ReportGenerationService
     }
 
     /// <summary>
+    /// 生成空报告 HTML（当没有数据时）
+    /// </summary>
+    private string GenerateEmptyReportHtml(DateTime startDate, DateTime endDate, string message)
+    {
+        return $@"
+<!DOCTYPE html>
+<html lang='zh-CN'>
+<head>
+    <meta charset='UTF-8'>
+    <title>游戏报告</title>
+    <style>
+        body {{ font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f5f5f5; padding: 40px; }}
+        .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 60px; border-radius: 10px; text-align: center; }}
+        h1 {{ color: #666; margin-bottom: 20px; }}
+        p {{ color: #999; font-size: 1.2em; }}
+        .period {{ color: #aaa; margin-top: 20px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>📊 游戏报告</h1>
+        <p>{message}</p>
+        <p class='period'>{startDate:yyyy-MM-dd} - {endDate:yyyy-MM-dd}</p>
+        <p style='margin-top: 40px; color: #ccc;'>请先绑定 Steam 或其他游戏平台账号</p>
+    </div>
+</body>
+</html>";
+    }
+
+    /// <summary>
     /// 生成HTML格式的月度游戏报告
     /// </summary>
     public async Task<string> GenerateMonthlyReportHtml(int userId, DateTime startDate, DateTime endDate)
     {
-        // 查询数据
-        var gameRecords = await _context.UserPlatformLibraries
-            .Include(r => r.Game)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
             .ToListAsync();
 
+        if (!platformUserIds.Any())
+        {
+            return GenerateEmptyReportHtml(startDate, endDate, "未绑定任何游戏平台");
+        }
+
+        // 从 user_playtime_history 表计算月度时长增量
+        var historyRecords = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+            .Where(h => h.UserId == userId 
+                && h.RecordDate >= startDate 
+                && h.RecordDate <= endDate)
+            .OrderBy(h => h.GameId)
+            .ThenBy(h => h.RecordDate)
+            .ToListAsync();
+
+        // 获取所有相关的平台信息
+        var platformIds = historyRecords.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 按游戏分组计算月度增量
+        var gamePlaytimeDict = new Dictionary<int, (string gameName, string platformName, int playtimeMinutes)>();
+        
+        foreach (var group in historyRecords.GroupBy(h => new { h.GameId, h.PlatformId }))
+        {
+            var records = group.OrderBy(h => h.RecordDate).ToList();
+            if (records.Count == 0) continue;
+
+            var firstRecord = records.First();
+            var lastRecord = records.Last();
+            
+            // 计算增量：最后一天的总时长 - 第一天的总时长
+            var playtimeIncrease = lastRecord.PlaytimeForever - firstRecord.PlaytimeForever;
+            
+            // 如果只有一条记录，说明是本月新增的游戏，使用该记录的时长
+            if (records.Count == 1)
+            {
+                playtimeIncrease = firstRecord.PlaytimeForever;
+            }
+            
+            if (playtimeIncrease > 0)
+            {
+                var gameId = (int)group.Key.GameId;
+                var gameName = firstRecord.Game?.Name ?? "未知游戏";
+                var platformName = platforms.GetValueOrDefault(group.Key.PlatformId, "未知平台");
+                
+                if (gamePlaytimeDict.ContainsKey(gameId))
+                {
+                    var existing = gamePlaytimeDict[gameId];
+                    gamePlaytimeDict[gameId] = (existing.gameName, existing.platformName, existing.playtimeMinutes + playtimeIncrease);
+                }
+                else
+                {
+                    gamePlaytimeDict[gameId] = (gameName, platformName, playtimeIncrease);
+                }
+            }
+        }
+
+        // 查询月度成就（如果有 UnlockTime 字段）
         var achievements = await _context.UserAchievements
             .Include(a => a.Achievement)
             .Where(a => a.UserId == userId && a.Unlocked)
             .ToListAsync();
+        
+        // 尝试筛选月度成就（如果有时间字段）
+        var monthlyAchievements = achievements; // 暂时使用全部成就，因为表结构可能没有解锁时间
 
         // 计算统计数据
-        var totalMinutes = gameRecords.Sum(r => r.PlaytimeMinutes);
+        var totalMinutes = gamePlaytimeDict.Values.Sum(v => v.playtimeMinutes);
         var totalHours = Math.Round(totalMinutes / 60.0, 1);
-        var totalGames = gameRecords.Count;
-        var totalAchievements = achievements.Count;
+        var totalGames = gamePlaytimeDict.Count;
+        var totalAchievements = monthlyAchievements.Count;
+
+        // 如果没有任何游戏数据
+        if (totalGames == 0)
+        {
+            return GenerateEmptyReportHtml(startDate, endDate, "本月暂无游戏时长数据");
+        }
 
         // 游戏排行
-        var topGames = gameRecords
-            .OrderByDescending(r => r.PlaytimeMinutes)
+        var topGames = gamePlaytimeDict
+            .OrderByDescending(kv => kv.Value.playtimeMinutes)
             .Take(10)
+            .Select(kv => new
+            {
+                GameName = kv.Value.gameName,
+                PlatformName = kv.Value.platformName,
+                PlaytimeMinutes = kv.Value.playtimeMinutes
+            })
             .ToList();
 
         // 生成HTML
@@ -219,8 +322,8 @@ public class ReportGenerationService
                     {string.Join("", topGames.Select((r, i) => $@"
                     <tr>
                         <td class='rank'>#{i + 1}</td>
-                        <td>{r.Game?.Name ?? "Unknown"}</td>
-                        <td>{r.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"}</td>
+                        <td>{r.GameName}</td>
+                        <td>{r.PlatformName}</td>
                         <td>{Math.Round(r.PlaytimeMinutes / 60.0, 1)} 小时</td>
                         <td>{(totalMinutes > 0 ? Math.Round((decimal)r.PlaytimeMinutes / totalMinutes * 100, 1) : 0)}%</td>
                     </tr>"))}
@@ -251,16 +354,60 @@ public class ReportGenerationService
     /// </summary>
     public async Task<byte[]> GenerateMonthlyReportCsv(int userId, DateTime startDate, DateTime endDate)
     {
-        // 查询数据
-        var gameRecords = await _context.UserPlatformLibraries
-            .Include(r => r.Game)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
-            .OrderByDescending(r => r.PlaytimeMinutes)
+        // 从 user_playtime_history 表计算月度时长增量
+        var historyRecords = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+            .Where(h => h.UserId == userId 
+                && h.RecordDate >= startDate 
+                && h.RecordDate <= endDate)
+            .OrderBy(h => h.GameId)
+            .ThenBy(h => h.RecordDate)
             .ToListAsync();
+
+        // 获取所有相关的平台信息
+        var platformIds = historyRecords.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 按游戏分组计算月度增量
+        var gamePlaytimeDict = new Dictionary<int, (string gameName, string platformName, int playtimeMinutes)>();
+        
+        foreach (var group in historyRecords.GroupBy(h => new { h.GameId, h.PlatformId }))
+        {
+            var records = group.OrderBy(h => h.RecordDate).ToList();
+            if (records.Count == 0) continue;
+
+            var firstRecord = records.First();
+            var lastRecord = records.Last();
+            
+            var playtimeIncrease = lastRecord.PlaytimeForever - firstRecord.PlaytimeForever;
+            if (records.Count == 1)
+            {
+                playtimeIncrease = firstRecord.PlaytimeForever;
+            }
+            
+            if (playtimeIncrease > 0)
+            {
+                var gameId = (int)group.Key.GameId;
+                var gameName = firstRecord.Game?.Name ?? "未知游戏";
+                var platformName = platforms.GetValueOrDefault(group.Key.PlatformId, "未知平台");
+                
+                if (gamePlaytimeDict.ContainsKey(gameId))
+                {
+                    var existing = gamePlaytimeDict[gameId];
+                    gamePlaytimeDict[gameId] = (existing.gameName, existing.platformName, existing.playtimeMinutes + playtimeIncrease);
+                }
+                else
+                {
+                    gamePlaytimeDict[gameId] = (gameName, platformName, playtimeIncrease);
+                }
+            }
+        }
+
+        var gameRecords = gamePlaytimeDict
+            .OrderByDescending(kv => kv.Value.playtimeMinutes)
+            .ToList();
 
         var csv = new StringBuilder();
         
@@ -272,10 +419,11 @@ public class ReportGenerationService
         csv.AppendLine();
         
         // 总体统计
+        var totalMinutes = gamePlaytimeDict.Values.Sum(v => v.playtimeMinutes);
         csv.AppendLine("总体统计");
         csv.AppendLine("指标,数值");
-        csv.AppendLine($"总游玩时长（小时）,{Math.Round(gameRecords.Sum(r => r.PlaytimeMinutes) / 60.0, 1)}");
-        csv.AppendLine($"游戏数量,{gameRecords.Count}");
+        csv.AppendLine($"总游玩时长（小时）,{Math.Round(totalMinutes / 60.0, 1)}");
+        csv.AppendLine($"游戏数量,{gamePlaytimeDict.Count}");
         csv.AppendLine();
         
         // 游戏详情
@@ -285,7 +433,7 @@ public class ReportGenerationService
         int rank = 1;
         foreach (var record in gameRecords)
         {
-            csv.AppendLine($"{rank},{record.Game?.Name ?? "Unknown"},{record.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"},{Math.Round(record.PlaytimeMinutes / 60.0, 1)},{record.PlaytimeMinutes}");
+            csv.AppendLine($"{rank},{record.Value.gameName},{record.Value.platformName},{Math.Round(record.Value.playtimeMinutes / 60.0, 1)},{record.Value.playtimeMinutes}");
             rank++;
         }
         
@@ -303,30 +451,77 @@ public class ReportGenerationService
         // 设置QuestPDF许可证（社区版免费）
         QuestPDF.Settings.License = LicenseType.Community;
 
-        // 查询数据
-        var gameRecords = await _context.UserPlatformLibraries
-            .Include(r => r.Game)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+        // 从 user_playtime_history 表计算月度时长增量
+        var historyRecords = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+            .Where(h => h.UserId == userId 
+                && h.RecordDate >= startDate 
+                && h.RecordDate <= endDate)
+            .OrderBy(h => h.GameId)
+            .ThenBy(h => h.RecordDate)
             .ToListAsync();
+
+        // 获取所有相关的平台信息
+        var platformIds = historyRecords.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 按游戏分组计算月度增量
+        var gamePlaytimeDict = new Dictionary<int, (string gameName, string platformName, int playtimeMinutes)>();
+        
+        foreach (var group in historyRecords.GroupBy(h => new { h.GameId, h.PlatformId }))
+        {
+            var records = group.OrderBy(h => h.RecordDate).ToList();
+            if (records.Count == 0) continue;
+
+            var firstRecord = records.First();
+            var lastRecord = records.Last();
+            
+            var playtimeIncrease = lastRecord.PlaytimeForever - firstRecord.PlaytimeForever;
+            if (records.Count == 1)
+            {
+                playtimeIncrease = firstRecord.PlaytimeForever;
+            }
+            
+            if (playtimeIncrease > 0)
+            {
+                var gameId = (int)group.Key.GameId;
+                var gameName = firstRecord.Game?.Name ?? "未知游戏";
+                var platformName = platforms.GetValueOrDefault(group.Key.PlatformId, "未知平台");
+                
+                if (gamePlaytimeDict.ContainsKey(gameId))
+                {
+                    var existing = gamePlaytimeDict[gameId];
+                    gamePlaytimeDict[gameId] = (existing.gameName, existing.platformName, existing.playtimeMinutes + playtimeIncrease);
+                }
+                else
+                {
+                    gamePlaytimeDict[gameId] = (gameName, platformName, playtimeIncrease);
+                }
+            }
+        }
 
         var achievements = await _context.UserAchievements
             .Where(a => a.UserId == userId && a.Unlocked)
             .ToListAsync();
 
         // 计算统计数据
-        var totalMinutes = gameRecords.Sum(r => r.PlaytimeMinutes);
+        var totalMinutes = gamePlaytimeDict.Values.Sum(v => v.playtimeMinutes);
         var totalHours = Math.Round(totalMinutes / 60.0, 1);
-        var totalGames = gameRecords.Count;
+        var totalGames = gamePlaytimeDict.Count;
         var totalAchievements = achievements.Count;
 
         // 游戏排行
-        var topGames = gameRecords
-            .OrderByDescending(r => r.PlaytimeMinutes)
+        var topGames = gamePlaytimeDict
+            .OrderByDescending(kv => kv.Value.playtimeMinutes)
             .Take(10)
+            .Select(kv => new
+            {
+                GameName = kv.Value.gameName,
+                PlatformName = kv.Value.platformName,
+                PlaytimeMinutes = kv.Value.playtimeMinutes
+            })
             .ToList();
 
         // 生成PDF
@@ -440,9 +635,9 @@ public class ReportGenerationService
                                 table.Cell().Background(bgColor).Padding(8)
                                     .Text($"#{rank}").FontColor(Colors.Green.Medium).SemiBold();
                                 table.Cell().Background(bgColor).Padding(8)
-                                    .Text(game.Game?.Name ?? "Unknown");
+                                    .Text(game.GameName);
                                 table.Cell().Background(bgColor).Padding(8)
-                                    .Text(game.PlayerPlatform?.Platform?.PlatformName ?? "Unknown");
+                                    .Text(game.PlatformName);
                                 table.Cell().Background(bgColor).Padding(8)
                                     .Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}h");
                                 table.Cell().Background(bgColor).Padding(8)
@@ -494,45 +689,102 @@ public class ReportGenerationService
         var startDate = new DateTime(year, 1, 1);
         var endDate = new DateTime(year, 12, 31);
 
-        // 查询数据
-        var gameRecords = await _context.UserPlatformLibraries
-            .Include(r => r.Game)
-            .ThenInclude(g => g.GameGenres)
-            .ThenInclude(gg => gg.Genre)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+        // 从 user_playtime_history 表计算年度时长增量
+        var historyRecords = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+                .ThenInclude(g => g.GameGenres)
+                    .ThenInclude(gg => gg.Genre)
+            .Where(h => h.UserId == userId 
+                && h.RecordDate >= startDate 
+                && h.RecordDate <= endDate)
+            .OrderBy(h => h.GameId)
+            .ThenBy(h => h.RecordDate)
             .ToListAsync();
+
+        if (!historyRecords.Any())
+        {
+            return GenerateEmptyReportHtml(startDate, endDate, "本年度暂无游戏时长数据");
+        }
+
+        // 获取所有相关的平台信息
+        var platformIds = historyRecords.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 按游戏分组计算年度增量
+        var gamePlaytimeDict = new Dictionary<int, (string gameName, string platformName, int playtimeMinutes, Game? game)>();
+        
+        foreach (var group in historyRecords.GroupBy(h => new { h.GameId, h.PlatformId }))
+        {
+            var records = group.OrderBy(h => h.RecordDate).ToList();
+            if (records.Count == 0) continue;
+
+            var firstRecord = records.First();
+            var lastRecord = records.Last();
+            
+            var playtimeIncrease = lastRecord.PlaytimeForever - firstRecord.PlaytimeForever;
+            if (records.Count == 1)
+            {
+                playtimeIncrease = firstRecord.PlaytimeForever;
+            }
+            
+            if (playtimeIncrease > 0)
+            {
+                var gameId = (int)group.Key.GameId;
+                var gameName = firstRecord.Game?.Name ?? "未知游戏";
+                var platformName = platforms.GetValueOrDefault(group.Key.PlatformId, "未知平台");
+                
+                if (gamePlaytimeDict.ContainsKey(gameId))
+                {
+                    var existing = gamePlaytimeDict[gameId];
+                    gamePlaytimeDict[gameId] = (existing.gameName, existing.platformName, existing.playtimeMinutes + playtimeIncrease, existing.game);
+                }
+                else
+                {
+                    gamePlaytimeDict[gameId] = (gameName, platformName, playtimeIncrease, firstRecord.Game);
+                }
+            }
+        }
 
         var achievements = await _context.UserAchievements
             .Include(a => a.Achievement)
-            .ThenInclude(a => a.Game)
+                .ThenInclude(a => a.Game)
             .Where(a => a.UserId == userId && a.Unlocked)
             .ToListAsync();
 
         // 计算统计数据
-        var totalMinutes = gameRecords.Sum(r => r.PlaytimeMinutes);
+        var totalMinutes = gamePlaytimeDict.Values.Sum(v => v.playtimeMinutes);
         var totalHours = Math.Round(totalMinutes / 60.0, 1);
-        var totalGames = gameRecords.Count;
-        var playedGames = gameRecords.Count(r => r.PlaytimeMinutes > 0);
+        var totalGames = gamePlaytimeDict.Count;
+        var playedGames = gamePlaytimeDict.Count(g => g.Value.playtimeMinutes > 0);
         var totalAchievements = achievements.Count;
 
         // 最常玩的游戏
-        var topGame = gameRecords.OrderByDescending(r => r.PlaytimeMinutes).FirstOrDefault();
+        var topGameEntry = gamePlaytimeDict.OrderByDescending(kv => kv.Value.playtimeMinutes).FirstOrDefault();
+        var topGameName = topGameEntry.Value.gameName ?? "无";
+        var topGameHours = topGameEntry.Value.playtimeMinutes > 0 ? Math.Round(topGameEntry.Value.playtimeMinutes / 60.0, 1) : 0;
 
         // 按类型统计
-        var genreStats = gameRecords
-            .SelectMany(r => r.Game.GameGenres.Select(gg => new { Genre = gg.Genre.Name, r.PlaytimeMinutes }))
+        var genreStats = gamePlaytimeDict.Values
+            .Where(v => v.game is not null)
+            .SelectMany(v => v.game!.GameGenres.Select(gg => new { Genre = gg.Genre?.Name ?? "未知", Minutes = v.playtimeMinutes }))
             .GroupBy(x => x.Genre)
-            .Select(g => new { Genre = g.Key, Minutes = g.Sum(x => x.PlaytimeMinutes) })
+            .Select(g => new { Genre = g.Key, Minutes = g.Sum(x => x.Minutes) })
             .OrderByDescending(x => x.Minutes)
             .Take(5)
             .ToList();
 
         // 游戏排行
-        var topGames = gameRecords
-            .OrderByDescending(r => r.PlaytimeMinutes)
+        var topGames = gamePlaytimeDict
+            .OrderByDescending(kv => kv.Value.playtimeMinutes)
             .Take(10)
+            .Select(kv => new
+            {
+                GameName = kv.Value.gameName,
+                PlatformName = kv.Value.platformName,
+                PlaytimeMinutes = kv.Value.playtimeMinutes
+            })
             .ToList();
 
         var html = $@"
@@ -592,11 +844,11 @@ public class ReportGenerationService
             </div>
         </div>
 
-        {(topGame != null ? $@"
+        {(topGameEntry.Value.playtimeMinutes > 0 ? $@"
         <div class='highlight-card'>
             <h3>🏆 年度最爱游戏</h3>
-            <div class='game-name'>{topGame.Game?.Name ?? "Unknown"}</div>
-            <div class='hours'>游玩 {Math.Round(topGame.PlaytimeMinutes / 60.0, 1)} 小时</div>
+            <div class='game-name'>{topGameName}</div>
+            <div class='hours'>游玩 {topGameHours} 小时</div>
         </div>" : "")}
 
         <div class='section'>
@@ -623,7 +875,7 @@ public class ReportGenerationService
                     {string.Join("", topGames.Select((r, i) => $@"
                     <tr>
                         <td class='rank'>#{i + 1}</td>
-                        <td>{r.Game?.Name ?? "Unknown"}</td>
+                        <td>{r.GameName}</td>
                         <td>{Math.Round(r.PlaytimeMinutes / 60.0, 1)} 小时</td>
                     </tr>"))}
                 </tbody>
@@ -647,23 +899,80 @@ public class ReportGenerationService
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
-        var gameRecords = await _context.UserPlatformLibraries
-            .Include(r => r.Game)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+        var startDate = new DateTime(year, 1, 1);
+        var endDate = new DateTime(year, 12, 31);
+
+        // 从 user_playtime_history 表计算年度时长增量
+        var historyRecords = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+            .Where(h => h.UserId == userId 
+                && h.RecordDate >= startDate 
+                && h.RecordDate <= endDate)
+            .OrderBy(h => h.GameId)
+            .ThenBy(h => h.RecordDate)
             .ToListAsync();
+
+        // 获取所有相关的平台信息
+        var platformIds = historyRecords.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 按游戏分组计算年度增量
+        var gamePlaytimeDict = new Dictionary<int, (string gameName, string platformName, int playtimeMinutes)>();
+        
+        foreach (var group in historyRecords.GroupBy(h => new { h.GameId, h.PlatformId }))
+        {
+            var records = group.OrderBy(h => h.RecordDate).ToList();
+            if (records.Count == 0) continue;
+
+            var firstRecord = records.First();
+            var lastRecord = records.Last();
+            
+            var playtimeIncrease = lastRecord.PlaytimeForever - firstRecord.PlaytimeForever;
+            if (records.Count == 1)
+            {
+                playtimeIncrease = firstRecord.PlaytimeForever;
+            }
+            
+            if (playtimeIncrease > 0)
+            {
+                var gameId = (int)group.Key.GameId;
+                var gameName = firstRecord.Game?.Name ?? "未知游戏";
+                var platformName = platforms.GetValueOrDefault(group.Key.PlatformId, "未知平台");
+                
+                if (gamePlaytimeDict.ContainsKey(gameId))
+                {
+                    var existing = gamePlaytimeDict[gameId];
+                    gamePlaytimeDict[gameId] = (existing.gameName, existing.platformName, existing.playtimeMinutes + playtimeIncrease);
+                }
+                else
+                {
+                    gamePlaytimeDict[gameId] = (gameName, platformName, playtimeIncrease);
+                }
+            }
+        }
 
         var achievements = await _context.UserAchievements
             .Where(a => a.UserId == userId && a.Unlocked)
             .ToListAsync();
 
-        var totalMinutes = gameRecords.Sum(r => r.PlaytimeMinutes);
+        var totalMinutes = gamePlaytimeDict.Values.Sum(v => v.playtimeMinutes);
         var totalHours = Math.Round(totalMinutes / 60.0, 1);
-        var totalGames = gameRecords.Count;
-        var playedGames = gameRecords.Count(r => r.PlaytimeMinutes > 0);
+        var totalGames = gamePlaytimeDict.Count;
+        var playedGames = gamePlaytimeDict.Count(g => g.Value.playtimeMinutes > 0);
         var totalAchievements = achievements.Count;
-        var topGames = gameRecords.OrderByDescending(r => r.PlaytimeMinutes).Take(10).ToList();
+        
+        var topGames = gamePlaytimeDict
+            .OrderByDescending(kv => kv.Value.playtimeMinutes)
+            .Take(10)
+            .Select(kv => new
+            {
+                GameName = kv.Value.gameName,
+                PlatformName = kv.Value.platformName,
+                PlaytimeMinutes = kv.Value.playtimeMinutes
+            })
+            .ToList();
 
         var document = Document.Create(container =>
         {
@@ -728,7 +1037,7 @@ public class ReportGenerationService
                         {
                             var bgColor = rank % 2 == 0 ? Colors.Grey.Lighten4 : Colors.White;
                             table.Cell().Background(bgColor).Padding(8).Text($"#{rank}").FontColor(Colors.Purple.Medium).SemiBold();
-                            table.Cell().Background(bgColor).Padding(8).Text(game.Game?.Name ?? "Unknown");
+                            table.Cell().Background(bgColor).Padding(8).Text(game.GameName);
                             table.Cell().Background(bgColor).Padding(8).Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}h");
                             rank++;
                         }
@@ -743,29 +1052,174 @@ public class ReportGenerationService
     }
 
     /// <summary>
+    /// 生成年度总结报告 CSV
+    /// </summary>
+    public async Task<byte[]> GenerateYearlyReportCsv(int userId, int year)
+    {
+        var startDate = new DateTime(year, 1, 1);
+        var endDate = new DateTime(year, 12, 31);
+
+        // 从 user_playtime_history 表计算年度时长增量
+        var historyRecords = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+                .ThenInclude(g => g.GameGenres)
+                    .ThenInclude(gg => gg.Genre)
+            .Where(h => h.UserId == userId 
+                && h.RecordDate >= startDate 
+                && h.RecordDate <= endDate)
+            .OrderBy(h => h.GameId)
+            .ThenBy(h => h.RecordDate)
+            .ToListAsync();
+
+        // 获取所有相关的平台信息
+        var platformIds = historyRecords.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 按游戏分组计算年度增量
+        var gamePlaytimeDict = new Dictionary<int, (string gameName, string platformName, int playtimeMinutes, Game? game)>();
+        
+        foreach (var group in historyRecords.GroupBy(h => new { h.GameId, h.PlatformId }))
+        {
+            var records = group.OrderBy(h => h.RecordDate).ToList();
+            if (records.Count == 0) continue;
+
+            var firstRecord = records.First();
+            var lastRecord = records.Last();
+            
+            var playtimeIncrease = lastRecord.PlaytimeForever - firstRecord.PlaytimeForever;
+            if (records.Count == 1)
+            {
+                playtimeIncrease = firstRecord.PlaytimeForever;
+            }
+            
+            if (playtimeIncrease > 0)
+            {
+                var gameId = (int)group.Key.GameId;
+                var gameName = firstRecord.Game?.Name ?? "未知游戏";
+                var platformName = platforms.GetValueOrDefault(group.Key.PlatformId, "未知平台");
+                
+                if (gamePlaytimeDict.ContainsKey(gameId))
+                {
+                    var existing = gamePlaytimeDict[gameId];
+                    gamePlaytimeDict[gameId] = (existing.gameName, existing.platformName, existing.playtimeMinutes + playtimeIncrease, existing.game);
+                }
+                else
+                {
+                    gamePlaytimeDict[gameId] = (gameName, platformName, playtimeIncrease, firstRecord.Game);
+                }
+            }
+        }
+
+        var achievements = await _context.UserAchievements
+            .Where(a => a.UserId == userId && a.Unlocked)
+            .ToListAsync();
+
+        // 计算统计数据
+        var totalMinutes = gamePlaytimeDict.Values.Sum(v => v.playtimeMinutes);
+        var totalHours = Math.Round(totalMinutes / 60.0, 1);
+        var totalGames = gamePlaytimeDict.Count;
+        var totalAchievements = achievements.Count;
+
+        // 按类型统计
+        var genreStats = gamePlaytimeDict.Values
+            .Where(v => v.game is not null)
+            .SelectMany(v => v.game!.GameGenres.Select(gg => new { Genre = gg.Genre?.Name ?? "未知", Minutes = v.playtimeMinutes }))
+            .GroupBy(x => x.Genre)
+            .Select(g => new { Genre = g.Key, Minutes = g.Sum(x => x.Minutes) })
+            .OrderByDescending(x => x.Minutes)
+            .ToList();
+
+        // 游戏排行
+        var gameRecords = gamePlaytimeDict
+            .OrderByDescending(kv => kv.Value.playtimeMinutes)
+            .ToList();
+
+        var csv = new StringBuilder();
+        
+        // 添加BOM以支持Excel正确显示中文
+        csv.Append("\uFEFF");
+        
+        // 标题
+        csv.AppendLine($"年度游戏报告,{year}年");
+        csv.AppendLine();
+        
+        // 总体统计
+        csv.AppendLine("总体统计");
+        csv.AppendLine("指标,数值");
+        csv.AppendLine($"总游玩时长（小时）,{totalHours}");
+        csv.AppendLine($"游戏数量,{totalGames}");
+        csv.AppendLine($"解锁成就,{totalAchievements}");
+        csv.AppendLine();
+        
+        // 类型统计
+        csv.AppendLine("游戏类型统计");
+        csv.AppendLine("类型,游玩时长（小时）");
+        foreach (var genre in genreStats)
+        {
+            csv.AppendLine($"{genre.Genre},{Math.Round(genre.Minutes / 60.0, 1)}");
+        }
+        csv.AppendLine();
+        
+        // 游戏详情
+        csv.AppendLine("游戏详情");
+        csv.AppendLine("排名,游戏名称,平台,游玩时长（小时）,游玩时长（分钟）");
+        
+        int rank = 1;
+        foreach (var record in gameRecords)
+        {
+            csv.AppendLine($"{rank},{record.Value.gameName},{record.Value.platformName},{Math.Round(record.Value.playtimeMinutes / 60.0, 1)},{record.Value.playtimeMinutes}");
+            rank++;
+        }
+        
+        csv.AppendLine();
+        csv.AppendLine($"报告生成时间,{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+
+        return Encoding.UTF8.GetBytes(csv.ToString());
+    }
+
+    /// <summary>
     /// 生成游戏库存报告 HTML
     /// </summary>
     public async Task<string> GenerateInventoryReportHtml(int userId)
     {
+        _logger.LogInformation("生成库存报告，用户ID: {UserId}", userId);
+        
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
+        _logger.LogInformation("用户绑定的平台数: {Count}", platformUserIds.Count);
+
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .ToListAsync();
+
+        _logger.LogInformation("游戏库记录数: {Count}", gameRecords.Count);
 
         var localGames = await _context.LocalGameInstalls
             .Include(l => l.Game)
             .Where(l => l.UserId == userId)
             .ToListAsync();
 
+        _logger.LogInformation("本地安装游戏数: {Count}", localGames.Count);
+
+        // 获取所有存档 - 通过 LocalGameInstall 关联
+        var installIds = localGames.Select(l => l.InstallId).ToList();
         var saves = await _context.LocalSaveFiles
             .Include(s => s.Install)
-            .ThenInclude(i => i.Game)
-            .Where(s => s.Install.UserId == userId)
+                .ThenInclude(i => i.Game)
+            .Where(s => installIds.Contains(s.InstallId))
             .ToListAsync();
+
+        _logger.LogInformation("存档数: {Count}", saves.Count);
 
         var totalGames = gameRecords.Count;
         var installedGames = localGames.Count;
@@ -897,13 +1351,18 @@ public class ReportGenerationService
     /// </summary>
     public async Task<byte[]> GenerateInventoryReportCsv(int userId)
     {
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .OrderBy(r => r.Game.Name)
             .ToListAsync();
 
@@ -947,13 +1406,18 @@ public class ReportGenerationService
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
+        // 获取用户绑定的平台用户ID
+        var platformUserIds = await _context.UserPlatformBindings
+            .Where(b => b.UserId == userId && b.BindingStatus == true)
+            .Select(b => b.PlatformUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToListAsync();
+
         var gameRecords = await _context.UserPlatformLibraries
             .Include(r => r.Game)
             .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.Platform)
-            .Include(r => r.PlayerPlatform)
-            .ThenInclude(pp => pp.UserPlatformBindings)
-            .Where(r => r.PlayerPlatform.UserPlatformBindings.Any(b => b.UserId == userId))
+                .ThenInclude(pp => pp.Platform)
+            .Where(r => platformUserIds.Contains(r.PlatformUserId))
             .ToListAsync();
 
         var localGames = await _context.LocalGameInstalls
@@ -961,9 +1425,11 @@ public class ReportGenerationService
             .Where(l => l.UserId == userId)
             .ToListAsync();
 
+        // 获取所有存档 - 通过 LocalGameInstall 关联
+        var installIds = localGames.Select(l => l.InstallId).ToList();
         var saves = await _context.LocalSaveFiles
             .Include(s => s.Install)
-            .Where(s => s.Install.UserId == userId)
+            .Where(s => installIds.Contains(s.InstallId))
             .ToListAsync();
 
         var document = Document.Create(container =>

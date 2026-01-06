@@ -282,7 +282,11 @@ public class LocalGamesController : ControllerBase
                     ModId = m.ModId,
                     ModName = m.ModName,
                     Version = m.Version,
-                    Enabled = m.Enabled ?? false
+                    Enabled = m.Enabled ?? false,
+                    FilePath = m.FilePath,
+                    SizeGB = 0.1m, // 网页版无法获取真实大小，使用默认值
+                    Description = null,
+                    Author = null
                 }).ToList()
             };
 

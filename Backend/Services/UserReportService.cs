@@ -129,16 +129,95 @@ public class UserReportService : IUserReportService
         result.PlayedGames = libraryGames.Count(g => g.PlaytimeMinutes > 0);
         result.NeverPlayedGames = libraryGames.Count(g => g.PlaytimeMinutes == 0);
 
-        // 按平台统计
-        var platformStats = libraryGames
-            .GroupBy(l => new { l.PlatformId, PlatformName = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown" })
-            .Select(g => new PlatformStatsDto
+        // 多平台统计
+        result.BoundPlatformCount = userBindings.Select(b => b.PlatformId).Distinct().Count();
+        
+        // 跨平台游戏数（同一个游戏在多个平台拥有）
+        var gamesByPlatformCount = libraryGames
+            .GroupBy(l => l.GameId)
+            .Where(g => g.Select(x => x.PlatformId).Distinct().Count() > 1)
+            .Count();
+        result.CrossPlatformGames = gamesByPlatformCount;
+
+        // 从 user_playtime_history 表计算最近2周的游戏时长
+        var twoWeeksAgo = DateTime.UtcNow.Date.AddDays(-14);
+        var today = DateTime.UtcNow.Date.AddDays(1); // 包含今天
+        
+        // 获取最近2周的时长历史记录
+        var recentHistory = await _context.UserPlaytimeHistories
+            .Where(h => h.UserId == userId && h.RecordDate >= twoWeeksAgo && h.RecordDate < today)
+            .ToListAsync();
+
+        _logger.LogInformation("用户 {UserId} 最近2周历史记录数: {Count}, 日期范围: {Start} - {End}", 
+            userId, recentHistory.Count, twoWeeksAgo.ToString("yyyy-MM-dd"), today.AddDays(-1).ToString("yyyy-MM-dd"));
+
+        if (recentHistory.Any())
+        {
+            // 方法1: 如果有 playtime_2weeks 字段（Steam API 返回的），直接使用最新记录
+            var latestRecords = recentHistory
+                .GroupBy(h => new { h.GameId, h.PlatformId })
+                .Select(g => g.OrderByDescending(h => h.RecordDate).First())
+                .ToList();
+            
+            var playtime2WeeksSum = latestRecords.Sum(r => r.Playtime2Weeks);
+            
+            _logger.LogInformation("用户 {UserId} playtime_2weeks 总和: {Sum}", userId, playtime2WeeksSum);
+            
+            // 方法2: 如果 playtime_2weeks 为0，则通过差值计算
+            if (playtime2WeeksSum == 0)
             {
-                PlatformId = g.Key.PlatformId,
-                PlatformName = g.Key.PlatformName,
-                GameCount = g.Count(),
-                PlaytimeMinutes = g.Sum(x => x.PlaytimeMinutes),
-                PlaytimeFormatted = FormatPlaytime(g.Sum(x => x.PlaytimeMinutes))
+                // 获取14天前的历史记录作为基准
+                var baselineDate = twoWeeksAgo;
+                var baselineHistory = await _context.UserPlaytimeHistories
+                    .Where(h => h.UserId == userId && h.RecordDate <= baselineDate)
+                    .GroupBy(h => new { h.GameId, h.PlatformId })
+                    .Select(g => new { g.Key.GameId, g.Key.PlatformId, PlaytimeForever = g.OrderByDescending(x => x.RecordDate).First().PlaytimeForever })
+                    .ToListAsync();
+                
+                // 获取每个游戏在这段时间内的时长增量
+                var gamePlaytimeChanges = 0;
+                foreach (var latest in latestRecords)
+                {
+                    var baseline = baselineHistory.FirstOrDefault(b => b.GameId == latest.GameId && b.PlatformId == latest.PlatformId);
+                    var basePlaytime = baseline?.PlaytimeForever ?? 0;
+                    var change = latest.PlaytimeForever - basePlaytime;
+                    if (change > 0)
+                    {
+                        gamePlaytimeChanges += change;
+                    }
+                }
+                
+                _logger.LogInformation("用户 {UserId} 通过差值计算的最近2周时长: {Minutes} 分钟", userId, gamePlaytimeChanges);
+                result.RecentPlaytimeMinutes = Math.Max(0, gamePlaytimeChanges);
+            }
+            else
+            {
+                result.RecentPlaytimeMinutes = playtime2WeeksSum;
+            }
+        }
+        else
+        {
+            _logger.LogInformation("用户 {UserId} 没有最近2周的历史记录", userId);
+        }
+
+        // 计算本周、本月游戏时长和每日趋势
+        await CalculatePlaytimeTrendsAsync(userId, result);
+
+        // 按平台统计 - 先在内存中处理，避免空引用问题
+        var platformStats = libraryGames
+            .GroupBy(l => l.PlatformId)
+            .Select(g => {
+                var firstItem = g.First();
+                var platformName = firstItem.PlayerPlatform?.Platform?.PlatformName ?? "Unknown";
+                var totalPlaytime = g.Sum(x => x.PlaytimeMinutes);
+                return new PlatformStatsDto
+                {
+                    PlatformId = g.Key,
+                    PlatformName = platformName,
+                    GameCount = g.Count(),
+                    PlaytimeMinutes = totalPlaytime,
+                    PlaytimeFormatted = FormatPlaytime(totalPlaytime)
+                };
             })
             .OrderByDescending(x => x.PlaytimeMinutes)
             .ToList();
@@ -270,7 +349,7 @@ public class UserReportService : IUserReportService
     }
 
     /// <summary>
-    /// 获取最近游玩记录（支持多平台）
+    /// 获取最近游玩记录（支持多平台，按两周内时长从高到低排序）
     /// </summary>
     public async Task<List<RecentPlayedGameDto>> GetRecentPlayedGamesAsync(int userId, int count = 10)
     {
@@ -289,24 +368,75 @@ public class UserReportService : IUserReportService
             .Select(b => b.PlatformUserId)
             .ToList();
 
-        // 从数据库获取所有平台的最近游玩记录
-        var dbGames = await _context.UserPlatformLibraries
-            .Include(l => l.Game)
-            .Include(l => l.PlayerPlatform)
-                .ThenInclude(pp => pp.Platform)
-            .Where(l => platformUserIds.Contains(l.PlatformUserId) && l.LastPlayed.HasValue)
-            .OrderByDescending(l => l.LastPlayed)
-            .Take(count)
+        // 从 user_playtime_history 获取用户所有历史记录，包含游戏信息
+        var allHistory = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+            .Where(h => h.UserId == userId)
             .ToListAsync();
 
-        return dbGames.Select(l => new RecentPlayedGameDto
-            {
-                GameId = l.GameId,
-                GameName = l.Game.Name,
-                HeaderImage = l.Game.HeaderImage,
-                PlaytimeMinutes = l.PlaytimeMinutes,
-                LastPlayed = l.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
-                Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
+        if (!allHistory.Any())
+        {
+            // 如果没有历史记录，回退到按最后游玩时间排序
+            var dbGames = await _context.UserPlatformLibraries
+                .Include(l => l.Game)
+                .Include(l => l.PlayerPlatform)
+                    .ThenInclude(pp => pp.Platform)
+                .Where(l => platformUserIds.Contains(l.PlatformUserId) && l.LastPlayed.HasValue)
+                .OrderByDescending(l => l.LastPlayed)
+                .Take(count)
+                .ToListAsync();
+
+            return dbGames.Select(l => new RecentPlayedGameDto
+                {
+                    GameId = l.GameId,
+                    GameName = l.Game.Name,
+                    HeaderImage = l.Game.HeaderImage,
+                    PlaytimeMinutes = l.PlaytimeMinutes,
+                    RecentPlaytimeMinutes = 0,
+                    LastPlayed = l.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
+                    Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
+                })
+                .ToList();
+        }
+
+        // 在内存中按游戏+平台分组，取每组最新记录，按两周时长排序
+        var latestPlaytimeHistory = allHistory
+            .GroupBy(h => new { h.GameId, h.PlatformId })
+            .Select(g => g.OrderByDescending(h => h.RecordDate).First())
+            .OrderByDescending(h => h.Playtime2Weeks)
+            .Take(count)
+            .ToList();
+
+        // 获取平台信息
+        var platformIds = latestPlaytimeHistory.Select(h => h.PlatformId).Distinct().ToList();
+        var platforms = await _context.Platforms
+            .Where(p => platformIds.Contains(p.PlatformId))
+            .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
+        // 获取用户库中的游戏时长信息
+        var gameIds = latestPlaytimeHistory.Select(h => h.GameId).ToList();
+        var libraryGames = await _context.UserPlatformLibraries
+            .Where(l => platformUserIds.Contains(l.PlatformUserId) && gameIds.Contains(l.GameId))
+            .ToListAsync();
+
+        var libraryLookup = libraryGames
+            .GroupBy(l => (l.GameId, l.PlatformId))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // 按两周时长排序返回结果
+        return latestPlaytimeHistory
+            .Select(h => {
+                var library = libraryLookup.TryGetValue((h.GameId, h.PlatformId), out var lib) ? lib : null;
+                return new RecentPlayedGameDto
+                {
+                    GameId = h.GameId,
+                    GameName = h.Game?.Name ?? "Unknown",
+                    HeaderImage = h.Game?.HeaderImage,
+                    PlaytimeMinutes = library?.PlaytimeMinutes ?? h.PlaytimeForever,
+                    RecentPlaytimeMinutes = h.Playtime2Weeks,
+                    LastPlayed = library?.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
+                    Platform = platforms.GetValueOrDefault(h.PlatformId, "Unknown")
+                };
             })
             .ToList();
     }
@@ -810,6 +940,126 @@ public class UserReportService : IUserReportService
     #endregion
 
     #region 辅助方法
+
+    /// <summary>
+    /// 计算游戏时长趋势统计
+    /// </summary>
+    private async Task CalculatePlaytimeTrendsAsync(int userId, GameLibrarySummaryDto result)
+    {
+        var today = DateTime.UtcNow.Date;
+        
+        // 首先查询用户最早的历史记录日期，动态确定数据范围
+        var earliestRecord = await _context.UserPlaytimeHistories
+            .Where(h => h.UserId == userId)
+            .OrderBy(h => h.RecordDate)
+            .FirstOrDefaultAsync();
+
+        if (earliestRecord == null)
+        {
+            _logger.LogInformation("用户 {UserId} 没有任何历史记录", userId);
+            return;
+        }
+
+        var dataStartDate = earliestRecord.RecordDate.Date;
+        _logger.LogInformation("用户 {UserId} 数据起始日期: {StartDate}", userId, dataStartDate);
+        
+        // 获取所有历史记录（从最早记录开始）
+        var allHistory = await _context.UserPlaytimeHistories
+            .Where(h => h.UserId == userId && h.RecordDate >= dataStartDate && h.RecordDate <= today)
+            .OrderBy(h => h.RecordDate)
+            .ToListAsync();
+
+        if (!allHistory.Any())
+        {
+            _logger.LogInformation("用户 {UserId} 没有历史记录", userId);
+            return;
+        }
+
+        // 按日期分组，计算每天的游戏时长增量
+        var dailyData = new Dictionary<DateTime, (int playtimeChange, HashSet<long> gamesPlayed)>();
+        
+        // 从最早记录开始计算，用空字典初始化
+        // 第一天的数据会被跳过（因为没有前一天的基准，避免把历史总时长当作当天增量）
+
+        // 构建每个游戏每天的时长记录
+        var gamesByDate = allHistory
+            .GroupBy(h => h.RecordDate.Date)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        // 用于追踪每个游戏的前一天时长（从空开始，第一天自然被跳过）
+        var previousDayPlaytime = new Dictionary<(long GameId, int PlatformId), int>();
+
+        foreach (var dayGroup in gamesByDate)
+        {
+            var date = dayGroup.Key;
+            var dailyPlaytimeChange = 0;
+            var gamesPlayedToday = new HashSet<long>();
+
+            foreach (var record in dayGroup)
+            {
+                var key = (record.GameId, record.PlatformId);
+                
+                // 只有当游戏之前有记录时才计算增量
+                // 避免第一次导入时把历史总时长当作当天增量
+                if (previousDayPlaytime.TryGetValue(key, out var previousPlaytime))
+                {
+                    var change = record.PlaytimeForever - previousPlaytime;
+                    
+                    // 只计算正向增量，且增量不能超过24小时（1440分钟）作为合理性检查
+                    if (change > 0 && change <= 1440)
+                    {
+                        dailyPlaytimeChange += change;
+                        gamesPlayedToday.Add(record.GameId);
+                    }
+                }
+                
+                // 更新/记录当前时长，作为下一天的基准
+                previousDayPlaytime[key] = record.PlaytimeForever;
+            }
+
+            dailyData[date] = (dailyPlaytimeChange, gamesPlayedToday);
+        }
+
+        // 生成最近14天的趋势数据（不包含今天，因为今天数据不完整）
+        var yesterday = today.AddDays(-1);
+        var trendData = new List<DailyPlaytimeDto>();
+        for (int i = 13; i >= 0; i--)
+        {
+            var date = yesterday.AddDays(-i);
+            var data = dailyData.GetValueOrDefault(date, (0, new HashSet<long>()));
+            trendData.Add(new DailyPlaytimeDto
+            {
+                Date = date.ToString("yyyy-MM-dd"),
+                PlaytimeMinutes = data.Item1,
+                GamesPlayed = data.Item2.Count
+            });
+        }
+        result.DailyPlaytimeTrend = trendData;
+
+        // 计算本周时长（从本周一开始，不包含今天）
+        var startOfWeek = today.AddDays(-(int)today.DayOfWeek + (int)DayOfWeek.Monday);
+        if (today.DayOfWeek == DayOfWeek.Sunday) startOfWeek = startOfWeek.AddDays(-7);
+        
+        result.ThisWeekPlaytimeMinutes = dailyData
+            .Where(d => d.Key >= startOfWeek && d.Key < today)
+            .Sum(d => d.Value.Item1);
+
+        // 计算本月时长（不包含今天）
+        var startOfMonth = new DateTime(today.Year, today.Month, 1);
+        result.ThisMonthPlaytimeMinutes = dailyData
+            .Where(d => d.Key >= startOfMonth && d.Key < today)
+            .Sum(d => d.Value.Item1);
+
+        // 计算日均时长（最近30天，不包含今天）
+        var validDailyData = dailyData.Where(d => d.Key < today).ToList();
+        var totalPlaytimeIn30Days = validDailyData.Sum(d => d.Value.Item1);
+        var daysWithData = validDailyData.Count(d => d.Value.Item1 > 0);
+        result.DailyAverageMinutes = daysWithData > 0 ? totalPlaytimeIn30Days / daysWithData : 0;
+
+        _logger.LogInformation("用户 {UserId} 时长趋势: 本周={ThisWeek}分钟, 本月={ThisMonth}分钟, 日均={DailyAvg}分钟", 
+            userId, result.ThisWeekPlaytimeMinutes, result.ThisMonthPlaytimeMinutes, result.DailyAverageMinutes);
+    }
 
     /// <summary>
     /// 格式化游戏时长

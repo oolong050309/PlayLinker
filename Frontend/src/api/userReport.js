@@ -116,20 +116,23 @@ export const getInventoryReportUrl = (format) => {
 
 /**
  * 下载报告（带认证）
- * @param {string} url - 报告URL
+ * @param {string} url - 报告完整URL
  * @param {string} filename - 文件名
  */
 export const downloadReport = async (url, filename) => {
-  const token = localStorage.getItem('token')
+  // 获取 token
+  const token = sessionStorage.getItem('token')
   
+  // 直接使用 fetch 来下载 blob，避免 axios 拦截器处理
   const response = await fetch(url, {
+    method: 'GET',
     headers: {
-      'Authorization': `Bearer ${token}`
+      'Authorization': token ? `Bearer ${token}` : ''
     }
   })
   
   if (!response.ok) {
-    throw new Error('下载失败')
+    throw new Error(`下载失败: ${response.status}`)
   }
   
   const blob = await response.blob()
@@ -145,25 +148,40 @@ export const downloadReport = async (url, filename) => {
 
 /**
  * 在新窗口打开HTML报告
- * @param {string} url - 报告URL
+ * @param {string} url - 报告完整URL
  */
 export const openHtmlReport = async (url) => {
-  const token = localStorage.getItem('token')
+  // 获取 token
+  const token = sessionStorage.getItem('token')
   
+  // 直接使用 fetch 获取 HTML，避免 axios 拦截器处理
   const response = await fetch(url, {
+    method: 'GET',
     headers: {
-      'Authorization': `Bearer ${token}`
+      'Authorization': token ? `Bearer ${token}` : ''
     }
   })
   
   if (!response.ok) {
-    throw new Error('获取报告失败')
+    throw new Error(`获取报告失败: ${response.status}`)
   }
   
   const html = await response.text()
-  const newWindow = window.open('', '_blank')
-  newWindow.document.write(html)
-  newWindow.document.close()
+  
+  // 使用 Blob URL 方式打开，更可靠
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  
+  const newWindow = window.open(blobUrl, '_blank')
+  if (!newWindow) {
+    URL.revokeObjectURL(blobUrl)
+    throw new Error('无法打开新窗口，请检查浏览器弹窗设置')
+  }
+  
+  // 延迟释放 Blob URL，确保页面加载完成
+  setTimeout(() => {
+    URL.revokeObjectURL(blobUrl)
+  }, 5000)
 }
 
 export default {

@@ -13,35 +13,87 @@
 
     <!-- 游戏选择器 -->
     <div class="selector-section">
-      <div class="game-selector-wrapper">
-        <div class="selector-label">
-          <Gamepad2 class="label-icon" />
-          <span>选择游戏</span>
-        </div>
-        <div class="custom-select" :class="{ open: dropdownOpen }" @click="toggleDropdown">
-          <div class="select-display">
-            <span v-if="selectedGame" class="selected-game">
-              {{ selectedGame.gameName }}
-            </span>
-            <span v-else class="placeholder">请选择游戏...</span>
-            <ChevronDown class="chevron" :class="{ rotated: dropdownOpen }" />
+      <div class="game-selectors-row">
+        <!-- 本地游戏选择器 -->
+        <div class="game-selector-wrapper" :class="{ disabled: selectionMode === 'search' }">
+          <div class="selector-label">
+            <Gamepad2 class="label-icon" />
+            <span>选择本地游戏</span>
+            <button v-if="selectionMode === 'local'" class="reset-btn" @click.stop="resetSelection">
+              <X :size="14" />
+            </button>
           </div>
-          <div class="select-dropdown" v-show="dropdownOpen" @click.stop>
-            <div v-if="localGames.length === 0" class="dropdown-empty">
-              <Package class="empty-icon" />
-              <p>暂无本地游戏</p>
-              <router-link to="/app/mods" class="add-game-link">去添加游戏</router-link>
+          <div class="custom-select" :class="{ open: dropdownOpen, disabled: selectionMode === 'search' }" @click="selectionMode !== 'search' && toggleDropdown()">
+            <div class="select-display">
+              <span v-if="selectedGame" class="selected-game">
+                {{ selectedGame.gameName }}
+              </span>
+              <span v-else class="placeholder">请选择游戏...</span>
+              <ChevronDown class="chevron" :class="{ rotated: dropdownOpen }" />
+            </div>
+            <div class="select-dropdown" v-show="dropdownOpen" @click.stop>
+              <div v-if="localGames.length === 0" class="dropdown-empty">
+                <Package class="empty-icon" />
+                <p>暂无本地游戏</p>
+                <router-link to="/app/mods" class="add-game-link">去添加游戏</router-link>
+              </div>
+              <div v-else class="dropdown-list">
+                <div 
+                  v-for="game in localGames" 
+                  :key="game.gameId"
+                  class="dropdown-item"
+                  :class="{ active: selectedGameId === game.gameId }"
+                  @click="selectGame(game)"
+                >
+                  <span class="game-name">{{ game.gameName }}</span>
+                  <span class="game-meta">{{ game.platformName }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="selector-divider">或</div>
+
+        <!-- 搜索所有游戏 -->
+        <div class="game-search-wrapper" :class="{ disabled: selectionMode === 'local' }">
+          <div class="selector-label">
+            <Search class="label-icon" />
+            <span>搜索游戏</span>
+            <button v-if="selectionMode === 'search'" class="reset-btn" @click.stop="resetSelection">
+              <X :size="14" />
+            </button>
+          </div>
+          <div class="game-search-box" :class="{ disabled: selectionMode === 'local' }">
+            <input 
+              v-model="gameSearchQuery" 
+              type="text" 
+              placeholder="输入游戏名称搜索..."
+              :disabled="selectionMode === 'local'"
+              @input="handleGameSearchInput"
+              @focus="showGameSearchResults = true"
+            />
+            <button v-if="gameSearchQuery && selectionMode !== 'local'" class="clear-btn" @click="clearGameSearch">
+              <X :size="16" />
+            </button>
+          </div>
+          <!-- 搜索结果下拉 -->
+          <div v-if="showGameSearchResults && selectionMode !== 'local' && (gameSearchResults.length > 0 || gameSearchLoading)" class="game-search-dropdown">
+            <div v-if="gameSearchLoading" class="search-loading">
+              <div class="mini-loader"></div>
+              <span>搜索中...</span>
             </div>
             <div v-else class="dropdown-list">
               <div 
-                v-for="game in localGames" 
+                v-for="game in gameSearchResults" 
                 :key="game.gameId"
                 class="dropdown-item"
-                :class="{ active: selectedGameId === game.gameId }"
-                @click="selectGame(game)"
+                @click="selectSearchedGame(game)"
               >
-                <span class="game-name">{{ game.gameName }}</span>
-                <span class="game-meta">{{ game.platformName }}</span>
+                <img v-if="game.headerImage" :src="game.headerImage" class="game-thumb" @error="handleImageError" />
+                <div class="game-info">
+                  <span class="game-name">{{ game.name }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -80,8 +132,22 @@
       </div>
     </div>
 
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-state">
+    <!-- 无 Mod 来源提示 -->
+    <div v-else-if="selectedGameId && !sourcesLoading" class="empty-state no-source">
+      <Package class="empty-icon" />
+      <h3>该游戏暂无 Mod 平台支持</h3>
+      <p>我们尚未收录 <strong>{{ selectedGame?.gameName }}</strong> 的 Mod 来源</p>
+      <p class="hint">目前支持 NexusMods、3DM 等平台的热门游戏</p>
+    </div>
+
+    <!-- 加载来源状态 -->
+    <div v-if="sourcesLoading" class="loading-state">
+      <div class="loader"></div>
+      <p>正在加载 Mod 来源...</p>
+    </div>
+
+    <!-- 加载 Mod 列表状态 -->
+    <div v-else-if="loading" class="loading-state">
       <div class="loader"></div>
       <p>正在加载 Mod 列表...</p>
     </div>
@@ -111,12 +177,12 @@
       </div>
     </div>
 
-    <!-- 空状态 - 选择了游戏但没有 Mod -->
-    <div v-else-if="selectedGameId && selectedSource && !loading" class="empty-state">
+    <!-- 空状态 - 选择了游戏和来源但没有 Mod -->
+    <div v-else-if="selectedGameId && selectedSource && !loading && !sourcesLoading && modSources.length > 0" class="empty-state">
       <Package class="empty-icon" />
-      <h3>暂无 Mod 数据</h3>
-      <p>该游戏在 {{ selectedSourceName }} 上可能没有 Mod，或需要配置 API</p>
-      <p class="hint">请确保已在数据库中配置游戏的 Mod 平台映射</p>
+      <h3>在 {{ selectedSourceName }} 上暂无 Mod</h3>
+      <p>该游戏在 {{ selectedSourceName }} 平台上目前没有可用的 Mod</p>
+      <p class="hint">可以尝试切换其他 Mod 来源平台</p>
     </div>
 
     <!-- 空状态 - 未选择游戏 -->
@@ -152,13 +218,15 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { 
   Store, Gamepad2, ChevronDown, ChevronLeft, ChevronRight, 
-  Search, Download, ThumbsUp, Package, Globe, Plus 
+  Search, Download, ThumbsUp, Package, Globe, Plus, X 
 } from 'lucide-vue-next'
 import { getGameModSources, getModList, searchMods } from '@/api/modExplore'
 import { getLocalGames } from '@/api/localGame'
+import { searchGames } from '@/api/games'
 
 // State
 const loading = ref(false)
+const sourcesLoading = ref(false)
 const dropdownOpen = ref(false)
 const localGames = ref([])
 const selectedGameId = ref(null)
@@ -172,6 +240,16 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const totalMods = ref(0)
 
+// 游戏搜索相关状态
+const gameSearchQuery = ref('')
+const gameSearchResults = ref([])
+const gameSearchLoading = ref(false)
+const showGameSearchResults = ref(false)
+let searchDebounceTimer = null
+
+// 选择模式: null=未选择, 'local'=本地游戏, 'search'=搜索游戏
+const selectionMode = ref(null)
+
 // Computed
 const totalPages = computed(() => Math.ceil(totalMods.value / pageSize.value))
 const selectedSourceName = computed(() => {
@@ -184,6 +262,9 @@ const handleClickOutside = (e) => {
   if (!e.target.closest('.custom-select')) {
     dropdownOpen.value = false
   }
+  if (!e.target.closest('.game-search-wrapper')) {
+    showGameSearchResults.value = false
+  }
 }
 
 onMounted(() => {
@@ -193,6 +274,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
 })
 
 // Methods
@@ -224,9 +306,16 @@ const selectGame = async (game) => {
   selectedGame.value = game
   selectedGameId.value = game.gameId
   dropdownOpen.value = false
+  selectionMode.value = 'local'  // 设置选择模式
   modSources.value = []
   selectedSource.value = ''
   mods.value = []
+  sourcesLoading.value = true
+  
+  // 清空游戏搜索
+  gameSearchQuery.value = ''
+  gameSearchResults.value = []
+  showGameSearchResults.value = false
   
   // 加载该游戏的 Mod 来源
   try {
@@ -243,6 +332,92 @@ const selectGame = async (game) => {
     }
   } catch (error) {
     console.error('加载 Mod 来源失败:', error)
+    modSources.value = []
+  } finally {
+    sourcesLoading.value = false
+  }
+}
+
+// 重置选择
+const resetSelection = () => {
+  selectionMode.value = null
+  selectedGame.value = null
+  selectedGameId.value = null
+  gameSearchQuery.value = ''
+  gameSearchResults.value = []
+  showGameSearchResults.value = false
+  modSources.value = []
+  selectedSource.value = ''
+  mods.value = []
+  totalMods.value = 0
+}
+
+// 游戏搜索相关方法
+const handleGameSearchInput = () => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  
+  if (!gameSearchQuery.value.trim()) {
+    gameSearchResults.value = []
+    showGameSearchResults.value = false
+    return
+  }
+  
+  searchDebounceTimer = setTimeout(async () => {
+    gameSearchLoading.value = true
+    showGameSearchResults.value = true
+    
+    try {
+      const res = await searchGames(gameSearchQuery.value, 1, 10)
+      const data = res.data || res
+      gameSearchResults.value = data.items || []
+    } catch (error) {
+      console.error('搜索游戏失败:', error)
+      gameSearchResults.value = []
+    } finally {
+      gameSearchLoading.value = false
+    }
+  }, 300)
+}
+
+const clearGameSearch = () => {
+  gameSearchQuery.value = ''
+  gameSearchResults.value = []
+  showGameSearchResults.value = false
+}
+
+const selectSearchedGame = async (game) => {
+  // 构造与本地游戏相同的格式
+  selectedGame.value = {
+    gameId: game.gameId,
+    gameName: game.name,
+    headerImage: game.headerImage
+  }
+  selectedGameId.value = game.gameId
+  selectionMode.value = 'search'  // 设置选择模式
+  showGameSearchResults.value = false
+  gameSearchQuery.value = game.name
+  modSources.value = []
+  selectedSource.value = ''
+  mods.value = []
+  sourcesLoading.value = true
+  
+  // 加载该游戏的 Mod 来源
+  try {
+    console.log('获取搜索游戏 Mod 来源, gameId:', game.gameId)
+    const res = await getGameModSources(game.gameId)
+    console.log('Mod 来源响应:', res)
+    
+    const sources = res.data?.sources || res.sources || []
+    modSources.value = sources
+    
+    if (sources.length > 0) {
+      selectSource(sources[0])
+    }
+  } catch (error) {
+    console.error('加载 Mod 来源失败:', error)
+    modSources.value = []
+  } finally {
+    sourcesLoading.value = false
   }
 }
 
@@ -365,8 +540,15 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
 
 .game-selector-wrapper {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 320px;
+  transition: opacity 0.2s;
+}
+
+.game-selector-wrapper.disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .selector-label {
@@ -383,9 +565,31 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
   height: 18px;
 }
 
+.reset-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 4px;
+  background: rgba(239, 68, 68, 0.2);
+  border: none;
+  border-radius: 4px;
+  color: #ef4444;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.reset-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
 .custom-select {
   position: relative;
-  min-width: 320px;
+}
+
+.custom-select.disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .select-display {
@@ -809,6 +1013,17 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
   color: #4a5568;
 }
 
+.empty-state.no-source {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  margin-top: 20px;
+}
+
+.empty-state.no-source strong {
+  color: #8b5cf6;
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -896,15 +1111,179 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
   border-radius: 3px;
 }
 
+/* Game Selectors Row */
+.game-selectors-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.selector-divider {
+  display: flex;
+  align-items: center;
+  padding-bottom: 12px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Game Search */
+.game-search-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 320px;
+  transition: opacity 0.2s;
+}
+
+.game-search-wrapper.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.game-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.game-search-box.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.game-search-box:focus-within:not(.disabled) {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+.game-search-box .search-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.game-search-box input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.game-search-box input::placeholder {
+  color: #64748b;
+}
+
+.game-search-box .clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.game-search-box .clear-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.game-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.game-search-dropdown .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.game-search-dropdown .game-thumb {
+  width: 60px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.game-search-dropdown .game-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-search-dropdown .game-info .game-name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.mini-loader {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(139, 92, 246, 0.2);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .mod-explore-page {
     padding: 20px;
   }
   
+  .game-selectors-row {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .selector-divider {
+    padding-top: 0;
+    justify-content: center;
+  }
+  
   .game-selector-wrapper {
     flex-direction: column;
     align-items: stretch;
+    width: 100%;
+  }
+  
+  .game-search-wrapper {
+    min-width: 100%;
   }
   
   .custom-select {
