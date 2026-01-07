@@ -43,14 +43,24 @@ def run_legendary_command(args):
     执行本地 Legendary CLI 命令
     """
     try:
-        command = ["legendary"] + args
+        # 构建命令字符串
+        command = "legendary " + " ".join(args)
+        print(f"执行命令: {command}", file=sys.stderr, flush=True)
+        
         # capture_output=True 用于捕获命令行输出，encoding='utf-8' 防止中文乱码
         result = subprocess.run(
             command, capture_output=True, text=True, encoding='utf-8', shell=True
         )
+        
+        print(f"命令返回码: {result.returncode}", file=sys.stderr, flush=True)
+        if result.stdout:
+            print(f"stdout: {result.stdout[:500]}", file=sys.stderr, flush=True)
+        if result.stderr:
+            print(f"stderr: {result.stderr[:500]}", file=sys.stderr, flush=True)
+        
         return result
     except Exception as e:
-        print(f"Command Error: {e}", file=sys.stderr)
+        print(f"Command Error: {e}", file=sys.stderr, flush=True)
         return None
 
 
