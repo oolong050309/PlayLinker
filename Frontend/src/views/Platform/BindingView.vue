@@ -197,9 +197,9 @@
                   v-model="bindForm.openBrowser"
                   style="margin-right: 0.5rem;"
                 />
-                打开浏览器进行OAuth2登录（首次认证推荐）
+                打开浏览器进行OAuth2登录
               </label>
-              <p class="form-hint">本地开发环境建议开启，服务器环境建议关闭</p>
+              
             </div>
             <div v-if="xboxAuthStep === 'authUrl'" class="form-group">
               <div class="alert alert-info">
@@ -249,7 +249,7 @@
                 </div>
               </div>
               <div v-if="gogAuthUrl" class="form-group">
-                <label>认证URL（步骤1）</label>
+                <label>认证URL</label>
                 <textarea
                   :value="gogAuthUrl"
                   class="form-input"
@@ -280,7 +280,7 @@
                 </div>
               </div>
               <div class="form-group">
-                <label>登录成功后的跳转URL（步骤2）*</label>
+                <label>登录成功后的跳转URL*</label>
                 <textarea
                   v-model="bindForm.redirectUrl"
                   class="form-input"
@@ -314,7 +314,7 @@
             </div>
             <div class="form-group">
               <div class="alert alert-warning">
-                <p><strong>方式1: 使用授权码（推荐）</strong></p>
+                <p><strong>方式: 使用授权码</strong></p>
                 <p>1. 访问以下链接并登录Epic账户：</p>
                 <p style="word-break: break-all; margin: 0.5rem 0;">
                   <a href="https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code" target="_blank" style="color: #4f46e5;">
@@ -326,16 +326,12 @@
               </div>
             </div>
             <div class="form-group">
-              <label>授权码（可选）</label>
+              <label>授权码</label>
               <input 
                 v-model="bindForm.epicCode" 
                 type="text" 
                 class="form-input"
-                placeholder="如果已在服务器上运行 legendary auth，可留空"
               />
-              <p class="form-hint">
-                如果已在服务器上通过命令行运行 <code>legendary auth</code> 完成认证，可留空此字段，系统会自动检测登录状态。
-              </p>
             </div>
           </div>
             </div>
