@@ -290,7 +290,7 @@
           </div>
 
           <!-- Activity Heatmap -->
-          <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="chart-card">
+          <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="chart-card heatmap-card">
             <h3 class="chart-title">🔥 游戏活跃度</h3>
             <div class="heatmap-container-inline">
               <div class="heatmap-weekdays-inline">
@@ -306,15 +306,6 @@
                 >
                   <span v-if="!day.isEmpty" class="heatmap-date">{{ day.dayOfMonth }}</span>
                 </div>
-              </div>
-              <div class="heatmap-legend-inline">
-                <span class="legend-label">少</span>
-                <div class="legend-cell level-0"></div>
-                <div class="legend-cell level-1"></div>
-                <div class="legend-cell level-2"></div>
-                <div class="legend-cell level-3"></div>
-                <div class="legend-cell level-4"></div>
-                <span class="legend-label">多</span>
               </div>
             </div>
           </div>
@@ -2612,12 +2603,26 @@ onUnmounted(() => {
   grid-template-columns: 2fr 1fr;
   gap: 24px;
   margin-bottom: 32px;
+  align-items: stretch;
 }
 
 .main-column, .side-column {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
+}
+
+.heatmap-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.heatmap-card .heatmap-container-inline {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* Chart Card */
