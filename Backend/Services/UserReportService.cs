@@ -280,21 +280,73 @@ public class UserReportService : IUserReportService
         }
         result.PlaytimeByGenre = genrePlaytime;
 
+        // 计算每个游戏的最后游玩时间（基于历史记录增量）
+        var allHistory = await _context.UserPlaytimeHistories
+            .Where(h => h.UserId == userId)
+            .OrderBy(h => h.RecordDate)
+            .ToListAsync();
+        
+        var gameLastPlayedDict = new Dictionary<(long GameId, int PlatformId), DateTime>();
+        var previousPlaytime = new Dictionary<(long GameId, int PlatformId), (int playtime, DateTime date)>();
+        
+        if (allHistory.Any())
+        {
+            var historyByDate = allHistory.GroupBy(h => h.RecordDate.Date).OrderBy(g => g.Key).ToList();
+            
+            foreach (var dayGroup in historyByDate)
+            {
+                var currentDate = dayGroup.Key;
+                
+                foreach (var record in dayGroup)
+                {
+                    var key = (record.GameId, record.PlatformId);
+                    
+                    if (previousPlaytime.TryGetValue(key, out var prev))
+                    {
+                        var increment = record.PlaytimeForever - prev.playtime;
+                        if (increment > 0)
+                        {
+                            // 有增量，说明在前一天（prev.date）有游玩
+                            gameLastPlayedDict[key] = prev.date;
+                        }
+                    }
+                    
+                    previousPlaytime[key] = (record.PlaytimeForever, currentDate);
+                }
+            }
+        }
+
         // TOP 10 最常玩游戏（包含平台信息）
         result.TopPlayedGames = libraryGames
             .OrderByDescending(l => l.PlaytimeMinutes)
             .Take(10)
-            .Select(l => new TopPlayedGameDto
-            {
-                GameId = l.GameId,
-                GameName = l.Game?.Name ?? "Unknown",
-                HeaderImage = l.Game?.HeaderImage,
-                PlaytimeMinutes = l.PlaytimeMinutes,
-                PlaytimeFormatted = FormatPlaytime(l.PlaytimeMinutes),
-                LastPlayed = l.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
-                AchievementsUnlocked = l.AchievementsUnlocked,
-                AchievementsTotal = l.AchievementsTotal,
-                Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
+            .Select(l => {
+                var key = (l.GameId, l.PlatformId);
+                string? lastPlayed = null;
+                
+                // 优先使用从历史记录计算的最后游玩时间
+                if (gameLastPlayedDict.TryGetValue(key, out var calculatedLastPlayed))
+                {
+                    lastPlayed = calculatedLastPlayed.ToString("yyyy-MM-dd");
+                }
+                else if (l.LastPlayed.HasValue)
+                {
+                    // 回退到库中的最后游玩时间
+                    lastPlayed = l.LastPlayed.Value.ToString("yyyy-MM-dd HH:mm");
+                }
+                
+                return new TopPlayedGameDto
+                {
+                    GameId = l.GameId,
+                    GameName = l.Game?.Name ?? "Unknown",
+                    HeaderImage = l.Game?.HeaderImage,
+                    PlaytimeMinutes = l.PlaytimeMinutes,
+                    PlaytimeFormatted = FormatPlaytime(l.PlaytimeMinutes),
+                    LastPlayed = lastPlayed,
+                    AchievementsUnlocked = l.AchievementsUnlocked,
+                    AchievementsTotal = l.AchievementsTotal,
+                    Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
+                };
             })
             .ToList();
 
@@ -398,6 +450,7 @@ public class UserReportService : IUserReportService
         var allHistory = await _context.UserPlaytimeHistories
             .Include(h => h.Game)
             .Where(h => h.UserId == userId)
+            .OrderBy(h => h.RecordDate)
             .ToListAsync();
 
         if (!allHistory.Any())
@@ -423,6 +476,35 @@ public class UserReportService : IUserReportService
                     Platform = l.PlayerPlatform?.Platform?.PlatformName ?? "Unknown"
                 })
                 .ToList();
+        }
+
+        // 计算每个游戏的最后游玩时间（基于历史记录增量）
+        // 逻辑：如果两天的差值不为0，说明在前一天有游玩这个游戏
+        var gameLastPlayedDict = new Dictionary<(long GameId, int PlatformId), DateTime>();
+        var previousPlaytime = new Dictionary<(long GameId, int PlatformId), (int playtime, DateTime date)>();
+        
+        var historyByDate = allHistory.GroupBy(h => h.RecordDate.Date).OrderBy(g => g.Key).ToList();
+        
+        foreach (var dayGroup in historyByDate)
+        {
+            var currentDate = dayGroup.Key;
+            
+            foreach (var record in dayGroup)
+            {
+                var key = (record.GameId, record.PlatformId);
+                
+                if (previousPlaytime.TryGetValue(key, out var prev))
+                {
+                    var increment = record.PlaytimeForever - prev.playtime;
+                    if (increment > 0)
+                    {
+                        // 有增量，说明在前一天（prev.date）有游玩
+                        gameLastPlayedDict[key] = prev.date;
+                    }
+                }
+                
+                previousPlaytime[key] = (record.PlaytimeForever, currentDate);
+            }
         }
 
         // 在内存中按游戏+平台分组，取每组最新记录，过滤掉两周时长为0的，按两周时长排序
@@ -454,6 +536,20 @@ public class UserReportService : IUserReportService
         return latestPlaytimeHistory
             .Select(h => {
                 var library = libraryLookup.TryGetValue((h.GameId, h.PlatformId), out var lib) ? lib : null;
+                var key = (h.GameId, h.PlatformId);
+                
+                // 优先使用从历史记录计算的最后游玩时间
+                string? lastPlayed = null;
+                if (gameLastPlayedDict.TryGetValue(key, out var calculatedLastPlayed))
+                {
+                    lastPlayed = calculatedLastPlayed.ToString("yyyy-MM-dd");
+                }
+                else if (library?.LastPlayed.HasValue == true)
+                {
+                    // 回退到库中的最后游玩时间
+                    lastPlayed = library.LastPlayed.Value.ToString("yyyy-MM-dd HH:mm");
+                }
+                
                 return new RecentPlayedGameDto
                 {
                     GameId = h.GameId,
@@ -461,7 +557,7 @@ public class UserReportService : IUserReportService
                     HeaderImage = h.Game?.HeaderImage,
                     PlaytimeMinutes = library?.PlaytimeMinutes ?? h.PlaytimeForever,
                     RecentPlaytimeMinutes = h.Playtime2Weeks,
-                    LastPlayed = library?.LastPlayed?.ToString("yyyy-MM-dd HH:mm"),
+                    LastPlayed = lastPlayed,
                     Platform = platforms.GetValueOrDefault(h.PlatformId, "Unknown")
                 };
             })
