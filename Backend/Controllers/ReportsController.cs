@@ -23,6 +23,15 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
+    /// 获取当前用户ID
+    /// </summary>
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : 0;
+    }
+
+    /// <summary>
     /// 获取报表模板列表
     /// </summary>
     [HttpGet("templates")]
@@ -211,7 +220,7 @@ public class ReportsController : ControllerBase
                 ReportId = id,
                 TemplateId = 1,
                 TemplateName = "月度游戏报告",
-                UserId = 1001,
+                UserId = GetCurrentUserId(),
                 Status = "completed",
                 Format = "pdf",
                 Parameters = new Dictionary<string, object>
@@ -244,8 +253,11 @@ public class ReportsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001
-            int userId = 1001;
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized("请先登录");
+            }
             
             // 解析报表ID中的日期信息（格式：rpt_yyyyMMdd_HHmmss）
             var startDate = DateTime.UtcNow.AddMonths(-1).Date;

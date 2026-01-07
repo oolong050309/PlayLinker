@@ -20,6 +20,15 @@ public class LocalGamesController : ControllerBase
     }
 
     /// <summary>
+    /// 获取当前用户ID
+    /// </summary>
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : 0;
+    }
+
+    /// <summary>
     /// 扫描本地游戏
     /// </summary>
     /// <param name="request">扫描请求参数</param>
@@ -74,7 +83,12 @@ public class LocalGamesController : ControllerBase
     {
         try
         {
-            int userId = 1001; // 假设当前用户ID
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<LocalGameListDto>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             // 检查游戏是否存在
             var game = await _context.Games.FindAsync(request.GameId);
@@ -161,8 +175,12 @@ public class LocalGamesController : ControllerBase
             pageSize = Math.Min(pageSize, 100);
             page = Math.Max(page, 1);
 
-            // 假设当前用户ID为1001（实际项目中应从JWT Token获取）
-            int userId = 1001;
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<PaginatedResponse<LocalGameListDto>>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             var query = _context.LocalGameInstalls
                 .Include(lgi => lgi.Game)

@@ -15,7 +15,7 @@
         <div class="game-selector-wrapper" :class="{ disabled: selectionMode === 'search' }">
           <div class="selector-label">
             <Gamepad2 class="label-icon" />
-            <span>选择本地游戏</span>
+            <span>从我的游戏库选择</span>
             <button v-if="selectionMode === 'local'" class="reset-btn" @click.stop="resetSelection">
               <X :size="14" />
             </button>
@@ -29,14 +29,14 @@
               <ChevronDown class="chevron" :class="{ rotated: dropdownOpen }" />
             </div>
             <div class="select-dropdown" v-show="dropdownOpen" @click.stop>
-              <div v-if="localGames.length === 0" class="dropdown-empty">
+              <div v-if="libraryGames.length === 0" class="dropdown-empty">
                 <Package class="empty-icon" />
-                <p>暂无本地游戏</p>
-                <router-link to="/app/mods" class="add-game-link">去添加游戏</router-link>
+                <p>游戏库为空</p>
+                <router-link to="/app/bindPlatform" class="add-game-link">去绑定平台</router-link>
               </div>
               <div v-else class="dropdown-list">
                 <div 
-                  v-for="game in localGames" 
+                  v-for="game in libraryGames" 
                   :key="game.gameId"
                   class="dropdown-item"
                   :class="{ active: selectedGameId === game.gameId }"
@@ -55,7 +55,7 @@
         <div class="game-search-wrapper" :class="{ disabled: selectionMode === 'local' }">
           <div class="selector-label">
             <Search class="label-icon" />
-            <span>搜索游戏</span>
+            <span>搜索所有游戏</span>
             <button v-if="selectionMode === 'search'" class="reset-btn" @click.stop="resetSelection">
               <X :size="14" />
             </button>
@@ -172,12 +172,12 @@
 
     <div v-else-if="!selectedGameId" class="empty-state">
       <Gamepad2 class="empty-icon" />
-      <h3 v-if="localGames.length === 0">暂无本地游戏</h3>
+      <h3 v-if="libraryGames.length === 0">游戏库为空</h3>
       <h3 v-else>请选择一个游戏</h3>
-      <p v-if="localGames.length === 0">请先在「Mod与存档」页面添加本地游戏</p>
+      <p v-if="libraryGames.length === 0">请先绑定平台同步游戏数据</p>
       <p v-else>选择游戏后将显示可用的 Mod 来源</p>
-      <router-link v-if="localGames.length === 0" to="/app/mods" class="btn-primary">
-        <Plus :size="16" /> 添加本地游戏
+      <router-link v-if="libraryGames.length === 0" to="/app/bindPlatform" class="btn-primary">
+        <Plus :size="16" /> 绑定平台
       </router-link>
     </div>
 
@@ -204,14 +204,14 @@ import {
   Search, Download, ThumbsUp, Package, Globe, Plus, X 
 } from 'lucide-vue-next'
 import { getGameModSources, getModList, searchMods } from '@/api/modExplore'
-import { getLocalGames } from '@/api/localGame'
+import { libraryApi } from '@/api/index'
 import { searchGames } from '@/api/games'
 
 // State
 const loading = ref(false)
 const sourcesLoading = ref(false)
 const dropdownOpen = ref(false)
-const localGames = ref([])
+const libraryGames = ref([])
 const selectedGameId = ref(null)
 const selectedGame = ref(null)
 const modSources = ref([])
@@ -251,7 +251,7 @@ const handleClickOutside = (e) => {
 }
 
 onMounted(() => {
-  loadLocalGames()
+  loadLibraryGames()
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -261,23 +261,31 @@ onUnmounted(() => {
 })
 
 // Methods
-const loadLocalGames = async () => {
+const loadLibraryGames = async () => {
   try {
-    const res = await getLocalGames()
-    console.log('本地游戏响应:', res)
-    // 响应拦截器返回 response.data，结构是 { success, data: { items, meta } }
+    const res = await libraryApi.getGames({ page: 1, pageSize: 100 })
+    console.log('游戏库响应:', res)
+    // 解析响应
+    let items = []
     if (res.data?.items) {
-      localGames.value = res.data.items
+      items = res.data.items
     } else if (res.items) {
-      localGames.value = res.items
+      items = res.items
     } else if (Array.isArray(res.data)) {
-      localGames.value = res.data
+      items = res.data
     } else if (Array.isArray(res)) {
-      localGames.value = res
+      items = res
     }
-    console.log('解析后游戏列表:', localGames.value)
+    
+    libraryGames.value = items.map(item => ({
+      gameId: item.gameId,
+      gameName: item.gameName || item.name || '未知游戏',
+      platformName: item.platformName || item.platform || ''
+    }))
+    console.log('解析后游戏库列表:', libraryGames.value)
   } catch (error) {
-    console.error('加载游戏列表失败:', error)
+    console.error('加载游戏库失败:', error)
+    libraryGames.value = []
   }
 }
 
@@ -478,7 +486,6 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
 <style scoped>
 .mod-explore-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
   padding: 32px;
   color: #e2e8f0;
 }
@@ -729,7 +736,7 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
 }
 
 .source-tab.active {
-  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  background: var(--primary-color);
   border-color: transparent;
   color: #fff;
 }
@@ -788,7 +795,7 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
 
 .btn-search {
   padding: 10px 20px;
-  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  background: var(--primary-color);
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -1013,7 +1020,7 @@ const handleIconError = (e) => { e.target.style.display = 'none' }
   gap: 8px;
   margin-top: 16px;
   padding: 12px 24px;
-  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  background: var(--primary-color);
   color: #fff;
   text-decoration: none;
   border-radius: 10px;

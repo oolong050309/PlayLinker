@@ -19,6 +19,15 @@ public class AnalyticsController : ControllerBase
     }
 
     /// <summary>
+    /// 获取当前用户ID
+    /// </summary>
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : 0;
+    }
+
+    /// <summary>
     /// 游玩时间分析
     /// </summary>
     [HttpGet("playtime")]
@@ -30,8 +39,12 @@ public class AnalyticsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001（实际项目中应从JWT Token获取）
-            int userId = 1001;
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<PlaytimeAnalyticsResponse>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             // 确定分析周期
             var analyzePeriod = period ?? $"{year ?? DateTime.UtcNow.Year}-{month ?? DateTime.UtcNow.Month:D2}";
@@ -94,8 +107,12 @@ public class AnalyticsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001
-            int userId = 1001;
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<GenreAnalyticsResponse>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             // 从数据库查询用户的游戏记录，关联题材信息
             var gameRecords = await _context.UserPlatformLibraries
@@ -164,8 +181,12 @@ public class AnalyticsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001
-            int userId = 1001;
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<PlatformAnalyticsResponse>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             // 从数据库查询用户的游戏记录，按平台分组
             var platformStats = await _context.UserPlatformLibraries
@@ -234,8 +255,12 @@ public class AnalyticsController : ControllerBase
     {
         try
         {
-            // 假设当前用户ID为1001
-            int userId = 1001;
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<AchievementAnalyticsResponse>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             // 从数据库查询用户的成就记录
             var userAchievements = await _context.UserAchievements

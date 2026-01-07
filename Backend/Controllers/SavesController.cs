@@ -21,6 +21,15 @@ public class SavesController : ControllerBase
     }
 
     /// <summary>
+    /// 获取当前用户ID
+    /// </summary>
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : 0;
+    }
+
+    /// <summary>
     /// 获取本地存档列表
     /// </summary>
     /// <param name="gameId">游戏ID（可选）</param>
@@ -39,7 +48,12 @@ public class SavesController : ControllerBase
             pageSize = Math.Min(pageSize, 100);
             page = Math.Max(page, 1);
 
-            int userId = 1001; // 假设当前用户ID
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<PaginatedResponse<LocalSaveListDto>>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             var query = _context.LocalSaveFiles
                 .Include(lsf => lsf.Install)
@@ -118,7 +132,12 @@ public class SavesController : ControllerBase
     {
         try
         {
-            int userId = 1001; // 假设当前用户ID
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<LocalSaveListDto>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             // 验证游戏安装记录是否存在
             var install = await _context.LocalGameInstalls

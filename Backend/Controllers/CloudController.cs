@@ -30,6 +30,15 @@ public class CloudController : ControllerBase
     }
 
     /// <summary>
+    /// 获取当前用户ID
+    /// </summary>
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value ?? User.FindFirst("sub")?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : 0;
+    }
+
+    /// <summary>
     /// 获取云存档列表
     /// </summary>
     /// <param name="gameId">游戏ID（可选）</param>
@@ -48,7 +57,12 @@ public class CloudController : ControllerBase
             pageSize = Math.Min(pageSize, 100);
             page = Math.Max(page, 1);
 
-            int userId = 1001; // 假设当前用户ID
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<PaginatedResponse<CloudSaveListDto>>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             var query = _context.CloudSaveBackups
                 .Include(csb => csb.Game)
@@ -344,7 +358,12 @@ public class CloudController : ControllerBase
     {
         try
         {
-            int userId = 1001; // 假设当前用户ID
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<CloudStorageUsageDto>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
 
             var cloudSaves = await _context.CloudSaveBackups
                 .Include(csb => csb.Game)
