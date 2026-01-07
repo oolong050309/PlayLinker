@@ -179,6 +179,7 @@ public class PlaytimeHistoryService : BackgroundService
                         {
                             gamesMatched++;
 
+                            // 更新或创建 user_playtime_history 记录
                             var existingHistory = await context.UserPlaytimeHistories
                                 .FirstOrDefaultAsync(h =>
                                     h.UserId == binding.UserId &&
@@ -204,6 +205,35 @@ public class PlaytimeHistoryService : BackgroundService
                                 existingHistory.PlaytimeForever = playtimeForever;
                                 existingHistory.Playtime2Weeks = playtime2Weeks;
                                 existingHistory.CreatedAt = DateTime.UtcNow;
+                            }
+
+                            // 同步更新 user_platform_library 表的 playtime_minutes 字段
+                            // 只有当新获取的游戏时间 > 现有 playtime_minutes 时才更新
+                            // 注意：如果记录不存在，不创建新记录
+                            var userPlatformLibrary = await context.UserPlatformLibraries
+                                .FirstOrDefaultAsync(upl =>
+                                    upl.PlatformUserId == steamId &&
+                                    upl.PlatformId == STEAM_PLATFORM_ID &&
+                                    upl.GameId == localGameId, stoppingToken);
+
+                            if (userPlatformLibrary != null)
+                            {
+                                // 只有当新获取的游戏时间大于现有值时才更新
+                                if (playtimeForever > userPlatformLibrary.PlaytimeMinutes)
+                                {
+                                    _logger.LogInformation(
+                                        "更新用户 {UserId} 游戏 {GameId} 的游戏时长: {OldMinutes} -> {NewMinutes} 分钟",
+                                        binding.UserId, localGameId, userPlatformLibrary.PlaytimeMinutes, playtimeForever);
+                                    
+                                    userPlatformLibrary.PlaytimeMinutes = playtimeForever;
+                                }
+                            }
+                            else
+                            {
+                                // 如果 user_platform_library 中不存在该记录，不创建新记录
+                                _logger.LogDebug(
+                                    "用户 {UserId} 游戏 {GameId} 在 user_platform_library 中不存在记录，跳过更新",
+                                    binding.UserId, localGameId);
                             }
                         }
                     }
