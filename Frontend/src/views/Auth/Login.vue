@@ -359,7 +359,7 @@ const handleLogin = async () => {
 /* 密码切换按钮 */
 .toggle-password-btn {
   position: absolute;
-  right: 16px;
+  right: 32px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
@@ -376,8 +376,8 @@ const handleLogin = async () => {
 }
 
 .toggle-password-btn .eye-icon {
-  width: 20px;
-  height: 20px;
+  width: 0px;
+  height: 22px;
 }
 
 .toggle-password-btn:hover {
