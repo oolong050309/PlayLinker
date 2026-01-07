@@ -287,7 +287,7 @@ public class CloudController : ControllerBase
             // 从 OSS 下载文件
             var memory = await _ossService.DownloadCloudSaveAsync(objectKey);
 
-            var fileName = $"{id}.dat";
+            var fileName = $"{id}.zip";
             _logger.LogInformation("Downloading file: {FileName}, Size: {Size} bytes", fileName, memory.Length);
 
             return File(memory, "application/octet-stream", fileName);
