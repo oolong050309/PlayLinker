@@ -392,6 +392,7 @@ public partial class PlayLinkerDbContext : DbContext
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.IsRead).HasDefaultValueSql("'0'");
+            entity.Property(e => e.IsVisible).HasDefaultValueSql("'1'");
             entity.Property(e => e.NotificationType).HasDefaultValueSql("'info'");
 
             entity.HasOne(d => d.User).WithMany(p => p.NotificationCenters)

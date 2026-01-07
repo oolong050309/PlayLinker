@@ -54,7 +54,7 @@ public class NotificationsController : ControllerBase
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 100) pageSize = 20;
 
-            var query = _dbContext.NotificationCenters.Where(n => n.UserId == userId);
+            var query = _dbContext.NotificationCenters.Where(n => n.UserId == userId && (n.IsVisible ?? true));
 
             // 应用过滤条件
             if (isRead.HasValue)
@@ -86,7 +86,7 @@ public class NotificationsController : ControllerBase
             }).ToList();
 
             var unreadCount = _dbContext.NotificationCenters
-                .Count(n => n.UserId == userId && n.IsRead == false);
+                .Count(n => n.UserId == userId && (n.IsVisible ?? true) && n.IsRead == false);
 
             var response = new NotificationsListResponseDto
             {
@@ -178,33 +178,14 @@ public class NotificationsController : ControllerBase
                 return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "通知不存在"));
             }
 
-            // 先删除相关的报警日志（避免外键约束错误）
-            // 删除价格提醒日志
-            var priceAlertLogs = await _dbContext.PriceAlertLogs
-                .Where(l => l.NotificationId == id)
-                .ToListAsync();
+            // 假删除：仅对当前用户隐藏，不做物理删除，也无需删除关联日志
 
-            if (priceAlertLogs.Any())
-            {
-                _dbContext.PriceAlertLogs.RemoveRange(priceAlertLogs);
-                _logger.LogInformation($"删除通知 {id} 相关的 {priceAlertLogs.Count} 条价格提醒日志");
-            }
-
-            // 删除家长控制报警日志
-            var alertLogs = await _dbContext.ParentalAlertLogs
-                .Where(l => l.NotificationId == id)
-                .ToListAsync();
-
-            if (alertLogs.Any())
-            {
-                _dbContext.ParentalAlertLogs.RemoveRange(alertLogs);
-                _logger.LogInformation($"删除通知 {id} 相关的 {alertLogs.Count} 条家长控制报警日志");
-            }
-
-            _dbContext.NotificationCenters.Remove(notification);
+            // 假删除：仅对当前用户隐藏，不做物理删除
+            notification.IsVisible = false;
+            _dbContext.NotificationCenters.Update(notification);
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation($"Notification deleted: {id}, user: {userId}");
+            _logger.LogInformation($"Notification hidden (soft deleted): {id}, user: {userId}");
             return Ok(ApiResponse<object>.SuccessResponse(new { }, "删除成功"));
         }
         catch (Exception ex)

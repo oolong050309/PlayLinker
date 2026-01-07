@@ -38,6 +38,12 @@ public partial class NotificationCenter
     [Column("is_read")]
     public bool? IsRead { get; set; }
 
+    /// <summary>
+    /// 是否可见（用于用户“假删除”）
+    /// </summary>
+    [Column("is_visible")]
+    public bool? IsVisible { get; set; }
+
     [Column("related_id")]
     public long RelatedId { get; set; }
 
