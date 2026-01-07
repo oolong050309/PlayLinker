@@ -2033,11 +2033,10 @@ onUnmounted(() => {
 }
 
 .heatmap-grid-inline {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(7, 40px);
   gap: 6px;
   justify-content: center;
-  max-width: calc(7 * 40px + 6 * 6px);
   margin: 0 auto;
 }
 
