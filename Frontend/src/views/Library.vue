@@ -18,15 +18,6 @@
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon bg-green">
-            <Play class="icon" size="24" />
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ overview.gamesPlayed || 0 }}</div>
-            <div class="stat-label">已玩游戏</div>
-          </div>
-        </div>
-        <div class="stat-card">
           <div class="stat-icon bg-purple">
             <Clock class="icon" size="24" />
           </div>
