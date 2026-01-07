@@ -196,9 +196,9 @@
             </p>
             <ul class="feature-list">
               <li>自动同步各平台游戏库</li>
-              <li>自定义游戏分类与标签</li>
-              <li>一键启动游戏无需切换启动器</li>
-              <li>游戏详情与攻略快速查看</li>
+              <li>查看游戏分类与标签</li>
+              <li>游戏排行与评分</li>
+              <li>游戏详情与mod快速查看</li>
             </ul>
           </div>
 
@@ -212,7 +212,7 @@
               实时监控游戏价格变动，设置折扣阈值自动提醒，再也不错过心仪游戏的促销
             </p>
             <ul class="feature-list">
-              <li>多平台价格对比</li>
+            
               <li>自定义折扣提醒阈值</li>
               <li>历史价格走势分析</li>
               <li>愿望单智能管理</li>
@@ -236,20 +236,20 @@
             </ul>
           </div>
 
-          <!-- 功能卡片 4：社交分享 -->
+          <!-- 功能卡片 4：存档 -->
           <div class="feature-card glass-panel">
             <div class="feature-icon pink">
-              <Users class="lucide-icon" />
+              <Archive class="lucide-icon" />
             </div>
-            <h3 class="feature-title">社交分享</h3>
+            <h3 class="feature-title">存档</h3>
             <p class="feature-desc">
-              轻松分享游戏库、成就和游玩时长，与好友互动，发现更多志同道合的游戏伙伴
+              轻松整理与管理游戏存档，支持备份与迁移，确保关键进度安全无忧
             </p>
             <ul class="feature-list">
-              <li>游戏库卡片生成与分享</li>
-              <li>好友游戏时长排行榜</li>
-              <li>成就解锁动态分享</li>
-              <li>游戏推荐与评论互动</li>
+              <li>本地与云端存档备份</li>
+              <li>跨设备存档迁移</li>
+              <li>存档版本管理与恢复</li>
+              <li>存档占用与状态概览</li>
             </ul>
           </div>
 
@@ -266,7 +266,6 @@
               <li>每日/每周游戏时长限制</li>
               <li>游戏内容分级筛选</li>
               <li>游戏活动周报推送</li>
-              <li>学习时段自动屏蔽</li>
             </ul>
           </div>
 
@@ -280,31 +279,13 @@
               支持多种格式导出游戏数据，满足媒体创作、数据分析等专业需求
             </p>
             <ul class="feature-list">
-              <li>PDF/Excel/CSV 格式导出</li>
+              <li>PDF/html 格式导出</li>
               <li>自定义导出数据维度</li>
               <li>可视化图表导出</li>
-              <li>定期自动备份数据</li>
             </ul>
           </div>
         </div>
 
-        <!-- 功能亮点 -->
-        <div class="features-highlight glass-panel">
-          <div class="highlight-content">
-            <h3 class="highlight-title">API 驱动 · 隐私优先</h3>
-            <p class="highlight-desc">
-              所有数据通过官方 API 获取，不存储敏感账号信息，支持本地数据缓存，
-              兼顾使用便捷性与数据安全性
-            </p>
-            <a href="#about" class="highlight-link">
-              了解更多安全特性 <ArrowRight class="lucide-icon" />
-            </a>
-          </div>
-          <div class="highlight-image">
-            <div class="image-bg-blur"></div>
-            <Lock class="lucide-icon" />
-          </div>
-        </div>
       </div>
     </section>
 
@@ -422,7 +403,7 @@
               <li class="panel-item">
                 <span class="item-emoji">📩</span>
                 <div class="item-content">
-                  <h4 class="item-title">每周活动摘要</h4>
+                  <h4 class="item-title">孩子活动摘要</h4>
                   <p class="item-desc">"接收电子邮件摘要，了解孩子玩了哪些游戏以及时长。"</p>
                 </div>
               </li>
@@ -437,13 +418,10 @@
       <div class="footer-container">
         <div class="footer-logo">
           <Gamepad2 class="lucide-icon" />
-          <span class="logo-text">GameLinker</span>
+          <span class="logo-text">PlayLinker</span>
         </div>
-        <p class="footer-desc">
-          本项目展示了如何使用原生 JS + Tailwind + Chart.js 整合复杂的游戏数据管理功能。
-        </p>
         <div class="copyright">
-          © 2024 游戏宇宙项目 版权所有
+          © 2025 Playlinker项目 版权所有
         </div>
       </div>
     </footer>
@@ -456,8 +434,8 @@ import Chart from 'chart.js/auto';
 // 引入需要的 Lucide 图标组件
 import { 
   Gamepad2, ArrowRight, Globe, ShieldCheck, BarChart3, Zap,
-  Library, DollarSign, Trophy, Users, Shield, Download, 
-  Bell, Lock, Share2, ShieldAlert
+  Library, DollarSign, Trophy, Archive, Shield, Download, 
+  Bell, Share2, ShieldAlert
 } from 'lucide-vue-next';
 
 // 响应式数据
@@ -565,6 +543,7 @@ onMounted(() => {
 
 .gradient-text {
   background: linear-gradient(to bottom, #ffffff, #71717a);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
