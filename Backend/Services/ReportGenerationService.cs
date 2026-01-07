@@ -174,12 +174,12 @@ public class ReportGenerationService
         if (topGameEntry.Value.playtimeMinutes > 0)
         {
             var topGamePercent = totalMinutes > 0 ? Math.Round((decimal)topGameEntry.Value.playtimeMinutes / totalMinutes * 100, 1) : 0;
-            insights.Add($"🎮 本月最爱是《{topGameName}》，投入了 {topGameHours} 小时，占总时长的 {topGamePercent}%");
+            insights.Add($"本月最爱是《{topGameName}》，投入了 {topGameHours} 小时，占总时长的 {topGamePercent}%");
         }
-        insights.Add($"📅 本月活跃 {activeDays} 天，平均每天游玩 {(activeDays > 0 ? Math.Round(totalHours / activeDays, 1) : 0)} 小时");
+        insights.Add($"本月活跃 {activeDays} 天，平均每天游玩 {(activeDays > 0 ? Math.Round(totalHours / activeDays, 1) : 0)} 小时");
         if (genreStats.Any())
         {
-            insights.Add($"💜 最喜欢的游戏类型是「{genreStats.First().Genre}」，共游玩 {Math.Round(genreStats.First().Minutes / 60.0, 1)} 小时");
+            insights.Add($"最喜欢的游戏类型是「{genreStats.First().Genre}」，共游玩 {Math.Round(genreStats.First().Minutes / 60.0, 1)} 小时");
         }
 
         var html = $@"
@@ -720,7 +720,7 @@ public class ReportGenerationService
                         {
                             column.Item().Background(accentPurple).Padding(18).Column(col =>
                             {
-                                col.Item().Text("🏆 本月最爱游戏").FontSize(11).FontColor(Colors.White);
+                                col.Item().Text("★ 本月最爱游戏").FontSize(11).FontColor(Colors.White);
                                 col.Item().Text(topGameName).FontSize(20).Bold().FontColor(Colors.White);
                                 col.Item().Text($"共游玩 {topGameHours} 小时").FontSize(12).FontColor(Colors.White);
                             });
@@ -729,7 +729,7 @@ public class ReportGenerationService
                         // 本月洞察
                         column.Item().Background(darkCard).Padding(15).Column(col =>
                         {
-                            col.Item().Text("💡 本月洞察").FontSize(13).SemiBold().FontColor(accentCyan);
+                            col.Item().Text("◆ 本月洞察").FontSize(13).SemiBold().FontColor(accentCyan);
                             col.Item().PaddingTop(8);
                             foreach (var insight in insights)
                             {
@@ -740,7 +740,7 @@ public class ReportGenerationService
                         // 游戏类型偏好
                         if (genreStats.Any())
                         {
-                            column.Item().Text("📊 游戏类型偏好").FontSize(14).SemiBold().FontColor(accentCyan);
+                            column.Item().Text("■ 游戏类型偏好").FontSize(14).SemiBold().FontColor(accentCyan);
 
                             column.Item().Background(darkCard).Padding(10).Table(table =>
                             {
@@ -771,7 +771,7 @@ public class ReportGenerationService
                         }
 
                         // 游戏排行榜
-                        column.Item().Text("🎯 游戏排行榜 TOP 10").FontSize(14).SemiBold().FontColor(accentCyan);
+                        column.Item().Text("● 游戏排行榜 TOP 10").FontSize(14).SemiBold().FontColor(accentCyan);
 
                         column.Item().Background(darkCard).Padding(8).Table(table =>
                         {
@@ -971,16 +971,16 @@ public class ReportGenerationService
         if (topGameEntry.Value.playtimeMinutes > 0)
         {
             var topGamePercent = totalMinutes > 0 ? Math.Round((decimal)topGameEntry.Value.playtimeMinutes / totalMinutes * 100, 1) : 0;
-            insights.Add($"🎮 你的年度最爱是《{topGameName}》，投入了 {topGameHours} 小时，占全年游戏时长的 {topGamePercent}%");
+            insights.Add($"你的年度最爱是《{topGameName}》，投入了 {topGameHours} 小时，占全年游戏时长的 {topGamePercent}%");
         }
-        insights.Add($"📅 全年活跃 {activeDays} 天，平均每天游玩 {(activeDays > 0 ? Math.Round(totalHours / activeDays, 1) : 0)} 小时");
+        insights.Add($"全年活跃 {activeDays} 天，平均每天游玩 {(activeDays > 0 ? Math.Round(totalHours / activeDays, 1) : 0)} 小时");
         if (genreStats.Any())
         {
-            insights.Add($"💜 你最喜欢的游戏类型是「{genreStats.First().Genre}」，共游玩 {Math.Round(genreStats.First().Minutes / 60.0, 1)} 小时");
+            insights.Add($"你最喜欢的游戏类型是「{genreStats.First().Genre}」，共游玩 {Math.Round(genreStats.First().Minutes / 60.0, 1)} 小时");
         }
         if (totalAchievements > 0)
         {
-            insights.Add($"🏅 全年解锁 {totalAchievements} 个成就，平均每款游戏 {(playedGames > 0 ? Math.Round((double)totalAchievements / playedGames, 1) : 0)} 个");
+            insights.Add($"全年解锁 {totalAchievements} 个成就，平均每款游戏 {(playedGames > 0 ? Math.Round((double)totalAchievements / playedGames, 1) : 0)} 个");
         }
 
         // 生成月度数据用于图表
@@ -1523,7 +1523,7 @@ public class ReportGenerationService
                     {
                         column.Item().Background(accentPurple).Padding(18).Column(col =>
                         {
-                            col.Item().Text("🏆 年度最爱游戏").FontSize(11).FontColor(Colors.White);
+                            col.Item().Text("★ 年度最爱游戏").FontSize(11).FontColor(Colors.White);
                             col.Item().Text(topGameName).FontSize(20).Bold().FontColor(Colors.White);
                             col.Item().Text($"共游玩 {topGameHours} 小时").FontSize(12).FontColor(Colors.White);
                         });
@@ -1532,7 +1532,7 @@ public class ReportGenerationService
                     // 年度洞察
                     column.Item().Background(darkCard).Padding(15).Column(col =>
                     {
-                        col.Item().Text("💡 年度洞察").FontSize(13).SemiBold().FontColor(accentCyan);
+                        col.Item().Text("◆ 年度洞察").FontSize(13).SemiBold().FontColor(accentCyan);
                         col.Item().PaddingTop(8);
                         foreach (var insight in insights)
                         {
@@ -1541,7 +1541,7 @@ public class ReportGenerationService
                     });
 
                     // 月度游戏时长
-                    column.Item().Text("📈 月度游戏时长").FontSize(14).SemiBold().FontColor(accentCyan);
+                    column.Item().Text("▲ 月度游戏时长").FontSize(14).SemiBold().FontColor(accentCyan);
                     
                     column.Item().Background(darkCard).Padding(8).Table(table =>
                     {
@@ -1568,7 +1568,7 @@ public class ReportGenerationService
                     // 游戏类型偏好
                     if (genreStats.Any())
                     {
-                        column.Item().Text("📊 游戏类型偏好").FontSize(14).SemiBold().FontColor(accentCyan);
+                        column.Item().Text("■ 游戏类型偏好").FontSize(14).SemiBold().FontColor(accentCyan);
 
                         column.Item().Background(darkCard).Padding(10).Table(table =>
                         {
@@ -1599,7 +1599,7 @@ public class ReportGenerationService
                     }
 
                     // 游戏排行榜
-                    column.Item().Text("🎯 游戏排行榜 TOP 10").FontSize(14).SemiBold().FontColor(accentCyan);
+                    column.Item().Text("● 游戏排行榜 TOP 10").FontSize(14).SemiBold().FontColor(accentCyan);
 
                     column.Item().Background(darkCard).Padding(8).Table(table =>
                     {
@@ -1828,19 +1828,19 @@ public class ReportGenerationService
         if (totalGames > 0)
         {
             var playedPercent = installedGames > 0 ? Math.Round((double)installedGames / totalGames * 100, 1) : 0;
-            insights.Add($"📦 你的游戏库共有 {totalGames} 款游戏，已安装 {installedGames} 款（{playedPercent}%）");
+            insights.Add($"你的游戏库共有 {totalGames} 款游戏，已安装 {installedGames} 款（{playedPercent}%）");
         }
         if (platformStats.Any())
         {
-            insights.Add($"🎮 你在 {platformStats.First().Platform} 平台拥有最多游戏（{platformStats.First().Count} 款）");
+            insights.Add($"你在 {platformStats.First().Platform} 平台拥有最多游戏（{platformStats.First().Count} 款）");
         }
         if (totalSizeGB > 0)
         {
-            insights.Add($"💾 本地游戏占用 {totalSizeGB:F1} GB 存储空间");
+            insights.Add($"本地游戏占用 {totalSizeGB:F1} GB 存储空间");
         }
         if (totalSaves > 0)
         {
-            insights.Add($"📁 共有 {totalSaves} 个游戏存档");
+            insights.Add($"共有 {totalSaves} 个游戏存档");
         }
 
         var html = $@"
@@ -2340,7 +2340,7 @@ public class ReportGenerationService
                     // 库存洞察
                     column.Item().Background(darkCard).Padding(15).Column(col =>
                     {
-                        col.Item().Text("💡 库存概览").FontSize(13).SemiBold().FontColor(accentCyan);
+                        col.Item().Text("◆ 库存概览").FontSize(13).SemiBold().FontColor(accentCyan);
                         col.Item().PaddingTop(8);
                         foreach (var insight in insights)
                         {
@@ -2351,7 +2351,7 @@ public class ReportGenerationService
                     // 平台分布
                     if (platformStats.Any())
                     {
-                        column.Item().Text("📊 平台分布").FontSize(14).SemiBold().FontColor(accentCyan);
+                        column.Item().Text("■ 平台分布").FontSize(14).SemiBold().FontColor(accentCyan);
 
                         column.Item().Background(darkCard).Padding(10).Table(table =>
                         {
@@ -2392,7 +2392,7 @@ public class ReportGenerationService
                     }
 
                     // 游戏收藏
-                    column.Item().Text("🎮 游戏收藏").FontSize(14).SemiBold().FontColor(accentCyan);
+                    column.Item().Text("● 游戏收藏").FontSize(14).SemiBold().FontColor(accentCyan);
 
                     column.Item().Background(darkCard).Padding(8).Table(table =>
                     {
