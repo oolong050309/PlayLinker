@@ -166,6 +166,10 @@ export const libraryApi = {
   // 获取游戏统计
   getStats() {
     return api.get('/library/stats')
+  },
+  // 获取游戏时长历史数据（7天内）
+  getGamePlaytimeHistory(gameId) {
+    return api.get(`/library/games/${gameId}/playtime-history`)
   }
 }
 

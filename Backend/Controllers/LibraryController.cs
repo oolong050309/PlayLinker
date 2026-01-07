@@ -587,5 +587,93 @@ public class LibraryController : ControllerBase
                 StatusCode(500, ApiResponse<GameStatsDto>.ErrorResponse("ERR_INTERNAL", "服务器内部错误")));
         }
     }
+
+    /// <summary>
+    /// 获取游戏时长历史数据（7天内）
+    /// </summary>
+    /// <param name="gameId">游戏ID</param>
+    [HttpGet("games/{gameId}/playtime-history")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<object>>> GetGamePlaytimeHistory(long gameId)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            _logger.LogInformation("获取游戏时长历史数据: userId={UserId}, gameId={GameId}", userId, gameId);
+
+            // 获取7天前的日期
+            var sevenDaysAgo = DateTime.UtcNow.Date.AddDays(-6); // 包含今天，共7天
+            var today = DateTime.UtcNow.Date;
+
+            // 查询该游戏在7天内的历史记录
+            var historyRecords = await _context.UserPlaytimeHistories
+                .Where(h => h.UserId == userId 
+                    && h.GameId == gameId 
+                    && h.RecordDate >= sevenDaysAgo 
+                    && h.RecordDate <= today)
+                .OrderBy(h => h.RecordDate)
+                .ToListAsync();
+
+            if (!historyRecords.Any())
+            {
+                // 如果没有历史记录，返回空数组
+                return Ok(ApiResponse<object>.SuccessResponse(new
+                {
+                    items = new List<object>()
+                }));
+            }
+
+            // 按日期分组，合并同一游戏在不同平台的时长
+            var dailyData = historyRecords
+                .GroupBy(h => h.RecordDate.Date)
+                .Select(g => new
+                {
+                    date = g.Key,
+                    playtimeMinutes = g.Sum(h => h.PlaytimeForever) // 累计总时长
+                })
+                .OrderBy(d => d.date)
+                .ToList();
+
+            // 确保有7天的数据
+            var allDates = new List<DateTime>();
+            for (int i = 0; i < 7; i++)
+            {
+                allDates.Add(sevenDaysAgo.AddDays(i));
+            }
+
+            var resultDict = dailyData.ToDictionary(d => d.date, d => d.playtimeMinutes);
+            int? lastPlaytime = null;
+
+            var finalResult = allDates.Select(date =>
+            {
+                if (resultDict.TryGetValue(date, out var playtime))
+                {
+                    lastPlaytime = playtime;
+                    return new
+                    {
+                        date = date.ToString("yyyy-MM-dd"),
+                        playtimeMinutes = playtime
+                    };
+                }
+                
+                // 如果某天没有数据，使用前一天的累计值
+                return new
+                {
+                    date = date.ToString("yyyy-MM-dd"),
+                    playtimeMinutes = lastPlaytime ?? 0
+                };
+            }).ToList();
+
+            return Ok(ApiResponse<object>.SuccessResponse(new
+            {
+                items = finalResult
+            }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取游戏时长历史数据时发生错误: gameId={GameId}", gameId);
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
 }
 

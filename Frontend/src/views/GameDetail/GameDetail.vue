@@ -134,6 +134,123 @@
             </div>
           </section>
 
+          <!-- 一周内游戏时间变化图表 -->
+          <section class="section-card playtime-trend-section">
+            <h2 class="section-title">一周内游戏时间变化</h2>
+            
+            <div v-if="playtimeHistoryLoading" class="loading-state">
+              <div class="loading-spinner"></div>
+              <span>加载中...</span>
+            </div>
+            
+            <div v-else-if="!playtimeHistory || playtimeHistory.length === 0" class="empty-state">
+              <p>暂无数据</p>
+            </div>
+            
+            <div v-else class="trend-chart-container">
+              <!-- SVG 图表 -->
+              <div class="chart-wrapper">
+                <svg class="trend-chart-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="trendGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" style="stop-color:rgba(139, 92, 246, 0.5);stop-opacity:1" />
+                      <stop offset="100%" style="stop-color:rgba(139, 92, 246, 0.05);stop-opacity:1" />
+                    </linearGradient>
+                  </defs>
+                  
+                  <!-- 背景网格线 -->
+                  <g class="grid-lines">
+                    <line
+                      v-for="(tick, index) in yAxisTicks"
+                      :key="'grid-' + index"
+                      :x1="0"
+                      :y1="tick.y"
+                      :x2="100"
+                      :y2="tick.y"
+                      stroke="rgba(255, 255, 255, 0.05)"
+                      stroke-width="0.3"
+                    />
+                  </g>
+                  
+                  <!-- 填充区域 -->
+                  <polygon
+                    :points="playtimeChartArea"
+                    fill="url(#trendGradient)"
+                    opacity="0.3"
+                  />
+                  
+                  <!-- 趋势线 -->
+                  <polyline
+                    :points="playtimeChartPoints"
+                    fill="none"
+                    stroke="rgba(139, 92, 246, 0.9)"
+                    stroke-width="2"
+                    vector-effect="non-scaling-stroke"
+                    class="trend-line"
+                  />
+                  
+                  <!-- 悬停触发区域（透明，扩大范围） -->
+                  <g class="hover-zones">
+                    <circle
+                      v-for="(item, index) in playtimeHistory"
+                      :key="'hover-' + index"
+                      :cx="getChartX(index)"
+                      :cy="getChartY(item.playtimeMinutes)"
+                      r="15"
+                      fill="transparent"
+                      class="hover-zone"
+                      @mouseenter="hoveredPointIndex = index"
+                      @mouseleave="hoveredPointIndex = null"
+                    />
+                  </g>
+                  
+                  <!-- 悬停指示线 -->
+                  <g v-if="hoveredPointIndex !== null" class="hover-indicator">
+                    <line
+                      :x1="getChartX(hoveredPointIndex)"
+                      :y1="0"
+                      :x2="getChartX(hoveredPointIndex)"
+                      :y2="100"
+                      stroke="rgba(139, 92, 246, 0.5)"
+                      stroke-width="1.5"
+                      stroke-dasharray="4,4"
+                    />
+                  </g>
+                </svg>
+                
+                <!-- 悬停提示框 -->
+                <div 
+                  v-if="hoveredPointIndex !== null && playtimeHistory[hoveredPointIndex]"
+                  class="chart-tooltip"
+                  :style="{ left: getChartX(hoveredPointIndex) + '%' }"
+                >
+                  <div class="tooltip-date">{{ formatTooltipDate(playtimeHistory[hoveredPointIndex].date) }}</div>
+                  <div class="tooltip-value">
+                    累计时长: <strong>{{ formatPlaytime(playtimeHistory[hoveredPointIndex].playtimeMinutes / 60) }}</strong>
+                  </div>
+                  <div v-if="hoveredPointIndex > 0" class="tooltip-change">
+                    变化: <span :class="getChangeClass(hoveredPointIndex)">{{ getPlaytimeChange(hoveredPointIndex) }}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 坐标轴 -->
+              <div class="chart-axes">
+                <!-- X 轴（日期） -->
+                <div class="x-axis">
+                  <div 
+                    v-for="(item, index) in playtimeHistory" 
+                    :key="'x-' + index"
+                    class="x-axis-label"
+                    :style="{ left: getChartX(index) + '%' }"
+                  >
+                    {{ formatAxisDate(item.date) }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <!-- 成就展示 -->
           <section class="section-card">
             <div class="section-header">
@@ -359,6 +476,7 @@ const gamePlaytime = ref(0)
 const playtimeHistory = ref([]) // 游戏时长历史数据
 const playtimeHistoryLoading = ref(false) // 游戏时长历史加载状态
 const platformPlaytimes = ref([]) // 不同平台的游戏时长数据
+const hoveredPointIndex = ref(null) // 当前悬停的数据点索引
 
 // 隐藏成就相关状态
 const revealedHiddenAchievements = ref(new Set()) // 已点击显示剧透的隐藏成就ID集合
@@ -623,17 +741,48 @@ const formatPlaytime = (hours) => {
 // 计算属性 - 游戏时长趋势图数据点
 const playtimeChartPoints = computed(() => {
   if (!playtimeHistory.value || playtimeHistory.value.length === 0) {
-    // 如果没有数据，返回一条水平线
     return '0,50 100,50'
   }
   
   const data = playtimeHistory.value
-  const maxPlaytime = Math.max(...data.map(d => d.playtimeMinutes || 0), 1)
+  const values = data.map(d => d.playtimeMinutes || 0)
+  const maxValue = Math.max(...values)
+  const minValue = Math.min(...values)
+  
+  // 计算合理的显示范围
+  const range = maxValue - minValue
+  
+  // 如果所有值都相同或范围很小，使用固定范围
+  if (range <= 10) {
+    const displayMin = Math.max(0, minValue - 50) // 最小值向下扩展50
+    const displayMax = maxValue + 50 // 最大值向上扩展50
+    
+    const pointCount = data.length
+    const points = data.map((item, index) => {
+      const x = pointCount > 1 ? (index / (pointCount - 1)) * 100 : 50
+      const value = item.playtimeMinutes || 0
+      const normalizedValue = displayMax > displayMin 
+        ? ((value - displayMin) / (displayMax - displayMin))
+        : 0.5
+      const y = 100 - (normalizedValue * 90) - 5 // 留出5%的上边距和5%的下边距
+      return `${x},${y}`
+    }).join(' ')
+    return points
+  }
+  
+  // 如果范围较大，使用动态范围，让变化更明显
+  // 最小值从0开始，或从实际最小值向下扩展10%
+  const displayMin = Math.max(0, minValue - range * 0.1)
+  // 最大值向上扩展15%，让顶部有空间
+  const displayMax = maxValue + range * 0.15
+  
   const pointCount = data.length
   
   const points = data.map((item, index) => {
-    const x = (index / (pointCount - 1)) * 100
-    const y = 100 - ((item.playtimeMinutes || 0) / maxPlaytime) * 80 // 留出上下边距
+    const x = pointCount > 1 ? (index / (pointCount - 1)) * 100 : 50
+    const value = item.playtimeMinutes || 0
+    const normalizedValue = ((value - displayMin) / (displayMax - displayMin))
+    const y = 100 - (normalizedValue * 90) - 5 // 留出5%的上边距和5%的下边距
     return `${x},${y}`
   }).join(' ')
   
@@ -654,7 +803,7 @@ const playtimeChartArea = computed(() => {
   return `${firstX},100 ${points} ${lastX},100`
 })
 
-// 加载游戏时长历史数据
+// 加载游戏时长历史数据（7天内）
 const loadPlaytimeHistory = async () => {
   if (!game.value) return
   
@@ -663,31 +812,30 @@ const loadPlaytimeHistory = async () => {
     const gameId = game.value.id || route.params.id
     console.log('加载游戏时长历史数据，游戏ID:', gameId)
     
-    // 从 UserPlaytimeHistory 表获取最近30天的数据
-    // 注意：这里需要调用后端API，如果还没有API，可以先使用模拟数据
-    // TODO: 调用后端API获取游戏时长历史数据
+    // 调用后端API获取游戏时长历史数据（7天内）
+    const response = await libraryApi.getGamePlaytimeHistory(gameId)
     
-    // 临时使用模拟数据（最近30天）
-    const mockData = []
-    const today = new Date()
-    const basePlaytime = gamePlaytime.value * 60 // 转换为分钟
-    
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(today)
-      date.setDate(date.getDate() - i)
+    if (response.success && response.data) {
+      const data = response.data
+      const items = data.items || []
       
-      // 模拟数据：随机波动，但总体趋势向上
-      const randomFactor = 0.8 + Math.random() * 0.4 // 0.8-1.2
-      const trendFactor = 1 - (i / 29) * 0.3 // 从0.7到1.0
-      const playtimeMinutes = Math.max(0, basePlaytime * trendFactor * randomFactor)
-      
-      mockData.push({
-        date: date.toISOString().split('T')[0],
-        playtimeMinutes: Math.round(playtimeMinutes)
+      // 确保数据按日期排序
+      const sortedItems = items.sort((a, b) => {
+        const dateA = new Date(a.date || a.Date)
+        const dateB = new Date(b.date || b.Date)
+        return dateA - dateB
       })
+      
+      playtimeHistory.value = sortedItems.map(item => ({
+        date: item.date || item.Date,
+        playtimeMinutes: item.playtimeMinutes || item.PlaytimeMinutes || 0
+      }))
+      
+      console.log('游戏时长历史数据加载成功，共', playtimeHistory.value.length, '条记录')
+    } else {
+      console.warn('获取游戏时长历史数据失败，响应:', response)
+      playtimeHistory.value = []
     }
-    
-    playtimeHistory.value = mockData
   } catch (err) {
     console.error('加载游戏时长历史数据失败:', err)
     playtimeHistory.value = []
@@ -696,6 +844,149 @@ const loadPlaytimeHistory = async () => {
   }
 }
 
+// 图表相关计算方法
+// 获取图表点的 X 坐标（百分比）
+const getChartX = (index) => {
+  if (!playtimeHistory.value || playtimeHistory.value.length === 0) return 50
+  const count = playtimeHistory.value.length
+  return count > 1 ? (index / (count - 1)) * 100 : 50
+}
+
+// 获取图表点的 Y 坐标（百分比）
+const getChartY = (value) => {
+  if (!playtimeHistory.value || playtimeHistory.value.length === 0) return 50
+  
+  const values = playtimeHistory.value.map(d => d.playtimeMinutes || 0)
+  const maxValue = Math.max(...values)
+  const minValue = Math.min(...values)
+  const range = maxValue - minValue
+  
+  let displayMin, displayMax
+  
+  if (range <= 10) {
+    displayMin = Math.max(0, minValue - 50)
+    displayMax = maxValue + 50
+  } else {
+    displayMin = Math.max(0, minValue - range * 0.1)
+    displayMax = maxValue + range * 0.15
+  }
+  
+  const normalizedValue = displayMax > displayMin 
+    ? ((value - displayMin) / (displayMax - displayMin))
+    : 0.5
+  
+  return 100 - (normalizedValue * 90) - 5 // 5% 上下边距
+}
+
+// 计算 Y 轴刻度
+const yAxisTicks = computed(() => {
+  if (!playtimeHistory.value || playtimeHistory.value.length === 0) {
+    return []
+  }
+  
+  const values = playtimeHistory.value.map(d => d.playtimeMinutes || 0)
+  const maxValue = Math.max(...values)
+  const minValue = Math.min(...values)
+  const range = maxValue - minValue
+  
+  let displayMin, displayMax
+  
+  if (range <= 10) {
+    displayMin = Math.max(0, minValue - 50)
+    displayMax = maxValue + 50
+  } else {
+    displayMin = Math.max(0, minValue - range * 0.1)
+    displayMax = maxValue + range * 0.15
+  }
+  
+  // 先确定上限和下限的位置
+  // 上限对应图表顶部（5%位置），下限对应图表底部（95%位置）
+  const topPosition = 5   // 顶部位置（对应最大值）
+  const bottomPosition = 95  // 底部位置（对应最小值）
+  
+  // 计算上限和下限对应的Y坐标（用于绘制网格线）
+  const topY = 100 - topPosition
+  const bottomY = 100 - bottomPosition
+  
+  // 生成5个刻度点：上限、中间3个、下限
+  const ticks = []
+  for (let i = 0; i <= 4; i++) {
+    // 位置从底部（95%）到顶部（5%）均匀分布
+    const position = bottomPosition - (i / 4) * (bottomPosition - topPosition)
+    const valueRatio = i / 4
+    const value = (displayMin + (displayMax - displayMin) * (1 - valueRatio)) / 60 // 从最大值到最小值
+    const y = 100 - position
+    
+    ticks.push({
+      position,
+      value,
+      y
+    })
+  }
+  
+  return ticks
+})
+
+// 格式化游戏时长为小时格式（用于Y轴）
+const formatPlaytimeHours = (hours) => {
+  if (!hours || hours === 0) return '0h'
+  // 如果小于1小时，显示为小数
+  if (hours < 1) {
+    return `${(hours * 60).toFixed(0)}m`
+  }
+  // 如果是整数，不显示小数
+  if (hours % 1 === 0) {
+    return `${hours.toFixed(0)}h`
+  }
+  // 否则显示一位小数
+  return `${hours.toFixed(1)}h`
+}
+
+// 格式化坐标轴日期（简短）
+const formatAxisDate = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+// 格式化提示框日期（完整）
+const formatTooltipDate = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+}
+
+// 计算相对前一个点的变化
+const getPlaytimeChange = (index) => {
+  if (index === 0 || !playtimeHistory.value[index] || !playtimeHistory.value[index - 1]) {
+    return '—'
+  }
+  
+  const current = playtimeHistory.value[index].playtimeMinutes || 0
+  const previous = playtimeHistory.value[index - 1].playtimeMinutes || 0
+  const change = current - previous
+  
+  if (change === 0) return '无变化'
+  
+  const changeHours = change / 60
+  const sign = change > 0 ? '+' : ''
+  return `${sign}${formatPlaytime(changeHours)}`
+}
+
+// 获取变化的CSS类
+const getChangeClass = (index) => {
+  if (index === 0 || !playtimeHistory.value[index] || !playtimeHistory.value[index - 1]) {
+    return ''
+  }
+  
+  const current = playtimeHistory.value[index].playtimeMinutes || 0
+  const previous = playtimeHistory.value[index - 1].playtimeMinutes || 0
+  const change = current - previous
+  
+  if (change > 0) return 'positive'
+  if (change < 0) return 'negative'
+  return 'neutral'
+}
 
 // 格式化日期（中国时区）
 const formatDate = (date) => {
@@ -1268,6 +1559,232 @@ onMounted(() => {
   color: #f8fafc;
   z-index: 1;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* 一周内游戏时间变化图表样式 */
+.playtime-trend-section {
+  margin-top: 24px;
+}
+
+.trend-chart-container {
+  position: relative;
+  padding: 24px 0 48px 24px;
+  margin-top: 16px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.02) 0%, rgba(139, 92, 246, 0.05) 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.chart-wrapper {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  margin-bottom: 16px;
+}
+
+.trend-chart-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.trend-line {
+  filter: drop-shadow(0 2px 6px rgba(139, 92, 246, 0.4));
+  transition: stroke-width 0.2s ease;
+}
+
+.hover-zone {
+  cursor: pointer;
+}
+
+.hover-indicator line {
+  animation: dashOffset 1s linear infinite;
+}
+
+@keyframes dashOffset {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: -100px;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, rgba(25, 25, 30, 0.98) 0%, rgba(15, 15, 20, 0.98) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #f8fafc;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(139, 92, 246, 0.2) inset;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
+  animation: tooltipFadeIn 0.2s ease;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.chart-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid rgba(139, 92, 246, 0.5);
+}
+
+.chart-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(25, 25, 30, 0.98);
+}
+
+.tooltip-date {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #cbd5e1;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.tooltip-value {
+  font-size: 14px;
+  color: #e2e8f0;
+  margin-bottom: 6px;
+}
+
+.tooltip-value strong {
+  font-weight: 700;
+  color: #8b5cf6;
+  font-size: 15px;
+}
+
+.tooltip-change {
+  font-size: 12px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tooltip-change .positive {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.tooltip-change .negative {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.tooltip-change .neutral {
+  color: #94a3b8;
+}
+
+.chart-axes {
+  position: relative;
+  width: 100%;
+}
+
+.x-axis {
+  position: relative;
+  height: 36px;
+  border-top: 1.5px solid rgba(139, 92, 246, 0.2);
+  margin-top: 8px;
+  padding-top: 10px;
+}
+
+.x-axis-label {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  transition: color 0.2s ease;
+}
+
+.x-axis-label:hover {
+  color: #cbd5e1;
+}
+
+.y-axis {
+  position: absolute;
+  left: -70px;
+  top: 0;
+  bottom: 0;
+  width: 65px;
+  border-right: 1.5px solid rgba(139, 92, 246, 0.2);
+  padding-right: 12px;
+}
+
+.y-axis-label {
+  position: absolute;
+  right: 12px;
+  transform: translateY(50%);
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: right;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  transition: color 0.2s ease;
+}
+
+.y-axis-label:hover {
+  color: #cbd5e1;
+}
+
+.loading-state,
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(139, 92, 246, 0.2);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 平台筛选器 */
