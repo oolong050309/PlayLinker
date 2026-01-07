@@ -53,23 +53,11 @@
         <p>暂无相关游戏</p>
       </div>
 
-      <div class="pagination" v-if="totalPages > 1">
-        <button
-          @click="changePage(page - 1)"
-          :disabled="page === 1"
-          class="btn btn-secondary"
-        >
-          上一页
-        </button>
-        <span class="page-info">第 {{ page }} 页 / 共 {{ totalPages }} 页</span>
-        <button
-          @click="changePage(page + 1)"
-          :disabled="page >= totalPages"
-          class="btn btn-secondary"
-        >
-          下一页
-        </button>
-      </div>
+      <Pagination
+        :current-page="page"
+        :total-pages="totalPages"
+        @page-change="changePage"
+      />
     </div>
   </div>
 </template>
@@ -79,6 +67,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { gameApi } from '../api'
 import noCoverImage from '@/assets/no_cover.png'
+import Pagination from '@/components/common/Pagination.vue'
 
 const router = useRouter()
 const games = ref([])

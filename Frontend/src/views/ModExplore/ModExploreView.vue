@@ -181,19 +181,11 @@
       </router-link>
     </div>
 
-    <div v-if="totalPages > 1" class="pagination">
-      <button class="page-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">
-        <ChevronLeft :size="16" /> 上一页
-      </button>
-      <div class="page-numbers">
-        <span class="current">{{ currentPage }}</span>
-        <span class="separator">/</span>
-        <span class="total">{{ totalPages }}</span>
-      </div>
-      <button class="page-btn" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">
-        下一页 <ChevronRight :size="16" />
-      </button>
-    </div>
+    <Pagination
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      @page-change="changePage"
+    />
   </div>
 </template>
 
@@ -206,6 +198,7 @@ import {
 import { getGameModSources, getModList, searchMods } from '@/api/modExplore'
 import { libraryApi } from '@/api/index'
 import { searchGames } from '@/api/games'
+import Pagination from '@/components/common/Pagination.vue'
 
 // State
 const loading = ref(false)
