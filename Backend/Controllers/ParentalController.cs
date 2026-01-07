@@ -111,7 +111,7 @@ public class ParentalController : ControllerBase
             {
                 ParentUserId = targetParentId,
                 ChildUserId = request.ChildUserId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now
             };
 
             _dbContext.ParentalControlRelationships.Add(relationship);
@@ -206,7 +206,7 @@ public class ParentalController : ControllerBase
 
                 // 生成邀请令牌
                 var token = Guid.NewGuid().ToString("N");
-                var expiresAt = DateTime.UtcNow.AddDays(3);
+                var expiresAt = DateTime.Now.AddDays(3);
 
                 var payload = new ParentalInvitationPayload
                 {
@@ -231,7 +231,7 @@ public class ParentalController : ControllerBase
                     NotificationType = "info",
                     IsRead = false,
                     RelatedId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.Now
                 };
 
                 _dbContext.NotificationCenters.Add(notification);
@@ -324,7 +324,7 @@ public class ParentalController : ControllerBase
                 }
 
                 // 检查是否过期
-                if (matchedPayload.ExpiresAt <= DateTime.UtcNow)
+                if (matchedPayload.ExpiresAt <= DateTime.Now)
                 {
                     matchedNotification.IsRead = true;
                     _dbContext.NotificationCenters.Update(matchedNotification);
@@ -348,7 +348,7 @@ public class ParentalController : ControllerBase
                         NotificationType = "info",
                         IsRead = false,
                         RelatedId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = DateTime.Now
                     };
                     _dbContext.NotificationCenters.Add(rejectNotification);
 
@@ -371,7 +371,7 @@ public class ParentalController : ControllerBase
                 {
                     ParentUserId = matchedPayload.ParentUserId,
                     ChildUserId = matchedPayload.ChildUserId,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.Now
                 };
 
                 _dbContext.ParentalControlRelationships.Add(relationship);
@@ -386,7 +386,7 @@ public class ParentalController : ControllerBase
                     NotificationType = "info",
                     IsRead = false,
                     RelatedId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.Now
                 };
                 _dbContext.NotificationCenters.Add(acceptNotification);
 
@@ -451,7 +451,7 @@ public class ParentalController : ControllerBase
 
             // 获取过去7天的日期范围（注意：由于数据在每天2点更新，今天的数据实际上是昨天的）
             // 所以我们要显示的是：昨天、前天、...、7天前（不包含今天）
-            var today = DateTime.UtcNow.Date;
+            var today = DateTime.Now.Date;
             var yesterday = today.AddDays(-1); // 昨天（这是最新有数据的日期）
             var sevenDaysAgo = yesterday.AddDays(-6); // 7天前
 
@@ -629,7 +629,7 @@ public class ParentalController : ControllerBase
                     todayPlaytime = todayPlaytime,
                     recentAlerts = _dbContext.ParentalAlertLogs
                         .Count(alert => alert.ChildUserId == r.ChildUser.UserId && 
-                                       alert.AlertTime >= DateTime.UtcNow.AddDays(-1))
+                                       alert.AlertTime >= DateTime.Now.AddDays(-1))
                 });
             }
 
@@ -757,8 +757,8 @@ public class ParentalController : ControllerBase
                 RuleType = request.RuleType,
                 RuleValue = JsonSerializer.Serialize(request.RuleValue),
                 IsActive = request.IsActive,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
             };
 
             _dbContext.ParentalControlRules.Add(rule);
@@ -873,7 +873,7 @@ public class ParentalController : ControllerBase
             }
             // 始终更新 isActive 状态
             rule.IsActive = request.IsActive;
-            rule.UpdatedAt = DateTime.UtcNow;
+            rule.UpdatedAt = DateTime.Now;
 
             await _dbContext.SaveChangesAsync();
 
@@ -967,7 +967,7 @@ public class ParentalController : ControllerBase
                 if (rule.IsActive == true)
                 {
                     rule.IsActive = false;
-                    rule.UpdatedAt = DateTime.UtcNow;
+                    rule.UpdatedAt = DateTime.Now;
                     disabledCount++;
                 }
             }
@@ -1114,7 +1114,7 @@ public class ParentalController : ControllerBase
                         .Count(alert => alert.RuleId == r.RuleId),
                     recentViolations = _dbContext.ParentalAlertLogs
                         .Count(alert => alert.RuleId == r.RuleId && 
-                                       alert.AlertTime >= DateTime.UtcNow.AddDays(-7))
+                                       alert.AlertTime >= DateTime.Now.AddDays(-7))
                 }
             }).ToList();
 
@@ -1362,12 +1362,12 @@ public class ParentalController : ControllerBase
                     parentUsername = parentUsername,
                     childUserId = childUserId,
                     childUsername = childUsername,
-                    terminatedAt = DateTime.UtcNow,
+                    terminatedAt = DateTime.Now,
                     message = $"家长 {parentUsername} 已解除与您的监管关系"
                 }),
                 IsRead = false,
                 RelatedId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), // 生成唯一ID
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now
             };
 
             _dbContext.NotificationCenters.Add(notification);
@@ -1379,7 +1379,7 @@ public class ParentalController : ControllerBase
                 relationshipId = relationship.RelationshipId,
                 parentUserId = userId,
                 childUserId = childId,
-                deletedAt = DateTime.UtcNow
+                deletedAt = DateTime.Now
             };
 
             _logger.LogInformation($"Parental relationship deleted: parent {userId}, child {childId}");
@@ -1403,7 +1403,7 @@ public class ParentalController : ControllerBase
     {
         try
         {
-            var today = DateTime.UtcNow.Date;
+            var today = DateTime.Now.Date;
             var yesterday = today.AddDays(-1);
             var dayBeforeYesterday = yesterday.AddDays(-1);
 
@@ -1559,7 +1559,6 @@ public class ParentalController : ControllerBase
                 .Include(r => r.ChildUser)
                 .FirstOrDefaultAsync(r => r.RuleId == rule.RuleId);
 
-            // IsActive 在实体中是 bool?，这里明确按“未启用/空值”处理为 false
             if (ruleWithChild == null || ruleWithChild.IsActive != true)
             {
                 return;
@@ -1567,7 +1566,7 @@ public class ParentalController : ControllerBase
 
             // 解析规则值
             var ruleValue = JsonSerializer.Deserialize<JsonElement>(ruleWithChild.RuleValue);
-            var now = DateTime.UtcNow;
+            var now = DateTime.Now;
             var today = now.Date;
 
             // 检查今天是否已经发送过该规则的提醒（避免重复通知）
@@ -1666,7 +1665,7 @@ public class ParentalController : ControllerBase
                     NotificationType = "warning",
                     IsRead = false,
                     RelatedId = ruleWithChild.RuleId,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.Now
                 };
 
                 _dbContext.NotificationCenters.Add(notification);
@@ -1678,7 +1677,7 @@ public class ParentalController : ControllerBase
                     RuleId = ruleWithChild.RuleId,
                     ChildUserId = ruleWithChild.ChildUserId,
                     ViolationDetails = JsonSerializer.Serialize(violationDetails),
-                    AlertTime = DateTime.UtcNow,
+                    AlertTime = DateTime.Now,
                     NotificationId = notification.NotificationId,
                     Severity = "warning"
                 };
@@ -1688,6 +1687,32 @@ public class ParentalController : ControllerBase
 
                 _logger.LogInformation("已为家长 {ParentUserId} 创建家长监管提醒: 规则ID={RuleId}, 子账户={ChildUserId}, 违规类型={ViolationType}",
                     parentUser.UserId, ruleWithChild.RuleId, ruleWithChild.ChildUserId, violationType);
+
+                // 发送邮件提醒（创建规则后立即检测也需要邮件）
+                if (!string.IsNullOrWhiteSpace(parentUser.Email))
+                {
+                    try
+                    {
+                        using var emailScope = _serviceProvider.CreateScope();
+                        var emailService = emailScope.ServiceProvider.GetRequiredService<IEmailService>();
+
+                        await emailService.SendParentalAlertAsync(
+                            to: parentUser.Email,
+                            username: parentUser.Username ?? "家长",
+                            childUsername: childUser.Username ?? "孩子",
+                            ruleType: ruleWithChild.RuleType,
+                            violationDetails: violationDetails
+                        );
+
+                        _logger.LogInformation("已为家长 {ParentUserId} 发送家长监管提醒邮件: Email={Email}, 规则ID={RuleId}",
+                            parentUser.UserId, parentUser.Email, ruleWithChild.RuleId);
+                    }
+                    catch (Exception emailEx)
+                    {
+                        // 邮件发送失败不影响通知创建
+                        _logger.LogWarning(emailEx, "为家长 {ParentUserId} 发送家长监管提醒邮件失败，但通知已创建", parentUser.UserId);
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -1749,17 +1774,22 @@ public class ParentalController : ControllerBase
             return false;
         }
 
-        // 获取子账户的游戏库
-        // 说明：当前数据模型中没有 UserGames 表，统一游戏库请使用 user_platform_library
-        // 这里按“该子账户绑定的所有平台账号”汇总其游戏库。
-        var userGames = await _dbContext.UserPlatformBindings
-            .Where(b => b.UserId == rule.ChildUserId && b.BindingStatus == true)
-            .Join(_dbContext.UserPlatformLibraries,
-                b => new { b.PlatformUserId, b.PlatformId },
-                upl => new { upl.PlatformUserId, upl.PlatformId },
-                (b, upl) => upl)
-            .Include(upl => upl.Game)
+        // 获取子账户的平台绑定
+        var platformBindings = await _dbContext.UserPlatformBindings
+            .Where(upb => upb.UserId == rule.ChildUserId && upb.BindingStatus == true)
+            .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
             .ToListAsync();
+
+        // 获取子账户的游戏库
+        var userGames = new List<UserPlatformLibrary>();
+        foreach (var binding in platformBindings)
+        {
+            var games = await _dbContext.UserPlatformLibraries
+                .Where(ug => ug.PlatformUserId == binding.PlatformUserId && ug.PlatformId == binding.PlatformId)
+                .Include(ug => ug.Game)
+                .ToListAsync();
+            userGames.AddRange(games);
+        }
 
         var violatingGameNames = userGames
             .Where(ug => blockedGameNames.Contains(ug.Game.Name, StringComparer.OrdinalIgnoreCase))
@@ -1794,17 +1824,22 @@ public class ParentalController : ControllerBase
             return false;
         }
 
-        // 获取子账户的游戏库
-        // 说明：当前数据模型中没有 UserGames 表，统一游戏库请使用 user_platform_library
-        // 这里按“该子账户绑定的所有平台账号”汇总其游戏库。
-        var userGames = await _dbContext.UserPlatformBindings
-            .Where(b => b.UserId == rule.ChildUserId && b.BindingStatus == true)
-            .Join(_dbContext.UserPlatformLibraries,
-                b => new { b.PlatformUserId, b.PlatformId },
-                upl => new { upl.PlatformUserId, upl.PlatformId },
-                (b, upl) => upl)
-            .Include(upl => upl.Game)
+        // 获取子账户的平台绑定
+        var platformBindings = await _dbContext.UserPlatformBindings
+            .Where(upb => upb.UserId == rule.ChildUserId && upb.BindingStatus == true)
+            .Select(upb => new { upb.PlatformUserId, upb.PlatformId })
             .ToListAsync();
+
+        // 获取子账户的游戏库
+        var userGames = new List<UserPlatformLibrary>();
+        foreach (var binding in platformBindings)
+        {
+            var games = await _dbContext.UserPlatformLibraries
+                .Where(ug => ug.PlatformUserId == binding.PlatformUserId && ug.PlatformId == binding.PlatformId)
+                .Include(ug => ug.Game)
+                .ToListAsync();
+            userGames.AddRange(games);
+        }
 
         var violatingGameNames = userGames
             .Where(ug => ug.Game.RequireAge.HasValue && ug.Game.RequireAge.Value > maxAgeRating)

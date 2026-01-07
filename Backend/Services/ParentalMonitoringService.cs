@@ -140,7 +140,7 @@ public class ParentalMonitoringService : BackgroundService
         {
             // 解析规则值
             var ruleValue = JsonSerializer.Deserialize<JsonElement>(rule.RuleValue);
-            var now = DateTime.UtcNow;
+            var now = DateTime.Now;
             var today = now.Date;
 
             // 检查今天是否已经发送过该规则的提醒（避免重复通知）
@@ -251,7 +251,7 @@ public class ParentalMonitoringService : BackgroundService
                     NotificationType = "warning",
                     IsRead = false,
                     RelatedId = rule.RuleId,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.Now
                 };
 
                 context.NotificationCenters.Add(notification);
@@ -263,7 +263,7 @@ public class ParentalMonitoringService : BackgroundService
                     RuleId = rule.RuleId,
                     ChildUserId = rule.ChildUserId,
                     ViolationDetails = JsonSerializer.Serialize(violationDetails),
-                    AlertTime = DateTime.UtcNow,
+                    AlertTime = DateTime.Now,
                     NotificationId = notification.NotificationId,
                     Severity = "warning"
                 };
@@ -338,7 +338,7 @@ public class ParentalMonitoringService : BackgroundService
             }
 
             // 使用PlaytimeForever字段计算今日游戏时长：今天的值 - 昨天的值
-            var today = DateTime.UtcNow.Date;
+            var today = DateTime.Now.Date;
             var yesterday = today.AddDays(-1);
 
             // 获取昨天的PlaytimeForever快照数据
@@ -518,7 +518,7 @@ public class ParentalMonitoringService : BackgroundService
                 return false;
             }
 
-            var now = DateTime.UtcNow;
+            var now = DateTime.Now;
             var nowTime = now.TimeOfDay;
 
             // 检查是否在宵禁时间段内
