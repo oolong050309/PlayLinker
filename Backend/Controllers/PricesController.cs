@@ -193,7 +193,7 @@ public class PricesController : ControllerBase
                 existingSubscription.TargetPrice = request.TargetPrice;
                 existingSubscription.TargetDiscount = request.TargetDiscount;
                 existingSubscription.IsActive = true; // 重新激活订阅
-                existingSubscription.UpdatedAt = DateTime.UtcNow;
+                existingSubscription.UpdatedAt = DateTime.Now; // 使用本地时间（UTC+8）
 
                 _context.PriceAlertSubscriptions.Update(existingSubscription);
                 await _context.SaveChangesAsync();
@@ -225,8 +225,8 @@ public class PricesController : ControllerBase
                 TargetPrice = request.TargetPrice,
                 TargetDiscount = request.TargetDiscount,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now, // 使用本地时间（UTC+8）
+                UpdatedAt = DateTime.Now // 使用本地时间（UTC+8）
             };
 
             _context.PriceAlertSubscriptions.Add(sub);
@@ -282,34 +282,100 @@ public class PricesController : ControllerBase
         var game = await _context.Games.FindAsync(subscription.GameId);
         if (game == null) return;
 
+        // 检查今天是否已经发送过通知（避免重复通知）
+        var today = DateTime.Now.Date; // 使用本地时间（UTC+8）
+        var todayAlert = await _context.PriceAlertLogs
+            .Where(l => l.SubscriptionId == subscription.SubscriptionId 
+                && l.AlertTime.HasValue 
+                && l.AlertTime.Value.Date == today)
+            .FirstOrDefaultAsync();
+
+        if (todayAlert != null)
+        {
+            _logger.LogDebug("[立即检查-跳过] 用户 {UserId} 订阅 {SubId} 今天已发过通知", userId, subscription.SubscriptionId);
+            return;
+        }
+
         bool shouldNotify = false;
         string notificationTitle = "";
         string notificationContent = "";
         string alertType = "";
 
         // 检查是否满足目标价格条件
-        if (subscription.TargetPrice.HasValue && latestPrice.CurrentPrice <= subscription.TargetPrice.Value)
+        if (subscription.TargetPrice.HasValue)
         {
-            shouldNotify = true;
-            alertType = "target_price";
-            notificationTitle = $"价格提醒：{game.Name}";
-            notificationContent = $"游戏 {game.Name} 的当前价格为 ¥{latestPrice.CurrentPrice:F2}，已低于您设置的目标价格 ¥{subscription.TargetPrice.Value:F2}。";
-            
-            if (latestPrice.IsDiscount && latestPrice.DiscountRate > 0)
+            _logger.LogInformation("[立即检查-价格判定] 订阅 {SubId}: 目标价={Target} vs 现价={Current}", 
+                subscription.SubscriptionId, subscription.TargetPrice, latestPrice.CurrentPrice);
+
+            if (latestPrice.CurrentPrice <= subscription.TargetPrice.Value)
             {
-                notificationContent += $" 当前折扣 {latestPrice.DiscountRate}%，原价 ¥{latestPrice.OriginalPrice:F2}。";
+                // 检查之前是否已经达到过目标价格
+                var previousAlert = await _context.PriceAlertLogs
+                    .Where(l => l.SubscriptionId == subscription.SubscriptionId 
+                        && l.AlertType == "target_price")
+                    .Include(l => l.Price)
+                    .OrderByDescending(l => l.AlertTime)
+                    .FirstOrDefaultAsync();
+
+                bool isSubscriptionUpdatedAfterAlert = subscription.UpdatedAt.HasValue 
+                    && previousAlert != null 
+                    && subscription.UpdatedAt.Value > previousAlert.AlertTime;
+
+                if (!isSubscriptionUpdatedAfterAlert && previousAlert != null && previousAlert.Price != null 
+                    && previousAlert.Price.CurrentPrice <= latestPrice.CurrentPrice)
+                {
+                    _logger.LogInformation("[立即检查-跳过] 订阅 {SubId} 已因更低/相同价格提醒过且未更新订阅", subscription.SubscriptionId);
+                    return;
+                }
+
+                shouldNotify = true;
+                alertType = "target_price";
+                notificationTitle = $"价格提醒：{game.Name}";
+                notificationContent = $"游戏 {game.Name} 的价格已降至 ¥{latestPrice.CurrentPrice:F2}，低于您设置的目标价格 ¥{subscription.TargetPrice.Value:F2}。";
+                
+                if (latestPrice.IsDiscount && latestPrice.DiscountRate > 0)
+                {
+                    notificationContent += $" 当前折扣 {latestPrice.DiscountRate}%，原价 ¥{latestPrice.OriginalPrice:F2}。";
+                }
             }
         }
         // 检查是否满足目标折扣条件
-        // [修复] 修改判断逻辑：当前折扣率 >= (100 - 目标折扣率)
-        // 例如：用户输入80 (8折)，期望折扣 >= 20%。当前折扣75%，75 >= 20，触发提醒。
-        else if (subscription.TargetDiscount.HasValue && latestPrice.DiscountRate >= (100 - subscription.TargetDiscount.Value))
+        else if (subscription.TargetDiscount.HasValue)
         {
-            shouldNotify = true;
-            alertType = "target_discount";
-            notificationTitle = $"折扣提醒：{game.Name}";
-            notificationContent = $"游戏 {game.Name} 当前折扣 {latestPrice.DiscountRate}%，已达到您设置的目标折扣 {subscription.TargetDiscount.Value}%（{(subscription.TargetDiscount.Value / 10.0):F1}折）。";
-            notificationContent += $" 当前价格：¥{latestPrice.CurrentPrice:F2}，原价：¥{latestPrice.OriginalPrice:F2}。";
+            // [逻辑修复]: 用户期望的"几折" (如80即8折) 意味着价格 <= 原价*0.8
+            // 即减免 >= (100 - 80)% = 20%
+            var targetDiscountRate = 100 - subscription.TargetDiscount.Value;
+            
+            _logger.LogInformation("[立即检查-折扣判定] 订阅 {SubId}: 用户期望{UserTarget}折(即减免>={CalcRate}%) vs 实际减免={ActualRate}%", 
+                subscription.SubscriptionId, subscription.TargetDiscount, targetDiscountRate, latestPrice.DiscountRate);
+
+            if (latestPrice.DiscountRate >= targetDiscountRate)
+            {
+                // 检查之前是否已经达到过目标折扣
+                var previousAlert = await _context.PriceAlertLogs
+                    .Where(l => l.SubscriptionId == subscription.SubscriptionId 
+                        && l.AlertType == "target_discount")
+                    .Include(l => l.Price)
+                    .OrderByDescending(l => l.AlertTime)
+                    .FirstOrDefaultAsync();
+
+                bool isSubscriptionUpdatedAfterAlert = subscription.UpdatedAt.HasValue 
+                    && previousAlert != null 
+                    && subscription.UpdatedAt.Value > previousAlert.AlertTime;
+
+                if (!isSubscriptionUpdatedAfterAlert && previousAlert != null && previousAlert.Price != null 
+                    && previousAlert.Price.DiscountRate >= latestPrice.DiscountRate)
+                {
+                    _logger.LogInformation("[立即检查-跳过] 订阅 {SubId} 已因更高/相同折扣提醒过且未更新订阅", subscription.SubscriptionId);
+                    return;
+                }
+
+                shouldNotify = true;
+                alertType = "target_discount";
+                notificationTitle = $"折扣提醒：{game.Name}";
+                notificationContent = $"游戏 {game.Name} 当前折扣 {latestPrice.DiscountRate}%，达到您设置的目标折扣 {subscription.TargetDiscount.Value}%（{(subscription.TargetDiscount.Value / 10.0):F1}折）。";
+                notificationContent += $" 当前价格：¥{latestPrice.CurrentPrice:F2}，原价：¥{latestPrice.OriginalPrice:F2}。";
+            }
         }
 
         if (shouldNotify)
@@ -329,7 +395,7 @@ public class PricesController : ControllerBase
                 existingNotification.Title = notificationTitle;
                 existingNotification.Content = notificationContent;
                 existingNotification.IsRead = false; // 重新标记为未读
-                existingNotification.CreatedAt = DateTime.UtcNow; // 更新时间
+                existingNotification.CreatedAt = DateTime.Now; // 更新时间（使用本地时间 UTC+8）
                 existingNotification.NotificationType = "info";
                 
                 notification = existingNotification;
@@ -347,7 +413,7 @@ public class PricesController : ControllerBase
                     NotificationType = "info",
                     IsRead = false,
                     RelatedId = subscription.SubscriptionId,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.Now // 使用本地时间（UTC+8）
                 };
                 _context.NotificationCenters.Add(notification);
             }
@@ -360,7 +426,7 @@ public class PricesController : ControllerBase
                 SubscriptionId = subscription.SubscriptionId,
                 PriceId = latestPrice.PriceId,
                 AlertType = alertType,
-                AlertTime = DateTime.UtcNow,
+                AlertTime = DateTime.Now, // 使用本地时间（UTC+8）
                 NotificationId = notification.NotificationId
             };
 
@@ -377,7 +443,7 @@ public class PricesController : ControllerBase
                 if (updatedSubscription != null)
                 {
                     updatedSubscription.IsActive = false;
-                    updatedSubscription.UpdatedAt = DateTime.UtcNow;
+                    updatedSubscription.UpdatedAt = DateTime.Now; // 使用本地时间（UTC+8）
                     _context.PriceAlertSubscriptions.Update(updatedSubscription);
                     await _context.SaveChangesAsync();
                     _logger.LogInformation("已将订阅 {SubscriptionId} 设为非active: GameId={GameId}, UserId={UserId}",
@@ -525,7 +591,7 @@ public class PricesController : ControllerBase
             
             // 如果更新了目标价格或折扣，重新激活订阅
             subscription.IsActive = true;
-            subscription.UpdatedAt = DateTime.UtcNow;
+            subscription.UpdatedAt = DateTime.Now; // 使用本地时间（UTC+8）
 
             _context.PriceAlertSubscriptions.Update(subscription);
             await _context.SaveChangesAsync();
@@ -637,7 +703,7 @@ public class PricesController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
-            var today = DateTime.UtcNow.Date;
+            var today = DateTime.Now.Date; // 使用本地时间（UTC+8）
             var yesterday = today.AddDays(-1);
 
             // 获取今日已记录价格的游戏数量

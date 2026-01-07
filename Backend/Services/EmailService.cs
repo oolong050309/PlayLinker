@@ -157,123 +157,128 @@ public class EmailService : IEmailService
 
     public Task SendParentalAlertAsync(string to, string username, string childUsername, string ruleType, Dictionary<string, object> violationDetails)
     {
-        var subject = $"家长监管提醒：{WebUtility.HtmlEncode(childUsername)}";
-        
-        string alertMessage = "";
-        string ruleTypeLabel = "";
-        
-        switch (ruleType)
-        {
-            case "playtime_daily_limit":
-                ruleTypeLabel = "每日游戏时长限制";
-                if (violationDetails.ContainsKey("currentMinutes") && violationDetails.ContainsKey("limitMinutes"))
-                {
-                    var currentMinutes = (int)violationDetails["currentMinutes"];
-                    var limitMinutes = (int)violationDetails["limitMinutes"];
-                    var exceededMinutes = currentMinutes - limitMinutes;
-                    
-                    if (violationDetails.ContainsKey("isWarning") && (bool)violationDetails["isWarning"])
-                    {
-                        alertMessage = $"您的孩子今日游戏时长已达到 {currentMinutes} 分钟，接近设定的限制 {limitMinutes} 分钟。";
-                    }
-                    else
-                    {
-                        alertMessage = $"您的孩子今日游戏时长已达到 {currentMinutes} 分钟，超过设定的限制 {limitMinutes} 分钟（超出 {exceededMinutes} 分钟）。";
-                    }
-                }
-                break;
-                
-            case "playtime_curfew":
-                ruleTypeLabel = "宵禁时间";
-                if (violationDetails.ContainsKey("startTime") && violationDetails.ContainsKey("endTime"))
-                {
-                    var startTime = violationDetails["startTime"].ToString();
-                    var endTime = violationDetails["endTime"].ToString();
-                    alertMessage = $"您的孩子在宵禁时间段（{startTime} - {endTime}）内仍在游戏。";
-                }
-                break;
-                
-            case "game_restriction":
-                ruleTypeLabel = "游戏限制";
-                if (violationDetails.ContainsKey("blockedGameNames"))
-                {
-                    var blockedGameNames = (List<string>)violationDetails["blockedGameNames"];
-                    alertMessage = $"您的孩子游戏库中包含被限制的游戏：{string.Join("、", blockedGameNames)}。";
-                }
-                else
-                {
-                    alertMessage = "您的孩子游戏库中包含被限制的游戏。";
-                }
-                break;
-                
-            case "age_restriction":
-                ruleTypeLabel = "年龄限制";
-                if (violationDetails.ContainsKey("maxAgeRating") && violationDetails.ContainsKey("violatingGameNames"))
-                {
-                    var maxAgeRating = violationDetails["maxAgeRating"].ToString();
-                    var violatingGameNames = (List<string>)violationDetails["violatingGameNames"];
-                    alertMessage = $"您的孩子游戏库中包含超出年龄分级（{maxAgeRating}+）的游戏：{string.Join("、", violatingGameNames)}。";
-                }
-                else
-                {
-                    alertMessage = "您的孩子游戏库中包含超出年龄分级的游戏。";
-                }
-                break;
-                
-            default:
-                ruleTypeLabel = "监管规则";
-                alertMessage = "您的孩子违反了家长监管规则。";
-                break;
-        }
+        // 更友好的标题（不暴露技术字段）
+        var subject = $"家长监管提醒：请关注 {WebUtility.HtmlEncode(childUsername)}";
 
+        // 仅展示人类可读的摘要，不展示“违规详情/键值表”
+        var summaryHtml = BuildParentalAlertSummaryHtml(ruleType, violationDetails);
+
+        var safeUsername = WebUtility.HtmlEncode(username);
+        var safeChild = WebUtility.HtmlEncode(childUsername);
+
+        // 更美观的邮件模板（与价格提醒风格统一、但更克制）
         var body = $@"
-<div style=""font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;"">
-    <div style=""background-color: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"">
-        <h2 style=""color: #ef4444; margin-top: 0;"">⚠️ 家长监管提醒</h2>
-        <p style=""font-size: 16px; color: #333;"">Hi {WebUtility.HtmlEncode(username)},</p>
-        <p style=""font-size: 16px; color: #333;"">{alertMessage}</p>
-        
-        <div style=""background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; border-radius: 4px;"">
-            <h3 style=""margin-top: 0; color: #333;"">违规详情</h3>
-            <p style=""margin: 5px 0; color: #666;""><strong>规则类型：</strong>{WebUtility.HtmlEncode(ruleTypeLabel)}</p>
-            <p style=""margin: 5px 0; color: #666;""><strong>子账户：</strong>{WebUtility.HtmlEncode(childUsername)}</p>";
-        
-        // 添加违规详情
-        foreach (var detail in violationDetails)
+<div style=""font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif; max-width: 640px; margin: 0 auto; padding: 24px; background-color: #f6f7fb;"">
+  <div style=""background: #ffffff; border-radius: 12px; padding: 28px; box-shadow: 0 6px 18px rgba(17,24,39,0.08);"">
+
+    <div style=""display:flex; align-items:center; gap:12px;"">
+      <div style=""width:44px; height:44px; border-radius:10px; background: #fff1f2; display:flex; align-items:center; justify-content:center; font-size:22px;"">⚠️</div>
+      <div>
+        <div style=""font-size:18px; font-weight:700; color:#111827; line-height:1.2;"">家长监管提醒</div>
+        <div style=""font-size:13px; color:#6b7280; margin-top:2px;"">PlayLinker 家长监管系统</div>
+      </div>
+    </div>
+
+    <div style=""margin-top:18px; font-size:15px; color:#111827;"">Hi {safeUsername}，</div>
+
+    <div style=""margin-top:10px; background:#f9fafb; border:1px solid #eef2f7; border-radius:10px; padding:16px;"">
+      <div style=""font-size:14px; color:#374151;"">子账户：<strong style=""color:#111827;"">{safeChild}</strong></div>
+      <div style=""margin-top:8px; font-size:15px; color:#111827; line-height:1.7;"">{summaryHtml}</div>
+    </div>
+
+    <div style=""margin-top:14px; font-size:13px; color:#6b7280; line-height:1.7;"">
+      建议您打开 PlayLinker，在 <strong>家长监管</strong> 页面查看详情并进行规则调整。
+    </div>
+
+    <div style=""margin-top:18px; padding-top:14px; border-top:1px solid #eef2f7; font-size:12px; color:#9ca3af; line-height:1.6;"">
+      本邮件由系统自动发送，请勿直接回复。
+    </div>
+
+  </div>
+</div>";
+
+        return SendAsync(to, subject, body);
+    }
+
+    /// <summary>
+    /// 将违规信息转换为简洁摘要（HTML）——不展示键名/不展示“违规规则部分”
+    /// </summary>
+    private static string BuildParentalAlertSummaryHtml(string ruleType, Dictionary<string, object> violationDetails)
+    {
+        try
         {
-            if (detail.Key != "isWarning" && detail.Key != "hasRecentActivity")
+            switch (ruleType)
             {
-                string valueStr = "";
-                if (detail.Value is List<string> stringList)
+                case "playtime_daily_limit":
                 {
-                    valueStr = string.Join("、", stringList.Select(s => WebUtility.HtmlEncode(s)));
+                    int? current = null;
+                    int? limit = null;
+
+                    if (violationDetails.TryGetValue("currentMinutes", out var cm) && cm != null)
+                        current = Convert.ToInt32(cm);
+                    if (violationDetails.TryGetValue("limitMinutes", out var lm) && lm != null)
+                        limit = Convert.ToInt32(lm);
+
+                    if (current.HasValue && limit.HasValue)
+                    {
+                        if (current.Value >= limit.Value)
+                        {
+                            var exceeded = Math.Max(0, current.Value - limit.Value);
+                            return $"游戏时长已达到 <strong>{current.Value}</strong> 分钟，已超过设定限制 <strong>{limit.Value}</strong> 分钟（超出 {exceeded} 分钟）。";
+                        }
+                        return $"游戏时长已达到 <strong>{current.Value}</strong> 分钟，接近设定限制 <strong>{limit.Value}</strong> 分钟。";
+                    }
+
+                    return "检测到游戏时长可能接近或超过设定阈值，请及时查看。";
                 }
-                else if (detail.Value is List<long> longList)
+
+                case "playtime_curfew":
                 {
-                    valueStr = string.Join("、", longList);
+                    var start = violationDetails.TryGetValue("startTime", out var st) ? st?.ToString() : null;
+                    var end = violationDetails.TryGetValue("endTime", out var et) ? et?.ToString() : null;
+
+                    if (!string.IsNullOrWhiteSpace(start) && !string.IsNullOrWhiteSpace(end))
+                    {
+                        return $"孩子在设定的禁玩时段（{WebUtility.HtmlEncode(start)} - {WebUtility.HtmlEncode(end)}）内仍存在游戏活动。";
+                    }
+
+                    return "孩子在设定的禁玩时段内仍存在游戏活动。";
                 }
-                else if (detail.Value is List<byte> byteList)
+
+                case "game_restriction":
                 {
-                    valueStr = string.Join("、", byteList);
+                    if (violationDetails.TryGetValue("blockedGameNames", out var bg) && bg is List<string> list && list.Count > 0)
+                    {
+                        var safeNames = list.Take(6).Select(WebUtility.HtmlEncode);
+                        var suffix = list.Count > 6 ? " 等" : "";
+                        return $"游戏库中检测到被限制的游戏：<strong>{string.Join("、", safeNames)}</strong>{suffix}。";
+                    }
+
+                    return "游戏库中检测到被限制的游戏，请及时查看。";
                 }
-                else
+
+                case "age_restriction":
                 {
-                    valueStr = detail.Value?.ToString() ?? "";
+                    var maxAge = violationDetails.TryGetValue("maxAgeRating", out var ma) ? ma?.ToString() : null;
+                    if (violationDetails.TryGetValue("violatingGameNames", out var vg) && vg is List<string> list && list.Count > 0)
+                    {
+                        var safeNames = list.Take(6).Select(WebUtility.HtmlEncode);
+                        var suffix = list.Count > 6 ? " 等" : "";
+                        var agePart = !string.IsNullOrWhiteSpace(maxAge) ? $"（设定分级：{WebUtility.HtmlEncode(maxAge)}+）" : "";
+                        return $"检测到超出年龄分级{agePart}的游戏：<strong>{string.Join("、", safeNames)}</strong>{suffix}。";
+                    }
+
+                    return "检测到可能存在超出年龄分级的游戏，请及时查看。";
                 }
-                body += $@"
-            <p style=""margin: 5px 0; color: #666;""><strong>{WebUtility.HtmlEncode(detail.Key)}：</strong>{valueStr}</p>";
+
+                default:
+                    return "检测到孩子可能触发了家长监管规则，请及时查看。";
             }
         }
-        
-        body += $@"
-        </div>
-        
-        <p style=""font-size: 14px; color: #666; margin-top: 20px;"">您可以在 PlayLinker 应用的家长监管页面中查看详细信息并管理监管规则。</p>
-        <p style=""font-size: 12px; color: #999; margin-top: 20px;"">此邮件由 PlayLinker 家长监管系统自动发送。</p>
-    </div>
-</div>";
-        
-        return SendAsync(to, subject, body);
+        catch
+        {
+            return "检测到孩子可能触发了家长监管规则，请及时查看。";
+        }
     }
 }
 
