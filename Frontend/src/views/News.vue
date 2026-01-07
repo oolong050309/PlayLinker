@@ -54,23 +54,11 @@
         </div>
       </div>
 
-      <div class="pagination">
-        <button
-          @click="changePage(page - 1)"
-          :disabled="page === 1"
-          class="page-btn"
-        >
-          上一页
-        </button>
-        <span class="page-info">第 {{ page }} 页</span>
-        <button 
-          @click="changePage(page + 1)" 
-          :disabled="!hasMore"
-          class="page-btn"
-        >
-          下一页
-        </button>
-      </div>
+      <Pagination
+        :current-page="page"
+        :total-pages="totalPages"
+        @page-change="changePage"
+      />
     </div>
 
     <!-- 新闻详情弹窗 -->
@@ -126,6 +114,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { newsApi } from '../api'
 import { X } from 'lucide-vue-next'
+import Pagination from '@/components/common/Pagination.vue'
 
 const newsList = ref([])
 const loading = ref(false)
@@ -142,6 +131,10 @@ const newsDetailContent = ref('')
 
 const hasMore = computed(() => {
   return page.value * pageSize.value < total.value
+})
+
+const totalPages = computed(() => {
+  return Math.ceil(total.value / pageSize.value) || 1
 })
 
 const loadNews = async () => {

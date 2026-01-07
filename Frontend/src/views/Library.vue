@@ -127,23 +127,11 @@
       </div>
 
       <!-- 分页 -->
-      <div v-if="totalPages > 1" class="pagination">
-        <button 
-          @click="changePage(currentPage - 1)" 
-          :disabled="currentPage === 1"
-          class="page-btn"
-        >
-          上一页
-        </button>
-        <span class="page-info">第 {{ currentPage }} / {{ totalPages }} 页</span>
-        <button 
-          @click="changePage(currentPage + 1)" 
-          :disabled="currentPage === totalPages"
-          class="page-btn"
-        >
-          下一页
-        </button>
-      </div>
+      <Pagination
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        @page-change="changePage"
+      />
     </div>
   </div>
 </template>
@@ -154,6 +142,7 @@ import { libraryApi, achievementApi } from '../api'
 import { Gamepad2, Play, Clock, Trophy, Search } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import noCoverImage from '@/assets/no_cover.png'
+import Pagination from '@/components/common/Pagination.vue'
 
 const router = useRouter()
 
