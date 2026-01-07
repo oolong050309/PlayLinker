@@ -650,123 +650,105 @@ public class ReportGenerationService
             insights.Add($"最喜欢的游戏类型是「{genreStats.First().Genre}」，共游玩 {Math.Round(genreStats.First().Minutes / 60.0, 1)} 小时");
         }
 
-        // 生成PDF
+        // 生成PDF - 暗色系风格
+        var darkBg = Color.FromHex("#1a1a2e");
+        var darkCard = Color.FromHex("#252542");
+        var accentCyan = Color.FromHex("#00d4ff");
+        var accentPurple = Color.FromHex("#7c3aed");
+        var textLight = Color.FromHex("#e0e0e0");
+        var textMuted = Color.FromHex("#888888");
+        
         var document = Document.Create(container =>
         {
             container.Page(page =>
             {
                 // 页面设置
                 page.Size(PageSizes.A4);
-                page.Margin(2, Unit.Centimetre);
-                page.PageColor(Colors.White);
-                page.DefaultTextStyle(x => x.FontSize(11));
+                page.Margin(1.5f, Unit.Centimetre);
+                page.PageColor(darkBg);
+                page.DefaultTextStyle(x => x.FontSize(11).FontColor(textLight));
 
                 // 页眉
                 page.Header()
-                    .BorderBottom(1)
-                    .BorderColor(Colors.Green.Medium)
-                    .PaddingBottom(10)
-                    .Row(row =>
+                    .PaddingBottom(15)
+                    .Column(col =>
                     {
-                        row.RelativeItem().Column(col =>
-                        {
-                            col.Item().Text($"{startDate:MM}月 月度游戏报告")
-                                .FontSize(24).SemiBold().FontColor(Colors.Green.Medium);
-                            col.Item().Text($"{startDate:yyyy年MM月dd日} - {endDate:yyyy年MM月dd日}")
-                                .FontSize(12).FontColor(Colors.Grey.Darken1);
-                        });
+                        col.Item().Text($"{startDate:MM}月").FontSize(48).Bold().FontColor(accentPurple);
+                        col.Item().Text("月度游戏报告").FontSize(28).SemiBold().FontColor(accentCyan);
+                        col.Item().Text($"{startDate:yyyy年MM月dd日} - {endDate:yyyy年MM月dd日}").FontSize(11).FontColor(textMuted);
                     });
 
                 // 内容
                 page.Content()
-                    .PaddingVertical(1, Unit.Centimetre)
+                    .PaddingVertical(0.5f, Unit.Centimetre)
                     .Column(column =>
                     {
-                        column.Spacing(15);
+                        column.Spacing(12);
 
                         // 总体统计卡片
                         column.Item().Row(row =>
                         {
-                            row.Spacing(10);
+                            row.Spacing(8);
 
-                            // 总游玩时长
-                            row.RelativeItem().Background(Colors.Green.Lighten3)
-                                .Padding(15).Column(col =>
-                                {
-                                    col.Item().Text(totalHours.ToString())
-                                        .FontSize(32).SemiBold().FontColor(Colors.Green.Darken2);
-                                    col.Item().Text("总时长(小时)")
-                                        .FontSize(10).FontColor(Colors.Grey.Darken1);
-                                });
+                            row.RelativeItem().Background(darkCard).Padding(12).Column(col =>
+                            {
+                                col.Item().Text(totalHours.ToString()).FontSize(28).Bold().FontColor(accentCyan);
+                                col.Item().Text("总时长(小时)").FontSize(9).FontColor(textMuted);
+                            });
 
-                            // 游戏数量
-                            row.RelativeItem().Background(Colors.Blue.Lighten3)
-                                .Padding(15).Column(col =>
-                                {
-                                    col.Item().Text(totalGames.ToString())
-                                        .FontSize(32).SemiBold().FontColor(Colors.Blue.Darken2);
-                                    col.Item().Text("游戏数")
-                                        .FontSize(10).FontColor(Colors.Grey.Darken1);
-                                });
+                            row.RelativeItem().Background(darkCard).Padding(12).Column(col =>
+                            {
+                                col.Item().Text(totalGames.ToString()).FontSize(28).Bold().FontColor(accentCyan);
+                                col.Item().Text("游戏数").FontSize(9).FontColor(textMuted);
+                            });
 
-                            // 活跃天数
-                            row.RelativeItem().Background(Colors.Purple.Lighten3)
-                                .Padding(15).Column(col =>
-                                {
-                                    col.Item().Text(activeDays.ToString())
-                                        .FontSize(32).SemiBold().FontColor(Colors.Purple.Darken2);
-                                    col.Item().Text("活跃天数")
-                                        .FontSize(10).FontColor(Colors.Grey.Darken1);
-                                });
+                            row.RelativeItem().Background(darkCard).Padding(12).Column(col =>
+                            {
+                                col.Item().Text(activeDays.ToString()).FontSize(28).Bold().FontColor(accentCyan);
+                                col.Item().Text("活跃天数").FontSize(9).FontColor(textMuted);
+                            });
 
-                            // 获得成就
-                            row.RelativeItem().Background(Colors.Orange.Lighten3)
-                                .Padding(15).Column(col =>
-                                {
-                                    col.Item().Text(totalAchievements.ToString())
-                                        .FontSize(32).SemiBold().FontColor(Colors.Orange.Darken2);
-                                    col.Item().Text("成就数")
-                                        .FontSize(10).FontColor(Colors.Grey.Darken1);
-                                });
+                            row.RelativeItem().Background(darkCard).Padding(12).Column(col =>
+                            {
+                                col.Item().Text(totalAchievements.ToString()).FontSize(28).Bold().FontColor(accentCyan);
+                                col.Item().Text("成就数").FontSize(9).FontColor(textMuted);
+                            });
                         });
 
                         // 本月最爱游戏高亮卡片
                         if (topGameEntry.Value.playtimeMinutes > 0)
                         {
-                            column.Item().Background(Colors.Green.Medium)
-                                .Padding(20).Column(col =>
-                                {
-                                    col.Item().Text("本月最爱游戏").FontSize(12).FontColor(Colors.White);
-                                    col.Item().Text(topGameName).FontSize(22).SemiBold().FontColor(Colors.White);
-                                    col.Item().Text($"共游玩 {topGameHours} 小时").FontSize(14).FontColor(Colors.White);
-                                });
+                            column.Item().Background(accentPurple).Padding(18).Column(col =>
+                            {
+                                col.Item().Text("🏆 本月最爱游戏").FontSize(11).FontColor(Colors.White);
+                                col.Item().Text(topGameName).FontSize(20).Bold().FontColor(Colors.White);
+                                col.Item().Text($"共游玩 {topGameHours} 小时").FontSize(12).FontColor(Colors.White);
+                            });
                         }
 
                         // 本月洞察
-                        column.Item().Background(Colors.Grey.Lighten4)
-                            .Padding(15).Column(col =>
+                        column.Item().Background(darkCard).Padding(15).Column(col =>
+                        {
+                            col.Item().Text("💡 本月洞察").FontSize(13).SemiBold().FontColor(accentCyan);
+                            col.Item().PaddingTop(8);
+                            foreach (var insight in insights)
                             {
-                                col.Item().Text("本月洞察").FontSize(14).SemiBold().FontColor(Colors.Green.Medium);
-                                col.Item().PaddingTop(8);
-                                foreach (var insight in insights)
-                                {
-                                    col.Item().Text($"• {insight}").FontSize(11).FontColor(Colors.Grey.Darken2);
-                                }
-                            });
+                                col.Item().Text($"• {insight}").FontSize(10).FontColor(textLight);
+                            }
+                        });
 
                         // 游戏类型偏好
                         if (genreStats.Any())
                         {
-                            column.Item().PaddingTop(10).Text("游戏类型偏好")
-                                .FontSize(16).SemiBold().FontColor(Colors.Green.Medium);
+                            column.Item().Text("📊 游戏类型偏好").FontSize(14).SemiBold().FontColor(accentCyan);
 
-                            column.Item().Table(table =>
+                            column.Item().Background(darkCard).Padding(10).Table(table =>
                             {
                                 table.ColumnsDefinition(columns =>
                                 {
                                     columns.RelativeColumn(2);
                                     columns.RelativeColumn(4);
-                                    columns.ConstantColumn(60);
+                                    columns.ConstantColumn(50);
                                 });
 
                                 var maxMinutes = genreStats.Max(x => x.Minutes);
@@ -774,69 +756,54 @@ public class ReportGenerationService
                                 {
                                     var percent = maxMinutes > 0 ? Math.Max(1, (int)Math.Round((double)genre.Minutes / maxMinutes * 100)) : 1;
                                     var remaining = Math.Max(1, 100 - percent);
-                                    table.Cell().Padding(5).Text(genre.Genre).FontSize(10);
-                                    table.Cell().Padding(5).Column(col =>
+                                    table.Cell().Padding(4).Text(genre.Genre).FontSize(9).FontColor(textLight);
+                                    table.Cell().Padding(4).Column(col =>
                                     {
-                                        col.Item().Height(16).Background(Colors.Grey.Lighten3).Row(row =>
+                                        col.Item().Height(12).Background(Color.FromHex("#333355")).Row(row =>
                                         {
-                                            row.RelativeItem(percent).Background(Colors.Green.Medium);
+                                            row.RelativeItem(percent).Background(accentCyan);
                                             row.RelativeItem(remaining);
                                         });
                                     });
-                                    table.Cell().Padding(5).AlignRight().Text($"{Math.Round(genre.Minutes / 60.0)}h").FontSize(10).FontColor(Colors.Green.Medium);
+                                    table.Cell().Padding(4).AlignRight().Text($"{Math.Round(genre.Minutes / 60.0)}h").FontSize(9).FontColor(accentCyan);
                                 }
                             });
                         }
 
-                        // 游戏排行榜标题
-                        column.Item().PaddingTop(15).Text("游戏排行榜 TOP 10")
-                            .FontSize(16).SemiBold().FontColor(Colors.Green.Medium);
+                        // 游戏排行榜
+                        column.Item().Text("🎯 游戏排行榜 TOP 10").FontSize(14).SemiBold().FontColor(accentCyan);
 
-                        // 游戏排行榜表格
-                        column.Item().Table(table =>
+                        column.Item().Background(darkCard).Padding(8).Table(table =>
                         {
-                            // 定义列宽
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.ConstantColumn(40);   // 排名
-                                columns.RelativeColumn(3);    // 游戏名称
-                                columns.RelativeColumn(2);    // 平台
-                                columns.ConstantColumn(80);   // 时长
-                                columns.ConstantColumn(60);   // 占比
+                                columns.ConstantColumn(35);
+                                columns.RelativeColumn(3);
+                                columns.RelativeColumn(2);
+                                columns.ConstantColumn(65);
+                                columns.ConstantColumn(50);
                             });
 
                             // 表头
                             table.Header(header =>
                             {
-                                header.Cell().Background(Colors.Green.Medium)
-                                    .Padding(8).Text("排名").FontColor(Colors.White).SemiBold();
-                                header.Cell().Background(Colors.Green.Medium)
-                                    .Padding(8).Text("游戏").FontColor(Colors.White).SemiBold();
-                                header.Cell().Background(Colors.Green.Medium)
-                                    .Padding(8).Text("平台").FontColor(Colors.White).SemiBold();
-                                header.Cell().Background(Colors.Green.Medium)
-                                    .Padding(8).Text("时长").FontColor(Colors.White).SemiBold();
-                                header.Cell().Background(Colors.Green.Medium)
-                                    .Padding(8).Text("占比").FontColor(Colors.White).SemiBold();
+                                header.Cell().Padding(6).Text("#").FontSize(9).SemiBold().FontColor(accentCyan);
+                                header.Cell().Padding(6).Text("游戏").FontSize(9).SemiBold().FontColor(accentCyan);
+                                header.Cell().Padding(6).Text("平台").FontSize(9).SemiBold().FontColor(accentCyan);
+                                header.Cell().Padding(6).Text("时长").FontSize(9).SemiBold().FontColor(accentCyan);
+                                header.Cell().Padding(6).Text("占比").FontSize(9).SemiBold().FontColor(accentCyan);
                             });
 
-                            // 数据行
                             int rank = 1;
                             foreach (var game in topGames)
                             {
-                                var bgColor = rank % 2 == 0 ? Colors.Grey.Lighten4 : Colors.White;
-                                var rankColor = rank == 1 ? Colors.Orange.Medium : (rank == 2 ? Colors.Grey.Medium : (rank == 3 ? Colors.Brown.Medium : Colors.Green.Medium));
+                                var rankColor = rank == 1 ? Color.FromHex("#ffd700") : (rank == 2 ? Color.FromHex("#c0c0c0") : (rank == 3 ? Color.FromHex("#cd7f32") : textLight));
 
-                                table.Cell().Background(bgColor).Padding(8)
-                                    .Text($"#{rank}").FontColor(rankColor).SemiBold();
-                                table.Cell().Background(bgColor).Padding(8)
-                                    .Text(game.GameName);
-                                table.Cell().Background(bgColor).Padding(8)
-                                    .Text(game.PlatformName);
-                                table.Cell().Background(bgColor).Padding(8)
-                                    .Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}小时");
-                                table.Cell().Background(bgColor).Padding(8)
-                                    .Text($"{(totalMinutes > 0 ? Math.Round((decimal)game.PlaytimeMinutes / totalMinutes * 100, 1) : 0)}%");
+                                table.Cell().Padding(5).Text($"{rank}").FontSize(9).Bold().FontColor(rankColor);
+                                table.Cell().Padding(5).Text(game.GameName).FontSize(9).FontColor(textLight);
+                                table.Cell().Padding(5).Text(game.PlatformName).FontSize(8).FontColor(textMuted);
+                                table.Cell().Padding(5).Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}h").FontSize(9).FontColor(accentCyan);
+                                table.Cell().Padding(5).Text($"{(totalMinutes > 0 ? Math.Round((decimal)game.PlaytimeMinutes / totalMinutes * 100, 1) : 0)}%").FontSize(9).FontColor(textMuted);
 
                                 rank++;
                             }
@@ -846,19 +813,18 @@ public class ReportGenerationService
                 // 页脚
                 page.Footer()
                     .BorderTop(1)
-                    .BorderColor(Colors.Grey.Lighten2)
-                    .PaddingTop(10)
+                    .BorderColor(Color.FromHex("#333355"))
+                    .PaddingTop(8)
                     .Row(row =>
                     {
-                        row.RelativeItem().Text($"PlayLinker · 生成时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}")
-                            .FontSize(9).FontColor(Colors.Grey.Darken1);
-                        row.ConstantItem(100).AlignRight().Text(text =>
+                        row.RelativeItem().Text($"PlayLinker · {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(8).FontColor(textMuted);
+                        row.ConstantItem(80).AlignRight().Text(text =>
                         {
-                            text.Span("第 ").FontSize(9).FontColor(Colors.Grey.Darken1);
-                            text.CurrentPageNumber().FontSize(9).FontColor(Colors.Grey.Darken1);
-                            text.Span(" / ").FontSize(9).FontColor(Colors.Grey.Darken1);
-                            text.TotalPages().FontSize(9).FontColor(Colors.Grey.Darken1);
-                            text.Span(" 页").FontSize(9).FontColor(Colors.Grey.Darken1);
+                            text.Span("第 ").FontSize(8).FontColor(textMuted);
+                            text.CurrentPageNumber().FontSize(8).FontColor(textMuted);
+                            text.Span(" / ").FontSize(8).FontColor(textMuted);
+                            text.TotalPages().FontSize(8).FontColor(textMuted);
+                            text.Span(" 页").FontSize(8).FontColor(textMuted);
                         });
                     });
             });
@@ -1498,80 +1464,86 @@ public class ReportGenerationService
             insights.Add($"全年解锁 {totalAchievements} 个成就，平均每款游戏 {(playedGames > 0 ? Math.Round((double)totalAchievements / playedGames, 1) : 0)} 个");
         }
 
+        // 生成PDF - 暗色系风格
+        var darkBg = Color.FromHex("#1a1a2e");
+        var darkCard = Color.FromHex("#252542");
+        var accentCyan = Color.FromHex("#00d4ff");
+        var accentPurple = Color.FromHex("#7c3aed");
+        var textLight = Color.FromHex("#e0e0e0");
+        var textMuted = Color.FromHex("#888888");
+
         var document = Document.Create(container =>
         {
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(2, Unit.Centimetre);
-                page.DefaultTextStyle(x => x.FontSize(11));
+                page.Margin(1.5f, Unit.Centimetre);
+                page.PageColor(darkBg);
+                page.DefaultTextStyle(x => x.FontSize(11).FontColor(textLight));
 
-                page.Header().Column(col =>
+                page.Header().PaddingBottom(15).Column(col =>
                 {
-                    col.Item().Text($"{year}年度游戏报告")
-                        .FontSize(28).SemiBold().FontColor(Colors.Purple.Medium);
-                    col.Item().Text("PlayLinker 年度回顾")
-                        .FontSize(12).FontColor(Colors.Grey.Darken1);
+                    col.Item().Text($"{year}").FontSize(56).Bold().FontColor(accentPurple);
+                    col.Item().Text("年度游戏报告").FontSize(28).SemiBold().FontColor(accentCyan);
+                    col.Item().Text("PlayLinker 年度回顾").FontSize(11).FontColor(textMuted);
                 });
 
-                page.Content().PaddingVertical(1, Unit.Centimetre).Column(column =>
+                page.Content().PaddingVertical(0.5f, Unit.Centimetre).Column(column =>
                 {
-                    column.Spacing(15);
+                    column.Spacing(12);
 
                     // 统计卡片
                     column.Item().Row(row =>
                     {
-                        row.Spacing(10);
-                        row.RelativeItem().Background(Colors.Purple.Lighten4).Padding(20).Column(c =>
+                        row.Spacing(8);
+                        row.RelativeItem().Background(darkCard).Padding(12).Column(c =>
                         {
-                            c.Item().Text(totalHours.ToString()).FontSize(36).SemiBold().FontColor(Colors.Purple.Darken2);
-                            c.Item().Text("总时长(小时)").FontSize(10);
+                            c.Item().Text(totalHours.ToString()).FontSize(28).Bold().FontColor(accentCyan);
+                            c.Item().Text("总时长(小时)").FontSize(9).FontColor(textMuted);
                         });
-                        row.RelativeItem().Background(Colors.Blue.Lighten4).Padding(20).Column(c =>
+                        row.RelativeItem().Background(darkCard).Padding(12).Column(c =>
                         {
-                            c.Item().Text(playedGames.ToString()).FontSize(36).SemiBold().FontColor(Colors.Blue.Darken2);
-                            c.Item().Text("游戏数").FontSize(10);
+                            c.Item().Text(playedGames.ToString()).FontSize(28).Bold().FontColor(accentCyan);
+                            c.Item().Text("游戏数").FontSize(9).FontColor(textMuted);
                         });
-                        row.RelativeItem().Background(Colors.Green.Lighten4).Padding(20).Column(c =>
+                        row.RelativeItem().Background(darkCard).Padding(12).Column(c =>
                         {
-                            c.Item().Text(activeDays.ToString()).FontSize(36).SemiBold().FontColor(Colors.Green.Darken2);
-                            c.Item().Text("活跃天数").FontSize(10);
+                            c.Item().Text(activeDays.ToString()).FontSize(28).Bold().FontColor(accentCyan);
+                            c.Item().Text("活跃天数").FontSize(9).FontColor(textMuted);
                         });
-                        row.RelativeItem().Background(Colors.Orange.Lighten4).Padding(20).Column(c =>
+                        row.RelativeItem().Background(darkCard).Padding(12).Column(c =>
                         {
-                            c.Item().Text(totalAchievements.ToString()).FontSize(36).SemiBold().FontColor(Colors.Orange.Darken2);
-                            c.Item().Text("成就数").FontSize(10);
+                            c.Item().Text(totalAchievements.ToString()).FontSize(28).Bold().FontColor(accentCyan);
+                            c.Item().Text("成就数").FontSize(9).FontColor(textMuted);
                         });
                     });
 
                     // 年度最爱游戏高亮卡片
                     if (topGameEntry.Value.playtimeMinutes > 0)
                     {
-                        column.Item().Background(Colors.Purple.Medium)
-                            .Padding(20).Column(col =>
-                            {
-                                col.Item().Text("年度最爱游戏").FontSize(12).FontColor(Colors.White);
-                                col.Item().Text(topGameName).FontSize(22).SemiBold().FontColor(Colors.White);
-                                col.Item().Text($"共游玩 {topGameHours} 小时").FontSize(14).FontColor(Colors.White);
-                            });
+                        column.Item().Background(accentPurple).Padding(18).Column(col =>
+                        {
+                            col.Item().Text("🏆 年度最爱游戏").FontSize(11).FontColor(Colors.White);
+                            col.Item().Text(topGameName).FontSize(20).Bold().FontColor(Colors.White);
+                            col.Item().Text($"共游玩 {topGameHours} 小时").FontSize(12).FontColor(Colors.White);
+                        });
                     }
 
                     // 年度洞察
-                    column.Item().Background(Colors.Grey.Lighten4)
-                        .Padding(15).Column(col =>
+                    column.Item().Background(darkCard).Padding(15).Column(col =>
+                    {
+                        col.Item().Text("💡 年度洞察").FontSize(13).SemiBold().FontColor(accentCyan);
+                        col.Item().PaddingTop(8);
+                        foreach (var insight in insights)
                         {
-                            col.Item().Text("年度洞察").FontSize(14).SemiBold().FontColor(Colors.Purple.Medium);
-                            col.Item().PaddingTop(8);
-                            foreach (var insight in insights)
-                            {
-                                col.Item().Text($"• {insight}").FontSize(11).FontColor(Colors.Grey.Darken2);
-                            }
-                        });
+                            col.Item().Text($"• {insight}").FontSize(10).FontColor(textLight);
+                        }
+                    });
 
                     // 月度游戏时长
-                    column.Item().PaddingTop(10).Text("月度游戏时长").FontSize(16).SemiBold().FontColor(Colors.Purple.Medium);
+                    column.Item().Text("📈 月度游戏时长").FontSize(14).SemiBold().FontColor(accentCyan);
                     
-                    column.Item().Table(table =>
+                    column.Item().Background(darkCard).Padding(8).Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
                         {
@@ -1582,31 +1554,29 @@ public class ReportGenerationService
                         // 月份标题
                         for (int m = 1; m <= 12; m++)
                         {
-                            table.Cell().Background(Colors.Purple.Lighten4).Padding(4).AlignCenter()
-                                .Text($"{m}月").FontSize(9).FontColor(Colors.Purple.Darken2);
+                            table.Cell().Padding(3).AlignCenter().Text($"{m}月").FontSize(8).FontColor(accentCyan);
                         }
 
                         // 时长数据
                         for (int m = 1; m <= 12; m++)
                         {
                             var hours = Math.Round(monthlyPlaytimeDict.GetValueOrDefault(m, 0) / 60.0, 1);
-                            table.Cell().Padding(4).AlignCenter()
-                                .Text($"{hours}h").FontSize(9);
+                            table.Cell().Padding(3).AlignCenter().Text($"{hours}h").FontSize(8).FontColor(textLight);
                         }
                     });
 
                     // 游戏类型偏好
                     if (genreStats.Any())
                     {
-                        column.Item().PaddingTop(15).Text("游戏类型偏好").FontSize(16).SemiBold().FontColor(Colors.Purple.Medium);
+                        column.Item().Text("📊 游戏类型偏好").FontSize(14).SemiBold().FontColor(accentCyan);
 
-                        column.Item().Table(table =>
+                        column.Item().Background(darkCard).Padding(10).Table(table =>
                         {
                             table.ColumnsDefinition(columns =>
                             {
                                 columns.RelativeColumn(2);
                                 columns.RelativeColumn(4);
-                                columns.ConstantColumn(60);
+                                columns.ConstantColumn(50);
                             });
 
                             var maxMinutes = genreStats.Max(x => x.Minutes);
@@ -1614,54 +1584,57 @@ public class ReportGenerationService
                             {
                                 var percent = maxMinutes > 0 ? Math.Max(1, (int)Math.Round((double)genre.Minutes / maxMinutes * 100)) : 1;
                                 var remaining = Math.Max(1, 100 - percent);
-                                table.Cell().Padding(5).Text(genre.Genre).FontSize(10);
-                                table.Cell().Padding(5).Column(col =>
+                                table.Cell().Padding(4).Text(genre.Genre).FontSize(9).FontColor(textLight);
+                                table.Cell().Padding(4).Column(col =>
                                 {
-                                    col.Item().Height(16).Background(Colors.Grey.Lighten3).Row(row =>
+                                    col.Item().Height(12).Background(Color.FromHex("#333355")).Row(row =>
                                     {
-                                        row.RelativeItem(percent).Background(Colors.Purple.Medium);
+                                        row.RelativeItem(percent).Background(accentPurple);
                                         row.RelativeItem(remaining);
                                     });
                                 });
-                                table.Cell().Padding(5).AlignRight().Text($"{Math.Round(genre.Minutes / 60.0)}h").FontSize(10).FontColor(Colors.Purple.Medium);
+                                table.Cell().Padding(4).AlignRight().Text($"{Math.Round(genre.Minutes / 60.0)}h").FontSize(9).FontColor(accentCyan);
                             }
                         });
                     }
 
                     // 游戏排行榜
-                    column.Item().PaddingTop(15).Text("游戏排行榜 TOP 10").FontSize(16).SemiBold().FontColor(Colors.Purple.Medium);
+                    column.Item().Text("🎯 游戏排行榜 TOP 10").FontSize(14).SemiBold().FontColor(accentCyan);
 
-                    column.Item().Table(table =>
+                    column.Item().Background(darkCard).Padding(8).Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
                         {
-                            columns.ConstantColumn(40);
+                            columns.ConstantColumn(35);
                             columns.RelativeColumn(4);
-                            columns.ConstantColumn(80);
+                            columns.ConstantColumn(65);
                         });
 
                         table.Header(header =>
                         {
-                            header.Cell().Background(Colors.Purple.Medium).Padding(8).Text("排名").FontColor(Colors.White).SemiBold();
-                            header.Cell().Background(Colors.Purple.Medium).Padding(8).Text("游戏").FontColor(Colors.White).SemiBold();
-                            header.Cell().Background(Colors.Purple.Medium).Padding(8).Text("时长").FontColor(Colors.White).SemiBold();
+                            header.Cell().Padding(6).Text("#").FontSize(9).SemiBold().FontColor(accentCyan);
+                            header.Cell().Padding(6).Text("游戏").FontSize(9).SemiBold().FontColor(accentCyan);
+                            header.Cell().Padding(6).Text("时长").FontSize(9).SemiBold().FontColor(accentCyan);
                         });
 
                         int rank = 1;
                         foreach (var game in topGames)
                         {
-                            var bgColor = rank % 2 == 0 ? Colors.Grey.Lighten4 : Colors.White;
-                            var rankColor = rank == 1 ? Colors.Orange.Medium : (rank == 2 ? Colors.Grey.Medium : (rank == 3 ? Colors.Brown.Medium : Colors.Purple.Medium));
+                            var rankColor = rank == 1 ? Color.FromHex("#ffd700") : (rank == 2 ? Color.FromHex("#c0c0c0") : (rank == 3 ? Color.FromHex("#cd7f32") : textLight));
                             
-                            table.Cell().Background(bgColor).Padding(8).Text($"#{rank}").FontColor(rankColor).SemiBold();
-                            table.Cell().Background(bgColor).Padding(8).Text(game.GameName);
-                            table.Cell().Background(bgColor).Padding(8).Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}小时");
+                            table.Cell().Padding(5).Text($"{rank}").FontSize(9).Bold().FontColor(rankColor);
+                            table.Cell().Padding(5).Text(game.GameName).FontSize(9).FontColor(textLight);
+                            table.Cell().Padding(5).Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}h").FontSize(9).FontColor(accentCyan);
                             rank++;
                         }
                     });
                 });
 
-                page.Footer().Text($"PlayLinker · 生成时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                page.Footer()
+                    .BorderTop(1)
+                    .BorderColor(Color.FromHex("#333355"))
+                    .PaddingTop(8)
+                    .Text($"PlayLinker · {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(8).FontColor(textMuted);
             });
         });
 
@@ -2311,83 +2284,91 @@ public class ReportGenerationService
             insights.Add($"共有 {totalSaves} 个游戏存档");
         }
 
+        // 暗色系风格
+        var darkBg = Color.FromHex("#0d1b2a");
+        var darkCard = Color.FromHex("#1b263b");
+        var accentCyan = Color.FromHex("#00d4ff");
+        var accentBlue = Color.FromHex("#48cae4");
+        var textLight = Color.FromHex("#e0e0e0");
+        var textMuted = Color.FromHex("#888888");
+
         var document = Document.Create(container =>
         {
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(2, Unit.Centimetre);
-                page.DefaultTextStyle(x => x.FontSize(10));
+                page.Margin(1.5f, Unit.Centimetre);
+                page.PageColor(darkBg);
+                page.DefaultTextStyle(x => x.FontSize(10).FontColor(textLight));
 
-                page.Header().Column(col =>
+                page.Header().PaddingBottom(15).Column(col =>
                 {
-                    col.Item().Text("游戏库存报告").FontSize(24).SemiBold().FontColor(Colors.Blue.Medium);
-                    col.Item().Text($"生成时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(10).FontColor(Colors.Grey.Darken1);
+                    col.Item().Text("📦 游戏库存报告").FontSize(26).SemiBold().FontColor(accentCyan);
+                    col.Item().Text($"生成时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(10).FontColor(textMuted);
                 });
 
-                page.Content().PaddingVertical(1, Unit.Centimetre).Column(column =>
+                page.Content().PaddingVertical(0.5f, Unit.Centimetre).Column(column =>
                 {
-                    column.Spacing(15);
+                    column.Spacing(12);
 
                     // 统计卡片
                     column.Item().Row(row =>
                     {
-                        row.Spacing(10);
-                        row.RelativeItem().Background(Colors.Blue.Lighten4).Padding(15).Column(c =>
+                        row.Spacing(8);
+                        row.RelativeItem().Background(darkCard).Padding(12).Column(c =>
                         {
-                            c.Item().Text(totalGames.ToString()).FontSize(28).SemiBold().FontColor(Colors.Blue.Darken2);
-                            c.Item().Text("游戏总数").FontSize(9);
+                            c.Item().Text(totalGames.ToString()).FontSize(26).Bold().FontColor(accentCyan);
+                            c.Item().Text("游戏总数").FontSize(9).FontColor(textMuted);
                         });
-                        row.RelativeItem().Background(Colors.Green.Lighten4).Padding(15).Column(c =>
+                        row.RelativeItem().Background(darkCard).Padding(12).Column(c =>
                         {
-                            c.Item().Text(installedGames.ToString()).FontSize(28).SemiBold().FontColor(Colors.Green.Darken2);
-                            c.Item().Text("已安装").FontSize(9);
+                            c.Item().Text(installedGames.ToString()).FontSize(26).Bold().FontColor(accentCyan);
+                            c.Item().Text("已安装").FontSize(9).FontColor(textMuted);
                         });
-                        row.RelativeItem().Background(Colors.Orange.Lighten4).Padding(15).Column(c =>
+                        row.RelativeItem().Background(darkCard).Padding(12).Column(c =>
                         {
-                            c.Item().Text(totalSaves.ToString()).FontSize(28).SemiBold().FontColor(Colors.Orange.Darken2);
-                            c.Item().Text("存档数").FontSize(9);
+                            c.Item().Text(totalSaves.ToString()).FontSize(26).Bold().FontColor(accentCyan);
+                            c.Item().Text("存档数").FontSize(9).FontColor(textMuted);
                         });
-                        row.RelativeItem().Background(Colors.Purple.Lighten4).Padding(15).Column(c =>
+                        row.RelativeItem().Background(darkCard).Padding(12).Column(c =>
                         {
-                            c.Item().Text($"{totalSizeGB:F1}").FontSize(28).SemiBold().FontColor(Colors.Purple.Darken2);
-                            c.Item().Text("GB 占用").FontSize(9);
+                            c.Item().Text($"{totalSizeGB:F1}").FontSize(26).Bold().FontColor(accentCyan);
+                            c.Item().Text("GB 占用").FontSize(9).FontColor(textMuted);
                         });
                     });
 
                     // 库存洞察
-                    column.Item().Background(Colors.Grey.Lighten4)
-                        .Padding(15).Column(col =>
+                    column.Item().Background(darkCard).Padding(15).Column(col =>
+                    {
+                        col.Item().Text("💡 库存概览").FontSize(13).SemiBold().FontColor(accentCyan);
+                        col.Item().PaddingTop(8);
+                        foreach (var insight in insights)
                         {
-                            col.Item().Text("库存概览").FontSize(14).SemiBold().FontColor(Colors.Blue.Medium);
-                            col.Item().PaddingTop(8);
-                            foreach (var insight in insights)
-                            {
-                                col.Item().Text($"• {insight}").FontSize(11).FontColor(Colors.Grey.Darken2);
-                            }
-                        });
+                            col.Item().Text($"• {insight}").FontSize(10).FontColor(textLight);
+                        }
+                    });
 
                     // 平台分布
                     if (platformStats.Any())
                     {
-                        column.Item().PaddingTop(10).Text("平台分布").FontSize(16).SemiBold().FontColor(Colors.Blue.Medium);
+                        column.Item().Text("📊 平台分布").FontSize(14).SemiBold().FontColor(accentCyan);
 
-                        column.Item().Table(table =>
+                        column.Item().Background(darkCard).Padding(10).Table(table =>
                         {
                             table.ColumnsDefinition(columns =>
                             {
                                 columns.RelativeColumn(2);
                                 columns.RelativeColumn(4);
-                                columns.ConstantColumn(60);
-                                columns.ConstantColumn(60);
+                                columns.ConstantColumn(50);
+                                columns.ConstantColumn(50);
                             });
 
                             table.Header(header =>
                             {
-                                header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("平台").FontColor(Colors.White).FontSize(9);
-                                header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("占比").FontColor(Colors.White).FontSize(9);
-                                header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("游戏数").FontColor(Colors.White).FontSize(9);
-                                header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("时长").FontColor(Colors.White).FontSize(9);
+                                header.Cell().Padding(5).Text("平台").FontSize(9).SemiBold().FontColor(accentCyan);
+                                header.Cell().Padding(5).Text("占比").FontSize(9).SemiBold().FontColor(accentCyan);
+                                header.Cell().Padding(5).Text("游戏数").FontSize(9).SemiBold().FontColor(accentCyan);
+                                header.Cell().Padding(5).Text("时长").FontSize(9).SemiBold().FontColor(accentCyan);
                             });
 
                             var maxCount = platformStats.Max(x => x.Count);
@@ -2395,61 +2376,69 @@ public class ReportGenerationService
                             {
                                 var percent = maxCount > 0 ? Math.Max(1, (int)Math.Round((double)platform.Count / maxCount * 100)) : 1;
                                 var remaining = Math.Max(1, 100 - percent);
-                                table.Cell().Padding(5).Text(platform.Platform).FontSize(9);
-                                table.Cell().Padding(5).Column(col =>
+                                table.Cell().Padding(4).Text(platform.Platform).FontSize(9).FontColor(textLight);
+                                table.Cell().Padding(4).Column(col =>
                                 {
-                                    col.Item().Height(14).Background(Colors.Grey.Lighten3).Row(row =>
+                                    col.Item().Height(12).Background(Color.FromHex("#2a3f5f")).Row(row =>
                                     {
-                                        row.RelativeItem(percent).Background(Colors.Blue.Medium);
+                                        row.RelativeItem(percent).Background(accentCyan);
                                         row.RelativeItem(remaining);
                                     });
                                 });
-                                table.Cell().Padding(5).AlignCenter().Text(platform.Count.ToString()).FontSize(9);
-                                table.Cell().Padding(5).AlignRight().Text($"{platform.TotalHours}h").FontSize(9).FontColor(Colors.Blue.Medium);
+                                table.Cell().Padding(4).AlignCenter().Text(platform.Count.ToString()).FontSize(9).FontColor(textLight);
+                                table.Cell().Padding(4).AlignRight().Text($"{platform.TotalHours}h").FontSize(9).FontColor(accentCyan);
                             }
                         });
                     }
 
                     // 游戏收藏
-                    column.Item().PaddingTop(15).Text("游戏收藏").FontSize(16).SemiBold().FontColor(Colors.Blue.Medium);
+                    column.Item().Text("🎮 游戏收藏").FontSize(14).SemiBold().FontColor(accentCyan);
 
-                    column.Item().Table(table =>
+                    column.Item().Background(darkCard).Padding(8).Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
                         {
                             columns.RelativeColumn(3);
                             columns.RelativeColumn(2);
-                            columns.ConstantColumn(60);
-                            columns.ConstantColumn(60);
+                            columns.ConstantColumn(55);
+                            columns.ConstantColumn(55);
                         });
 
                         table.Header(header =>
                         {
-                            header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("游戏").FontColor(Colors.White).FontSize(9);
-                            header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("平台").FontColor(Colors.White).FontSize(9);
-                            header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("时长").FontColor(Colors.White).FontSize(9);
-                            header.Cell().Background(Colors.Blue.Medium).Padding(6).Text("状态").FontColor(Colors.White).FontSize(9);
+                            header.Cell().Padding(5).Text("游戏").FontSize(9).SemiBold().FontColor(accentCyan);
+                            header.Cell().Padding(5).Text("平台").FontSize(9).SemiBold().FontColor(accentCyan);
+                            header.Cell().Padding(5).Text("时长").FontSize(9).SemiBold().FontColor(accentCyan);
+                            header.Cell().Padding(5).Text("状态").FontSize(9).SemiBold().FontColor(accentCyan);
                         });
 
                         foreach (var game in gameRecords.Take(30))
                         {
                             var isInstalled = localGames.Any(l => l.GameId == game.GameId);
-                            table.Cell().Padding(5).Text(game.Game?.Name ?? "未知").FontSize(9);
-                            table.Cell().Padding(5).Text(game.PlayerPlatform?.Platform?.PlatformName ?? "-").FontSize(9);
-                            table.Cell().Padding(5).Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}小时").FontSize(9);
-                            table.Cell().Padding(5).Text(isInstalled ? "已安装" : "-").FontSize(9).FontColor(isInstalled ? Colors.Green.Medium : Colors.Grey.Medium);
+                            table.Cell().Padding(4).Text(game.Game?.Name ?? "未知").FontSize(8).FontColor(textLight);
+                            table.Cell().Padding(4).Text(game.PlayerPlatform?.Platform?.PlatformName ?? "-").FontSize(8).FontColor(textMuted);
+                            table.Cell().Padding(4).Text($"{Math.Round(game.PlaytimeMinutes / 60.0, 1)}h").FontSize(8).FontColor(accentCyan);
+                            table.Cell().Padding(4).Text(isInstalled ? "已安装" : "-").FontSize(8).FontColor(isInstalled ? Color.FromHex("#4caf50") : textMuted);
                         }
                     });
                 });
 
-                page.Footer().Text(text =>
-                {
-                    text.Span("PlayLinker · 第 ").FontSize(9).FontColor(Colors.Grey.Darken1);
-                    text.CurrentPageNumber().FontSize(9).FontColor(Colors.Grey.Darken1);
-                    text.Span(" / ").FontSize(9).FontColor(Colors.Grey.Darken1);
-                    text.TotalPages().FontSize(9).FontColor(Colors.Grey.Darken1);
-                    text.Span(" 页").FontSize(9).FontColor(Colors.Grey.Darken1);
-                });
+                page.Footer()
+                    .BorderTop(1)
+                    .BorderColor(Color.FromHex("#2a3f5f"))
+                    .PaddingTop(8)
+                    .Row(row =>
+                    {
+                        row.RelativeItem().Text($"PlayLinker").FontSize(8).FontColor(textMuted);
+                        row.ConstantItem(80).AlignRight().Text(text =>
+                        {
+                            text.Span("第 ").FontSize(8).FontColor(textMuted);
+                            text.CurrentPageNumber().FontSize(8).FontColor(textMuted);
+                            text.Span(" / ").FontSize(8).FontColor(textMuted);
+                            text.TotalPages().FontSize(8).FontColor(textMuted);
+                            text.Span(" 页").FontSize(8).FontColor(textMuted);
+                        });
+                    });
             });
         });
 
