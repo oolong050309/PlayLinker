@@ -478,7 +478,7 @@ watch(() => priceStore.wishlist, () => {
   flex: 1;
   overflow-y: auto;
   padding: 2rem;
-  background-color: #09090b; /* 背景色统一，增强沉浸感 */
+  background-color: transparent;
 }
 
 /* 玻璃态基础样式优化（增强质感） */

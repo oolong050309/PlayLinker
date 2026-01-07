@@ -270,9 +270,10 @@ onMounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 24px;
-  background: #0f0f13;
+  background: rgba(20, 20, 23, 0.6);
   min-height: 100vh;
   color: #f8fafc;
+  backdrop-filter: blur(12px);
 }
 
 .header {

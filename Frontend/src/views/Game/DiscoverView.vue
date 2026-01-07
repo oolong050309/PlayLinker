@@ -144,12 +144,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.discover-container { min-height: 100vh; background: #0f0f13; color: #f8fafc; padding: 24px; }
+.discover-container { min-height: 100vh; background: rgba(20, 20, 23, 0.3); color: #f8fafc; padding: 24px; }
 
 /* 头部控制栏：现在只包含刷新按钮 */
 .header-control { display: flex; justify-content: flex-end; margin-bottom: 20px; }
 
-.section-card { background: rgba(20, 20, 23, 0.5); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 24px; margin-bottom: 30px; }
+.section-card { background: rgba(20, 20, 23, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 24px; margin-bottom: 30px; }
 .section-header { display: flex; align-items: center; margin-bottom: 20px; }
 .section-header-left { display: flex; gap: 12px; align-items: center; }
 .section-title { font-size: 20px; font-weight: 600; margin: 0; color: #fff; }

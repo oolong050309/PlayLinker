@@ -429,7 +429,7 @@ onActivated(() => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
-  background: #0f0f13;
+  background: template;
   min-height: 100vh;
   color: #f8fafc;
 }
@@ -461,12 +461,12 @@ onActivated(() => {
 }
 
 .stat-card {
-  background: rgba(20, 20, 23, 0.75);
+  background: template;
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px template;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -601,7 +601,7 @@ onActivated(() => {
 }
 
 .game-card {
-  background: rgba(20, 20, 23, 0.75);
+  background: template;
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -643,14 +643,14 @@ onActivated(() => {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.7);
+  background: template;
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
   color: #cbd5e1;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 1px 2px template;
   white-space: nowrap;
 }
 
@@ -759,7 +759,7 @@ onActivated(() => {
   padding: 8px 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
-  background: rgba(20, 20, 23, 0.75);
+  background: template;
   color: #f8fafc;
   cursor: pointer;
   font-size: 14px;

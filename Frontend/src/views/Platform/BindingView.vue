@@ -1446,7 +1446,7 @@ onMounted(() => {
 /* 基础样式 */
 .app-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #000000 0%, #000000 50%, #0f0f0f 100%);
+  background: rgba(255, 255, 255, 0.03);
   color: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
@@ -1456,9 +1456,9 @@ onMounted(() => {
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(10, 10, 10, 0.8);
+  background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .header-content {

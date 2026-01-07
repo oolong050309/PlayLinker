@@ -442,7 +442,6 @@ onMounted(() => {
 <style scoped>
 .container {
   padding: 24px;
-  /* 确保页面背景也是深色（如果全局未设置） */
   color: #f8fafc; 
 }
 
