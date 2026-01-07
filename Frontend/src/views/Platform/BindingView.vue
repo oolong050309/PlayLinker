@@ -982,37 +982,100 @@ const handlePsnPostAuth = async (authResponse) => {
     // 从认证响应中获取onlineId，如果没有则使用表单中的值
     const psnOnlineId = authResponse?.data?.onlineId || bindForm.value.psnOnlineId // 优先使用认证返回
     
-    if (psnOnlineId) {
-      // 绑定平台
-      const bindData = {
-        platformId: 6,
-        psnOnlineId: psnOnlineId
-      }
-      const bindRes = await platformsApi.bindPlatform(bindData)
-      
-      if (bindRes.success) {
-        // 导入数据
-        const userId = getCurrentUserId()
-        await psnApi.importData({
-          userId,
-          psnOnlineId,
-          importGames: true,
-          importTrophies: true
-        })
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        closeBindModal()
-        await loadBindings()
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        await refreshStats()
-        alert('数据同步完成！')
-      }
-    } else {
+    if (!psnOnlineId) {
       alert('PSN认证成功，但无法获取在线ID，请手动输入PSN在线ID')
+      return
+    }
+
+    // 先绑定平台（如果已绑定，409错误是正常的，继续执行同步）
+    const bindData = {
+      platformId: 6,
+      psnOnlineId: psnOnlineId
+    }
+    
+    let bindRes
+    try {
+      bindRes = await platformsApi.bindPlatform(bindData)
+    } catch (bindError) {
+      // 处理409冲突错误（绑定已存在）
+      if (bindError.response?.status === 409) {
+        console.log('PSN平台已绑定，继续执行同步...')
+        bindRes = { success: true } // 视为成功，继续执行
+      } else {
+        // 其他错误则抛出
+        throw bindError
+      }
+    }
+    
+    // 无论绑定是否成功（包括409冲突），都继续执行同步
+    if (!bindRes || !bindRes.success) {
+      // 如果不是409错误，才提示绑定失败
+      if (bindRes && !bindRes.success) {
+        alert('PSN绑定失败，但将继续尝试同步数据')
+      }
+    }
+
+    // 绑定成功后立即进行同步
+    const userId = getCurrentUserId()
+    if (!userId) {
+      alert('无法获取用户ID')
+      return
+    }
+
+    try {
+      await psnApi.importData({
+        userId,
+        psnOnlineId,
+        importGames: true,
+        importTrophies: true
+      })
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      closeBindModal()
+      await loadBindings()
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      await refreshStats()
+      alert('PSN绑定成功并已完成数据同步！')
+    } catch (error) {
+      console.error('PSN绑定后同步失败:', error)
+      const errorMessage = error.response?.data?.message || error.message || '未知错误'
+      alert('PSN数据同步失败: ' + errorMessage + '\n请稍后手动同步')
+      closeBindModal()
+      await loadBindings()
     }
   } catch (error) {
     console.error('PSN认证后处理失败:', error)
-    alert('PSN认证成功，但数据同步失败，请稍后手动同步')
+    const errorMessage = error.response?.data?.message || error.message || '未知错误'
+    const errorStatus = error.response?.status
+    
+    // 根据错误类型给出不同的提示
+    if (errorStatus === 409) {
+      alert('PSN平台已绑定，正在同步数据...')
+      // 409错误时，仍然尝试同步
+      const psnOnlineId = authResponse?.data?.onlineId || bindForm.value.psnOnlineId
+      if (psnOnlineId) {
+        const userId = getCurrentUserId()
+        if (userId) {
+          try {
+            await psnApi.importData({
+              userId,
+              psnOnlineId,
+              importGames: true,
+              importTrophies: true
+            })
+            closeBindModal()
+            await loadBindings()
+            await refreshStats()
+            alert('PSN数据同步完成！')
+          } catch (syncError) {
+            console.error('PSN数据同步失败:', syncError)
+            alert('PSN数据同步失败，请稍后手动同步')
+          }
+        }
+      }
+    } else {
+      alert('PSN认证后处理失败: ' + errorMessage)
+    }
   }
 }
 
