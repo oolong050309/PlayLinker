@@ -125,8 +125,28 @@ public class EpicService : IEpicService
                 _fastApiProcess.BeginErrorReadLine();
                 
                 _logger.LogInformation("FastAPI服务已启动: PID={ProcessId}", _fastApiProcess.Id);
-                // 等待服务启动
-                await Task.Delay(5000);
+                
+                // 轮询等待服务就绪，最多等待30秒
+                var healthCheckUrl = $"{_epicApiBaseUrl}/";
+                using var checkClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+                for (int i = 0; i < 30; i++)
+                {
+                    await Task.Delay(1000);
+                    try
+                    {
+                        var response = await checkClient.GetAsync(healthCheckUrl);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            _logger.LogInformation("FastAPI服务就绪，等待了 {Seconds} 秒", i + 1);
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        // 继续等待
+                    }
+                }
+                _logger.LogWarning("FastAPI服务启动超时（30秒）");
             }
         }
         catch (Exception ex)
