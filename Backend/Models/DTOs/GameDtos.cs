@@ -56,6 +56,7 @@ public class GameDetailDto
     public List<LanguageDto> Languages { get; set; } = new();
     public PlatformSupportDto Platforms { get; set; } = new();
     public List<int> PlatformIds { get; set; } = new(); // 游戏支持的所有平台ID（Steam、Xbox等）
+    public List<GamePlatformDto> GamePlatforms { get; set; } = new(); // 游戏平台信息（包含商店链接）
     public string ReleaseDate { get; set; } = string.Empty;
     public GameReviewsDto Reviews { get; set; } = new();
 }
@@ -141,6 +142,16 @@ public class LanguageDto
 {
     public int LanguageId { get; set; }
     public string Name { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 游戏平台DTO（包含商店链接）
+/// </summary>
+public class GamePlatformDto
+{
+    public int PlatformId { get; set; }
+    public string PlatformName { get; set; } = string.Empty;
+    public string? GamePlatformUrl { get; set; }
 }
 
 /// <summary>

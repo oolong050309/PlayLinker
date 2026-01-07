@@ -342,6 +342,15 @@ public class GamesController : ControllerBase
                 Languages = game.GameLanguages.Select(gl => new LanguageDto { LanguageId = gl.Language?.LanguageId ?? 0, Name = gl.Language?.LanguageName ?? "" }).ToList(),
                 Platforms = new PlatformSupportDto { Windows = game.Windows, Mac = game.Mac, Linux = game.Linux },
                 PlatformIds = game.GamePlatforms.Select(gp => gp.PlatformId).Distinct().ToList(), // 获取所有支持的平台ID
+                GamePlatforms = game.GamePlatforms
+                    .Where(gp => !string.IsNullOrEmpty(gp.GamePlatformUrl)) // 只返回有商店链接的平台
+                    .Select(gp => new GamePlatformDto 
+                    { 
+                        PlatformId = gp.PlatformId, 
+                        PlatformName = gp.Platform?.PlatformName ?? "", 
+                        GamePlatformUrl = gp.GamePlatformUrl 
+                    })
+                    .ToList(),
                 ReleaseDate = game.ReleaseDate.ToString("yyyy-MM-dd"),
                 Reviews = new GameReviewsDto { Score = game.ReviewScore, ScoreDesc = game.ReviewScoreDesc, TotalReviews = game.NumReviews, TotalPositive = game.TotalPositive }
             };

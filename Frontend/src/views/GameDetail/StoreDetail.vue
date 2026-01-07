@@ -333,6 +333,24 @@
             </div>
           </section>
 
+          <!-- 平台商店链接 -->
+          <section v-if="game.gamePlatforms && game.gamePlatforms.length > 0" class="section-card">
+            <h3 class="sidebar-title">商店链接</h3>
+            <div class="platform-links">
+              <a 
+                v-for="platform in game.gamePlatforms" 
+                :key="platform.platformId || platform.PlatformId"
+                :href="platform.gamePlatformUrl || platform.GamePlatformUrl" 
+                target="_blank"
+                rel="noopener noreferrer"
+                class="platform-link"
+              >
+                <ExternalLink class="link-icon" size="16" />
+                <span>{{ platform.platformName || platform.PlatformName || `平台 ${platform.platformId || platform.PlatformId}` }}</span>
+              </a>
+            </div>
+          </section>
+
           <!-- 价格监控（免费游戏不显示） -->
           <section v-if="game.isFree !== true" class="section-card">
             <h3 class="sidebar-title">价格监控</h3>
@@ -647,7 +665,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { gameApi, libraryApi, newsApi, achievementApi } from '@/api'
 import { priceApi } from '@/api/price'
-import { ArrowLeft, Trophy, Calendar, Bell, X, Lock } from 'lucide-vue-next'
+import { ArrowLeft, Trophy, Calendar, Bell, X, Lock, ExternalLink } from 'lucide-vue-next'
 import noCoverImage from '@/assets/no_cover.png'
 
 const route = useRoute()
@@ -981,6 +999,7 @@ const loadGameDetail = async () => {
           // 不再使用 platform 字段存储操作系统信息
           // platforms 字段用于存储游戏平台ID数组（Steam、Xbox等）
           platforms: detail.platformIds ?? detail.PlatformIds ?? [],
+          gamePlatforms: detail.gamePlatforms ?? detail.GamePlatforms ?? [],
           genre: genreNames.join(' / '),
           isFree: detail.isFree ?? detail.IsFree ?? null,
           releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? '',
@@ -1013,6 +1032,7 @@ const loadGameDetail = async () => {
           // platform 字段不再用于显示操作系统，改为存储游戏平台ID数组
           // 优先使用游戏详情 API 返回的所有支持的平台，而不是用户拥有的平台
           platforms: (detail.platformIds ?? detail.PlatformIds ?? detail.platforms ?? []) || game.value.platforms || [],
+          gamePlatforms: detail.gamePlatforms ?? detail.GamePlatforms ?? game.value.gamePlatforms ?? [],
           genre: genreNames.join(' / ') || game.value.genre,
           isFree: detail.isFree ?? detail.IsFree ?? game.value.isFree,
           releaseDate: detail.releaseDate ?? detail.ReleaseDate ?? game.value.releaseDate,
@@ -2556,6 +2576,43 @@ onMounted(() => {
   font-size: 18px;
   font-weight: 600;
   color: #f8fafc;
+}
+
+.platform-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.platform-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(30, 30, 35, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #f8fafc;
+  text-decoration: none;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.platform-link:hover {
+  background: rgba(30, 30, 35, 0.8);
+  border-color: rgba(139, 92, 246, 0.3);
+  transform: translateX(2px);
+  color: #8b5cf6;
+}
+
+.platform-link .link-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.platform-link:hover .link-icon {
+  opacity: 1;
 }
 
 .price-monitor {
