@@ -140,7 +140,6 @@ const notifications = ref([])
 const tabs = computed(() => [
   { key: 'all', label: '全部', count: notifications.value.filter(n => !n.read).length },
   { key: 'system', label: '系统', count: notifications.value.filter(n => n.type === 'system' && !n.read).length },
-  { key: 'game', label: '游戏', count: notifications.value.filter(n => (n.type === 'game' || n.type === 'achievement') && !n.read).length },
   { key: 'parental', label: '家长监管', count: notifications.value.filter(n => n.type === 'parental' && !n.read).length }
 ])
 
@@ -150,8 +149,6 @@ const filteredNotifications = computed(() => {
   // 按分类筛选
   if (activeTab.value === 'system') {
     filtered = filtered.filter(n => n.type === 'system')
-  } else if (activeTab.value === 'game') {
-    filtered = filtered.filter(n => n.type === 'game' || n.type === 'achievement')
   } else if (activeTab.value === 'parental') {
     filtered = filtered.filter(n => n.type === 'parental')
   }
@@ -176,8 +173,6 @@ const totalPages = computed(() => {
   let filtered = notifications.value
   if (activeTab.value === 'system') {
     filtered = filtered.filter(n => n.type === 'system')
-  } else if (activeTab.value === 'game') {
-    filtered = filtered.filter(n => n.type === 'game' || n.type === 'achievement')
   } else if (activeTab.value === 'parental') {
     filtered = filtered.filter(n => n.type === 'parental')
   }

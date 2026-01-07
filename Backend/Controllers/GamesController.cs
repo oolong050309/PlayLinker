@@ -816,6 +816,11 @@ public class GamesController : ControllerBase
                             {
                                 if (stats.TryGetProperty("achievements", out var achievementsObj))
                                 {
+                                    // 【性能优化】先批量查询该游戏的所有成就，避免 N+1 查询问题
+                                    var existingAchievementsDict = await _context.Achievements
+                                        .Where(a => a.GameId == game.GameId && a.PlatformId == STEAM_PLATFORM_ID)
+                                        .ToDictionaryAsync(a => a.AchievementName, a => a);
+
                                     // 处理成就数据（数组格式）
                                     if (achievementsObj.ValueKind == JsonValueKind.Array)
                                     {
@@ -850,8 +855,8 @@ public class GamesController : ControllerBase
                                                 ? iconGrayProp.GetString() ?? "" 
                                                 : "";
 
-                                            var existingAchievement = await _context.Achievements
-                                                .FirstOrDefaultAsync(a => a.GameId == game.GameId && a.AchievementName == achievementName);
+                                            // 从内存字典中查找，而不是查询数据库
+                                            existingAchievementsDict.TryGetValue(achievementName, out var existingAchievement);
 
                                             if (existingAchievement == null)
                                             {
@@ -867,6 +872,8 @@ public class GamesController : ControllerBase
                                                     IconLocked = iconGray
                                                 };
                                                 _context.Achievements.Add(existingAchievement);
+                                                // 添加到字典中，避免重复添加
+                                                existingAchievementsDict[achievementName] = existingAchievement;
                                             }
                                             else
                                             {
@@ -910,8 +917,8 @@ public class GamesController : ControllerBase
                                                 ? iconGrayProp.GetString() ?? "" 
                                                 : "";
 
-                                            var existingAchievement = await _context.Achievements
-                                                .FirstOrDefaultAsync(a => a.GameId == game.GameId && a.AchievementName == achievementName);
+                                            // 从内存字典中查找，而不是查询数据库
+                                            existingAchievementsDict.TryGetValue(achievementName, out var existingAchievement);
 
                                             if (existingAchievement == null)
                                             {
@@ -927,6 +934,8 @@ public class GamesController : ControllerBase
                                                     IconLocked = iconGray
                                                 };
                                                 _context.Achievements.Add(existingAchievement);
+                                                // 添加到字典中，避免重复添加
+                                                existingAchievementsDict[achievementName] = existingAchievement;
                                             }
                                             else
                                             {
