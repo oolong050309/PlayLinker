@@ -1,11 +1,37 @@
 import axios from 'axios'
 
+// 自定义参数序列化函数，支持数组参数
+const paramsSerializer = (params) => {
+  const searchParams = new URLSearchParams()
+  
+  for (const key in params) {
+    const value = params[key]
+    if (value === null || value === undefined) {
+      continue
+    }
+    
+    if (Array.isArray(value)) {
+      // 数组参数：genres=value1&genres=value2
+      value.forEach(item => {
+        if (item !== null && item !== undefined) {
+          searchParams.append(key, item)
+        }
+      })
+    } else {
+      searchParams.append(key, value)
+    }
+  }
+  
+  return searchParams.toString()
+}
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  paramsSerializer: paramsSerializer
 })
 
 /**
@@ -138,6 +164,10 @@ export const metadataApi = {
   // 获取分类列表
   getCategories() {
     return api.get('/categories')
+  },
+  // 获取支持的语言列表
+  getLanguages() {
+    return api.get('/languages')
   },
   // 获取开发商列表
   getDevelopers(params) {

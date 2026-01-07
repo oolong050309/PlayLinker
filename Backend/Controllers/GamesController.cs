@@ -54,6 +54,11 @@ public class GamesController : ControllerBase
         [FromQuery] string? sortBy = null,
         [FromQuery] string? platform = null,
         [FromQuery] string? genre = null,
+        [FromQuery] string? category = null,
+        [FromQuery] string? language = null,
+        [FromQuery] List<string>? genres = null,
+        [FromQuery] List<string>? categories = null,
+        [FromQuery] List<string>? languages = null,
         [FromQuery] bool? isFree = null,
         [FromQuery] string? q = null) // [修改] 新增搜索参数
     {
@@ -71,9 +76,82 @@ public class GamesController : ControllerBase
                 query = query.Where(g => g.Name.Contains(q));
             }
 
+            // 支持单个或多个类型筛选（向后兼容）
+            var genreList = new List<string>();
             if (!string.IsNullOrEmpty(genre))
             {
-                query = query.Where(g => g.GameGenres.Any(gg => gg.Genre!.Name == genre));
+                genreList.Add(genre);
+            }
+            if (genres != null && genres.Any())
+            {
+                genreList.AddRange(genres.Where(g => !string.IsNullOrEmpty(g)));
+            }
+
+            // 支持单个或多个分类筛选（向后兼容）
+            var categoryList = new List<string>();
+            if (!string.IsNullOrEmpty(category))
+            {
+                categoryList.Add(category);
+            }
+            if (categories != null && categories.Any())
+            {
+                categoryList.AddRange(categories.Where(c => !string.IsNullOrEmpty(c)));
+            }
+
+            // 支持单个或多个语言筛选（向后兼容）
+            var languageList = new List<string>();
+            if (!string.IsNullOrEmpty(language))
+            {
+                languageList.Add(language);
+            }
+            if (languages != null && languages.Any())
+            {
+                languageList.AddRange(languages.Where(l => !string.IsNullOrEmpty(l)));
+            }
+
+            // 如果有多选筛选，使用数据库层面的子查询来筛选
+            if (genreList.Any() || categoryList.Any() || languageList.Any())
+            {
+                _logger.LogInformation("筛选类型: {Genres}, 分类: {Categories}, 语言: {Languages}", 
+                    string.Join(", ", genreList), string.Join(", ", categoryList), string.Join(", ", languageList));
+                
+                // 使用子查询方式，在数据库层面完成筛选，避免加载所有数据
+                // 对于每个筛选条件，使用 EXISTS 子查询
+                if (genreList.Any())
+                {
+                    var distinctGenres = genreList.Distinct().ToList();
+                    // 对每个类型，游戏必须包含该类型
+                    foreach (var genreName in distinctGenres)
+                    {
+                        var genreNameValue = genreName;
+                        query = query.Where(g => g.GameGenres
+                            .Any(gg => gg.Genre != null && gg.Genre.Name == genreNameValue));
+                    }
+                }
+                
+                if (categoryList.Any())
+                {
+                    var distinctCategories = categoryList.Distinct().ToList();
+                    // 对每个分类，游戏必须包含该分类
+                    foreach (var categoryName in distinctCategories)
+                    {
+                        var categoryNameValue = categoryName;
+                        query = query.Where(g => g.GameCategories
+                            .Any(gc => gc.Category != null && gc.Category.Name == categoryNameValue));
+                    }
+                }
+                
+                if (languageList.Any())
+                {
+                    var distinctLanguages = languageList.Distinct().ToList();
+                    // 对每个语言，游戏必须包含该语言
+                    foreach (var languageName in distinctLanguages)
+                    {
+                        var languageNameValue = languageName;
+                        query = query.Where(g => g.GameLanguages
+                            .Any(gl => gl.Language != null && gl.Language.LanguageName == languageNameValue));
+                    }
+                }
             }
 
             if (isFree.HasValue)

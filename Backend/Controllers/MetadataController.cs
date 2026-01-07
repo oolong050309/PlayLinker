@@ -194,5 +194,40 @@ public class MetadataController : ControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
+
+    /// <summary>
+    /// 获取所有支持的语言
+    /// </summary>
+    [HttpGet("languages")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<object>>> GetLanguages()
+    {
+        try
+        {
+            _logger.LogInformation("获取所有支持的语言");
+
+            var languages = await _context.Languages
+                .Select(l => new
+                {
+                    LanguageId = l.LanguageId,
+                    Name = l.LanguageName
+                })
+                .OrderBy(l => l.Name)
+                .ToListAsync();
+
+            var result = new
+            {
+                items = languages,
+                totalCount = languages.Count
+            };
+
+            return Ok(ApiResponse<object>.SuccessResponse(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取支持语言时发生错误");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
 }
 
