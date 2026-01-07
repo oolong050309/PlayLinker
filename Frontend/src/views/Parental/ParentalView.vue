@@ -43,13 +43,13 @@
                   <h4 class="relationship-name">{{ child.childUsername }}</h4>
                   <div class="relationship-stats">
                     <span>活跃规则: {{ child.activeRulesCount || 0 }}</span>
-                    <span>今日游戏时长: {{ formatPlaytime(child.todayPlaytime || 0) }}</span>
+                    <span>昨日游戏时长: {{ formatPlaytime(child.todayPlaytime || 0) }}</span>
                     <span>近期违规: {{ child.recentAlerts || 0 }} 次</span>
                   </div>
                   <!-- 游戏时长进度条（如果有每日限制规则） -->
                   <div v-if="getDailyLimitRule(child.childUserId)" class="playtime-summary">
                     <div class="playtime-summary-info">
-                      <span class="summary-label">今日进度:</span>
+                      <span class="summary-label">昨日进度:</span>
                       <span class="summary-value">
                         {{ formatPlaytime(child.todayPlaytime || 0) }} / {{ formatPlaytime(getDailyLimitRule(child.childUserId)?.ruleValue?.limitMinutes || 0) }}
                       </span>
@@ -86,6 +86,43 @@
               </div>
               <!-- 规则列表 -->
               <div v-if="expandedChildren[child.childUserId]" class="rules-container">
+                <!-- 过去一周游玩时间统计 -->
+                <div class="weekly-playtime-section">
+                  <h4 class="weekly-playtime-title">过去一周游玩时间</h4>
+                  <div v-if="loadingWeeklyPlaytime[child.childUserId]" class="loading-state">
+                    <p>加载中...</p>
+                  </div>
+                  <div v-else-if="weeklyPlaytime[child.childUserId] && weeklyPlaytime[child.childUserId].length > 0" class="weekly-playtime-chart">
+                    <div class="weekly-playtime-bars">
+                      <div 
+                        v-for="(day, index) in weeklyPlaytime[child.childUserId]" 
+                        :key="index"
+                        class="playtime-bar-item"
+                      >
+                        <div class="bar-container">
+                          <div 
+                            class="playtime-bar"
+                            :style="{ 
+                              height: `${Math.max(5, (day.playtimeMinutes / Math.max(1, getMaxPlaytime(child.childUserId))) * 100)}%` 
+                            }"
+                            :title="`${day.dayOfWeek} ${day.date}: ${formatPlaytime(day.playtimeMinutes)}`"
+                          ></div>
+                        </div>
+                        <div class="bar-label">
+                          <div class="bar-date">{{ day.dayOfWeek }}</div>
+                          <div class="bar-time">{{ formatPlaytimeShort(day.playtimeMinutes) }}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="weekly-playtime-summary">
+                      <span>一周总计: {{ formatPlaytime(getWeeklyTotal(child.childUserId)) }}</span>
+                    </div>
+                  </div>
+                  <div v-else class="empty-state">
+                    <p>暂无游玩时间数据</p>
+                  </div>
+                </div>
+
                 <div v-if="loadingRules[child.childUserId]" class="loading-state">
                   <p>加载规则中...</p>
                 </div>
@@ -117,7 +154,7 @@
                               <span class="limit-value warning">{{ formatPlaytime(rule.ruleValue.warningMinutes) }}</span>
                             </div>
                             <div class="limit-item" v-if="child && rule.ruleType === 'playtime_daily_limit'">
-                              <span class="limit-label">今日已用:</span>
+                              <span class="limit-label">昨日已用:</span>
                               <span class="limit-value" :class="{ 
                                 'exceeded': (child.todayPlaytime || 0) >= (rule.ruleValue?.limitMinutes || 0),
                                 'warning': (child.todayPlaytime || 0) >= (rule.ruleValue?.warningMinutes || 0) && (child.todayPlaytime || 0) < (rule.ruleValue?.limitMinutes || 0)
@@ -146,12 +183,6 @@
                                   }"
                                 ></div>
                               </div>
-                            </div>
-                          </div>
-                          <div v-else-if="rule.ruleType === 'playtime_curfew'" class="curfew-info">
-                            <div class="limit-item">
-                              <span class="limit-label">宵禁时间:</span>
-                              <span class="limit-value">{{ rule.ruleValue?.startTime || '--' }} - {{ rule.ruleValue?.endTime || '--' }}</span>
                             </div>
                           </div>
                           <div v-else-if="rule.ruleType === 'game_restriction'" class="game-restriction-info">
@@ -208,14 +239,6 @@
                     @click="openEditRuleDialog(child, rule)"
                   >
                     编辑
-                  </button>
-                  <button 
-                    v-if="rule.ruleType === 'playtime_daily_limit'"
-                    class="btn btn-sm btn-info"
-                    @click="selectedChild = child; showRuleDialog = false; setTimeout(() => { openEditRuleDialog(child, rule) }, 100)"
-                    title="查看详细时长信息"
-                  >
-                    查看详情
                   </button>
                       <button 
                         class="btn btn-sm btn-danger"
@@ -310,7 +333,6 @@
               :disabled="!!editingRule"
             >
               <option value="playtime_daily_limit">每日时长限制</option>
-              <option value="playtime_curfew">宵禁时间</option>
               <option value="game_restriction">游戏限制</option>
               <option value="age_restriction">年龄限制</option>
             </select>
@@ -335,7 +357,7 @@
               建议值：小学生60-90分钟，中学生90-120分钟，高中生120-180分钟
             </p>
             <div v-if="selectedChild" class="current-playtime-info">
-              <span class="info-label">今日已用时长:</span>
+              <span class="info-label">昨日已用时长:</span>
               <span class="info-value" :class="{ 
                 'exceeded': (selectedChild.todayPlaytime || 0) >= (ruleForm.ruleValue.limitMinutes || 0),
                 'warning': (selectedChild.todayPlaytime || 0) >= (ruleForm.ruleValue.limitMinutes * 0.8 || 0)
@@ -370,24 +392,6 @@
             <p class="form-hint">
               每日在此时间重置游戏时长统计（默认00:00，即午夜）
             </p>
-          </div>
-
-          <!-- 宵禁时间 -->
-          <div v-if="ruleForm.ruleType === 'playtime_curfew'" class="form-group">
-            <label class="form-label">开始时间</label>
-            <input 
-              v-model="ruleForm.ruleValue.startTime"
-              type="time"
-              class="form-input"
-              placeholder="22:00"
-            />
-            <label class="form-label" style="margin-top: 10px;">结束时间</label>
-            <input 
-              v-model="ruleForm.ruleValue.endTime"
-              type="time"
-              class="form-input"
-              placeholder="07:00"
-            />
           </div>
 
           <!-- 游戏限制 -->
@@ -442,7 +446,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import parentalApi from '@/api/parental'
 import usersApi from '@/api/users'
 
@@ -456,6 +460,8 @@ const childRules = ref({})
 const loadingRules = ref({})
 const togglingRuleStatus = ref({})
 const switchingRole = ref(false)
+const weeklyPlaytime = ref({})
+const loadingWeeklyPlaytime = ref({})
 
 // 邀请相关
 const childUsername = ref('')
@@ -506,9 +512,56 @@ const handleSendInvitation = async () => {
 // 切换子账户展开/折叠
 const toggleChildExpanded = async (childId) => {
   expandedChildren.value[childId] = !expandedChildren.value[childId]
-  // 每次展开时都重新加载规则，确保获取最新状态（包括规则是否被禁用）
+  // 每次展开时都重新加载规则和游玩时间，确保获取最新状态
   if (expandedChildren.value[childId]) {
-    await loadChildRules(childId)
+    await Promise.all([
+      loadChildRules(childId),
+      loadWeeklyPlaytime(childId)
+    ])
+  }
+}
+
+// 加载子账户过去一周的游玩时间
+const loadWeeklyPlaytime = async (childId) => {
+  loadingWeeklyPlaytime.value[childId] = true
+  try {
+    const res = await parentalApi.getChildWeeklyPlaytime(childId)
+    if (res && res.success !== false && res.data) {
+      weeklyPlaytime.value[childId] = res.data.weeklyData || []
+    }
+  } catch (error) {
+    console.error('加载游玩时间失败:', error)
+    weeklyPlaytime.value[childId] = []
+  } finally {
+    loadingWeeklyPlaytime.value[childId] = false
+  }
+}
+
+// 获取一周中的最大游玩时间（用于计算柱状图高度）
+const getMaxPlaytime = (childId) => {
+  const data = weeklyPlaytime.value[childId]
+  if (!data || data.length === 0) return 1
+  return Math.max(...data.map(d => d.playtimeMinutes), 1)
+}
+
+// 获取一周总游玩时间
+const getWeeklyTotal = (childId) => {
+  const data = weeklyPlaytime.value[childId]
+  if (!data || data.length === 0) return 0
+  return data.reduce((sum, d) => sum + (d.playtimeMinutes || 0), 0)
+}
+
+// 格式化游玩时间（简短版，用于图表）
+const formatPlaytimeShort = (minutes) => {
+  if (!minutes || minutes === 0) return '0'
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (hours > 0 && mins > 0) {
+    return `${hours}h${mins}m`
+  } else if (hours > 0) {
+    return `${hours}h`
+  } else {
+    return `${mins}m`
   }
 }
 
@@ -532,7 +585,6 @@ const loadChildRules = async (childId) => {
 const getRuleTypeLabel = (ruleType) => {
   const labels = {
     'playtime_daily_limit': '每日时长限制',
-    'playtime_curfew': '宵禁时间',
     'game_restriction': '游戏限制',
     'age_restriction': '年龄限制'
   }
@@ -879,12 +931,6 @@ const updateRuleValue = () => {
         limitMinutes: 120,
         warningMinutes: 100,
         resetTime: '00:00'
-      }
-      break
-    case 'playtime_curfew':
-      ruleForm.value.ruleValue = {
-        startTime: '22:00',
-        endTime: '07:00'
       }
       break
     case 'game_restriction':
@@ -1764,7 +1810,6 @@ onMounted(() => {
   color: var(--error-color);
 }
 
-.curfew-info,
 .game-restriction-info,
 .age-restriction-info {
   display: flex;
@@ -1808,6 +1853,93 @@ onMounted(() => {
 
 .rule-value-raw {
   margin-top: var(--spacing-xs);
+}
+
+/* 过去一周游玩时间统计样式 */
+.weekly-playtime-section {
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color-light);
+}
+
+.weekly-playtime-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.weekly-playtime-chart {
+  width: 100%;
+}
+
+.weekly-playtime-bars {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--spacing-xs);
+  height: 150px;
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-sm) 0;
+}
+
+.playtime-bar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.bar-container {
+  width: 100%;
+  height: 120px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.playtime-bar {
+  width: 100%;
+  min-height: 5px;
+  background: var(--primary-color);
+  border-radius: 4px 4px 0 0;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.playtime-bar:hover {
+  background: var(--primary-hover);
+  opacity: 0.9;
+}
+
+.bar-label {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: 100%;
+}
+
+.bar-date {
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.bar-time {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.weekly-playtime-summary {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color-light);
 }
 </style>
 

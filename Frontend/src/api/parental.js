@@ -84,6 +84,14 @@ export const parentalApi = {
       ruleValue: ruleValue || {}, // 传递当前规则值，确保不丢失内容
       isActive: isActive
     })
+  },
+
+  /**
+   * 获取子账户过去一周的游玩时间
+   * @param {number} childId - 子账户ID
+   */
+  getChildWeeklyPlaytime(childId) {
+    return api.get(`/parental/children/${childId}/weekly-playtime`)
   }
 }
 

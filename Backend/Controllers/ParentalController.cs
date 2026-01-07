@@ -411,6 +411,178 @@ public class ParentalController : ControllerBase
     }
 
     /// <summary>
+    /// 获取子账户过去一周的游玩时间统计
+    /// </summary>
+    /// <param name="childId">子账户ID</param>
+    [SwaggerOperation(Summary = "获取子账户过去一周游玩时间", Description = "获取指定子账户过去7天每天的累计游玩时间（分钟）。需要parent角色与有效监管关系。")]
+    [HttpGet("children/{childId}/weekly-playtime")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<object>>> GetChildWeeklyPlaytime(int childId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            // 检查用户角色
+            var parentUser = _dbContext.Users
+                .Include(u => u.Role)
+                .FirstOrDefault(u => u.UserId == userId);
+
+            if (parentUser?.Role?.RoleName != "parent")
+            {
+                return Forbid();
+            }
+
+            // 检查监管关系
+            var relationship = _dbContext.ParentalControlRelationships
+                .FirstOrDefault(r => r.ParentUserId == userId && r.ChildUserId == childId);
+
+            if (relationship == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_NO_RELATIONSHIP", "没有监管关系"));
+            }
+
+            // 获取过去7天的日期范围（注意：由于数据在每天2点更新，今天的数据实际上是昨天的）
+            // 所以我们要显示的是：昨天、前天、...、7天前（不包含今天）
+            var today = DateTime.UtcNow.Date;
+            var yesterday = today.AddDays(-1); // 昨天（这是最新有数据的日期）
+            var sevenDaysAgo = yesterday.AddDays(-6); // 7天前
+
+            // 查询过去7天的游玩时间历史记录（从7天前到今天）
+            // 注意：由于数据在每天凌晨2点更新，RecordDate = today 的数据实际上是 yesterday 的累计数据
+            // 所以要计算 yesterday 的增量，需要 RecordDate = today 的数据 - RecordDate = yesterday 的数据
+            // 因此需要包含 today 的数据
+            var historyRecords = await _dbContext.UserPlaytimeHistories
+                .Where(h => h.UserId == childId 
+                    && h.RecordDate >= sevenDaysAgo 
+                    && h.RecordDate <= today) // 包含今天，因为今天的数据是昨天的累计数据
+                .ToListAsync();
+
+            // 按日期分组，计算每天的总游玩时间（分钟）
+            var dailyPlaytime = new Dictionary<DateTime, int>();
+
+            // 初始化过去7天的日期（从7天前到昨天，不包含今天）
+            for (int i = 0; i < 7; i++)
+            {
+                var date = sevenDaysAgo.AddDays(i);
+                dailyPlaytime[date] = 0;
+            }
+
+            // 按日期和游戏分组
+            var groupedByDate = historyRecords
+                .GroupBy(h => h.RecordDate.Date)
+                .ToList();
+
+            foreach (var dateGroup in groupedByDate)
+            {
+                var recordDate = dateGroup.Key; // 数据库中的记录日期
+                // 注意：由于数据在每天凌晨2点更新，RecordDate 存储的是更新当天的日期
+                // 例如：周三凌晨2点更新时，记录的是周二的累计数据，RecordDate = 周三
+                // 所以要显示周二的游玩时间，应该用 RecordDate = 周三 的数据 - RecordDate = 周二 的数据
+                // 因此，actualDate = recordDate - 1（因为 recordDate 的数据是 actualDate 的累计）
+                var actualDate = recordDate.AddDays(-1); // 实际对应的日期（因为数据延迟1天）
+                
+                // 如果实际日期不在我们要显示的范围内，跳过（只显示到昨天，不包含今天）
+                // 如果 recordDate = today，那么 actualDate = yesterday，这是我们要显示的
+                // 如果 recordDate = yesterday，那么 actualDate = yesterday - 1，这也是我们要显示的
+                // 但如果 recordDate < sevenDaysAgo，那么 actualDate < sevenDaysAgo - 1，应该跳过
+                if (actualDate < sevenDaysAgo || actualDate > yesterday)
+                {
+                    continue;
+                }
+
+                // 获取前一天的记录（用于计算增量）
+                // 要计算 actualDate 的增量，需要 recordDate 的数据 - (recordDate - 1) 的数据
+                var previousRecordDate = recordDate.AddDays(-1); // 前一天的记录日期
+                var previousRecords = await _dbContext.UserPlaytimeHistories
+                    .Where(h => h.UserId == childId && h.RecordDate == previousRecordDate)
+                    .ToDictionaryAsync(h => new { h.GameId, h.PlatformId }, h => h.PlaytimeForever);
+
+                int dailyTotal = 0;
+
+                // 按游戏和平台分组，计算增量
+                var gameGroups = dateGroup.GroupBy(h => new { h.GameId, h.PlatformId });
+                foreach (var gameGroup in gameGroups)
+                {
+                    var currentMax = gameGroup.Max(h => h.PlaytimeForever);
+                    var key = new { gameGroup.Key.GameId, gameGroup.Key.PlatformId };
+                    
+                    if (previousRecords.TryGetValue(key, out var previousPlaytime))
+                    {
+                        // 计算增量：当前记录的总时长 - 前一天记录的总时长
+                        var increment = currentMax - previousPlaytime;
+                        if (increment > 0)
+                        {
+                            dailyTotal += increment;
+                        }
+                    }
+                    else
+                    {
+                        // 新游戏：如果总时长较小（小于8小时），可能是当天开始玩的
+                        if (currentMax > 0 && currentMax < 480)
+                        {
+                            dailyTotal += currentMax;
+                        }
+                    }
+                }
+
+                dailyPlaytime[actualDate] = dailyTotal;
+            }
+
+            // 转换为数组格式，按日期排序
+            var weeklyData = dailyPlaytime
+                .Select(kvp => new
+                {
+                    date = kvp.Key.ToString("yyyy-MM-dd"),
+                    playtimeMinutes = kvp.Value,
+                    dayOfWeek = GetDayOfWeekChinese(kvp.Key.DayOfWeek)
+                })
+                .OrderBy(d => d.date)
+                .ToList();
+
+            var response = new
+            {
+                childId = childId,
+                weeklyData = weeklyData,
+                totalMinutes = weeklyData.Sum(d => d.playtimeMinutes)
+            };
+
+            _logger.LogInformation($"Weekly playtime retrieved for child: {childId}, parent: {userId}");
+            return Ok(ApiResponse<object>.SuccessResponse(response, "获取成功"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving weekly playtime for child {ChildId}", childId);
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
+
+    /// <summary>
+    /// 获取星期几的中文名称
+    /// </summary>
+    private string GetDayOfWeekChinese(DayOfWeek dayOfWeek)
+    {
+        return dayOfWeek switch
+        {
+            DayOfWeek.Monday => "周一",
+            DayOfWeek.Tuesday => "周二",
+            DayOfWeek.Wednesday => "周三",
+            DayOfWeek.Thursday => "周四",
+            DayOfWeek.Friday => "周五",
+            DayOfWeek.Saturday => "周六",
+            DayOfWeek.Sunday => "周日",
+            _ => ""
+        };
+    }
+
+    /// <summary>
     /// 获取子账户列表
     /// </summary>
     [SwaggerOperation(Summary = "获取子账户列表", Description = "家长用户获取其名下所有被监管的子账户信息，包括活跃规则数、今日时长、近期违规次数等。需要parent角色。")]
@@ -592,9 +764,24 @@ public class ParentalController : ControllerBase
             _dbContext.ParentalControlRules.Add(rule);
             await _dbContext.SaveChangesAsync();
 
-            // 注意：ParentalMonitoringService是后台服务，会在定时任务中自动检查规则
-            // 这里不再手动触发检查，避免重复执行
-            _logger.LogInformation("规则 {RuleId} 已创建，将在下次定时检查时生效", rule.RuleId);
+            // 如果规则已启用，立即检查一次并通知家长
+            if (request.IsActive)
+            {
+                try
+                {
+                    await CheckRuleAndNotifyAsync(rule);
+                    _logger.LogInformation("规则 {RuleId} 已创建并立即检查，如有违规已通知家长", rule.RuleId);
+                }
+                catch (Exception ex)
+                {
+                    // 检测失败不影响规则创建
+                    _logger.LogWarning(ex, "规则 {RuleId} 创建后立即检查失败，将在下次定时检查时生效", rule.RuleId);
+                }
+            }
+            else
+            {
+                _logger.LogInformation("规则 {RuleId} 已创建（未启用），将在启用后检查", rule.RuleId);
+            }
 
             var response = new
             {
@@ -690,11 +877,23 @@ public class ParentalController : ControllerBase
 
             await _dbContext.SaveChangesAsync();
 
-            // 注意：ParentalMonitoringService是后台服务，会在定时任务中自动检查规则
-            // 这里不再手动触发检查，避免重复执行
+            // 如果规则已启用，立即检查一次并通知家长
             if (rule.IsActive == true)
             {
-                _logger.LogInformation("规则 {RuleId} 已更新并激活，将在下次定时检查时生效", rule.RuleId);
+                try
+                {
+                    await CheckRuleAndNotifyAsync(rule);
+                    _logger.LogInformation("规则 {RuleId} 已更新并立即检查，如有违规已通知家长", rule.RuleId);
+                }
+                catch (Exception ex)
+                {
+                    // 检测失败不影响规则更新
+                    _logger.LogWarning(ex, "规则 {RuleId} 更新后立即检查失败，将在下次定时检查时生效", rule.RuleId);
+                }
+            }
+            else
+            {
+                _logger.LogInformation("规则 {RuleId} 已更新（未启用）", rule.RuleId);
             }
 
             var response = new
@@ -1194,37 +1393,41 @@ public class ParentalController : ControllerBase
     }
 
     /// <summary>
-    /// 计算用户今日游戏时长（基于PlaytimeForever字段：今天的值 - 昨天的值）
+    /// 计算用户昨日游戏时长（基于PlaytimeForever字段：今天的值 - 昨天的值）
+    /// 注意：由于数据在每天凌晨2点更新，今天的数据实际上是昨天的累计数据
+    /// 所以"今日时长"实际显示的是"昨日"的时长
     /// </summary>
     /// <param name="userId">用户ID</param>
-    /// <returns>今日游戏时长（分钟）</returns>
+    /// <returns>昨日游戏时长（分钟）</returns>
     private async Task<int> CalculateTodayPlaytimeAsync(int userId)
     {
         try
         {
             var today = DateTime.UtcNow.Date;
             var yesterday = today.AddDays(-1);
+            var dayBeforeYesterday = yesterday.AddDays(-1);
 
-            // 获取昨天的PlaytimeForever快照数据
+            // 获取昨天的PlaytimeForever快照数据（实际上是前天的累计数据，用于计算昨天的增量）
             var yesterdayRecords = await _dbContext.UserPlaytimeHistories
                 .Where(h => h.UserId == userId && h.RecordDate == yesterday)
                 .ToDictionaryAsync(h => h.GameId, h => h.PlaytimeForever);
 
             int currentMinutes = 0;
 
-            // 方法1：如果今天已有快照数据，直接使用快照中的PlaytimeForever
+            // 方法1：如果今天已有快照数据（实际上是昨天的累计数据），使用它来计算昨天的增量
             var todayRecords = await _dbContext.UserPlaytimeHistories
                 .Where(h => h.UserId == userId && h.RecordDate == today)
                 .ToListAsync();
 
             if (todayRecords.Any())
             {
-                // 使用今天的PlaytimeForever - 昨天的PlaytimeForever计算增量
+                // 今天的记录实际上是昨天的累计数据
+                // 使用今天的PlaytimeForever - 昨天的PlaytimeForever（前天的累计）计算昨天的增量
                 foreach (var todayRecord in todayRecords)
                 {
                     if (yesterdayRecords.TryGetValue(todayRecord.GameId, out var yesterdayPlaytime))
                     {
-                        // 计算增量：今天的总时长 - 昨天的总时长 = 今日新增时长
+                        // 计算增量：今天的总时长（实际是昨天的累计）- 昨天的总时长（实际是前天的累计）= 昨天的新增时长
                         var dailyIncrement = todayRecord.PlaytimeForever - yesterdayPlaytime;
                         if (dailyIncrement > 0)
                         {
@@ -1233,71 +1436,93 @@ public class ParentalController : ControllerBase
                     }
                     else
                     {
-                        // 新游戏：如果今天有记录但昨天没有，且PlaytimeForever较小，可能是今天开始玩的
-                        if (todayRecord.PlaytimeForever > 0 && todayRecord.PlaytimeForever < 480) // 8小时内认为是今天玩的
+                        // 新游戏：如果今天有记录但昨天没有，且PlaytimeForever较小，可能是昨天开始玩的
+                        if (todayRecord.PlaytimeForever > 0 && todayRecord.PlaytimeForever < 480) // 8小时内认为是昨天玩的
                         {
                             currentMinutes += todayRecord.PlaytimeForever;
                         }
                     }
                 }
             }
-            // 方法2：如果今天还没有快照，实时从Steam API获取最新的PlaytimeForever
-            else if (yesterdayRecords.Any())
+            // 方法2：如果今天还没有快照，使用昨天的记录计算（昨天的记录 - 前天的记录）
+            // 注意：这种情况下，昨天的记录实际上是前天的累计，前天的记录是大前天的累计
+            // 所以计算出来的是前天的增量，不是昨天的增量
+            // 但为了保持一致性，我们仍然返回这个值，或者返回0表示数据尚未更新
+            else
             {
-                // 获取用户的Steam绑定信息
-                var steamBinding = await _dbContext.UserPlatformBindings
-                    .Include(b => b.PlayerPlatform)
-                    .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 1 && b.BindingStatus == true);
+                // 获取前天的PlaytimeForever快照数据（实际上是大前天的累计数据）
+                var dayBeforeYesterdayRecords = await _dbContext.UserPlaytimeHistories
+                    .Where(h => h.UserId == userId && h.RecordDate == dayBeforeYesterday)
+                    .ToDictionaryAsync(h => h.GameId, h => h.PlaytimeForever);
 
-                if (steamBinding != null && !string.IsNullOrEmpty(steamBinding.AccessToken))
+                if (yesterdayRecords.Any())
                 {
-                    try
+                    // 使用昨天的记录（前天的累计）- 前天的记录（大前天的累计）计算前天的增量
+                    // 注意：这不是昨天的增量，而是前天的增量
+                    // 但由于今天的数据还没更新，我们暂时返回0，表示数据尚未更新
+                    // 或者可以选择返回前天的增量作为参考
+                    // 这里我们返回0，表示等待今天的数据更新
+                    return 0;
+                }
+                else
+                {
+                    // 如果昨天也没有记录，尝试实时从Steam API获取
+                    // 获取用户的Steam绑定信息
+                    var steamBinding = await _dbContext.UserPlatformBindings
+                        .Include(b => b.PlayerPlatform)
+                        .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == 1 && b.BindingStatus == true);
+
+                    if (steamBinding != null && !string.IsNullOrEmpty(steamBinding.AccessToken))
                     {
-                        // 实时调用Steam API获取最新的PlaytimeForever
-                        var tokenService = _serviceProvider.GetRequiredService<ITokenEncryptionService>();
-                        var apiKey = tokenService.DecryptToken(steamBinding.AccessToken);
-                        var steamId = steamBinding.PlatformUserId;
-
-                        if (!string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(steamId))
+                        try
                         {
-                            var httpClient = new HttpClient();
-                            var url = $"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={Uri.EscapeDataString(apiKey)}&steamid={Uri.EscapeDataString(steamId)}&include_appinfo=false&include_played_free_games=true";
-                            var response = await httpClient.GetAsync(url);
+                            // 实时调用Steam API获取最新的PlaytimeForever
+                            var tokenService = _serviceProvider.GetRequiredService<ITokenEncryptionService>();
+                            var apiKey = tokenService.DecryptToken(steamBinding.AccessToken);
+                            var steamId = steamBinding.PlatformUserId;
 
-                            if (response.IsSuccessStatusCode)
+                            if (!string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(steamId))
                             {
-                                var json = await response.Content.ReadAsStringAsync();
-                                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                                var httpClient = new HttpClient();
+                                var url = $"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={Uri.EscapeDataString(apiKey)}&steamid={Uri.EscapeDataString(steamId)}&include_appinfo=false&include_played_free_games=true";
+                                var response = await httpClient.GetAsync(url);
 
-                                if (doc.RootElement.TryGetProperty("response", out var responseEl) &&
-                                    responseEl.TryGetProperty("games", out var gamesEl))
+                                if (response.IsSuccessStatusCode)
                                 {
-                                    var knownGamesMap = await _dbContext.GamePlatforms
-                                        .Where(gp => gp.PlatformId == 1)
-                                        .ToDictionaryAsync(gp => gp.PlatformGameId, gp => gp.GameId);
+                                    var json = await response.Content.ReadAsStringAsync();
+                                    using var doc = System.Text.Json.JsonDocument.Parse(json);
 
-                                    foreach (var gameItem in gamesEl.EnumerateArray())
+                                    if (doc.RootElement.TryGetProperty("response", out var responseEl) &&
+                                        responseEl.TryGetProperty("games", out var gamesEl))
                                     {
-                                        var appId = gameItem.GetProperty("appid").GetInt32();
-                                        var playtimeForever = gameItem.GetProperty("playtime_forever").GetInt32();
+                                        var knownGamesMap = await _dbContext.GamePlatforms
+                                            .Where(gp => gp.PlatformId == 1)
+                                            .ToDictionaryAsync(gp => gp.PlatformGameId, gp => gp.GameId);
 
-                                        if (playtimeForever > 0 && knownGamesMap.TryGetValue(appId.ToString(), out var gameId))
+                                        foreach (var gameItem in gamesEl.EnumerateArray())
                                         {
-                                            if (yesterdayRecords.TryGetValue(gameId, out var yesterdayPlaytime))
+                                            var appId = gameItem.GetProperty("appid").GetInt32();
+                                            var playtimeForever = gameItem.GetProperty("playtime_forever").GetInt32();
+
+                                            if (playtimeForever > 0 && knownGamesMap.TryGetValue(appId.ToString(), out var gameId))
                                             {
-                                                // 使用PlaytimeForever计算增量：今天的值 - 昨天的值
-                                                var dailyIncrement = playtimeForever - yesterdayPlaytime;
-                                                if (dailyIncrement > 0)
+                                                // 使用昨天的记录（实际上是前天的累计）来计算昨天的增量
+                                                if (yesterdayRecords.TryGetValue(gameId, out var yesterdayPlaytime))
                                                 {
-                                                    currentMinutes += dailyIncrement;
+                                                    // 使用PlaytimeForever计算增量：当前值（实际是昨天的累计）- 昨天的值（实际是前天的累计）= 昨天的增量
+                                                    var dailyIncrement = playtimeForever - yesterdayPlaytime;
+                                                    if (dailyIncrement > 0)
+                                                    {
+                                                        currentMinutes += dailyIncrement;
+                                                    }
                                                 }
-                                            }
-                                            else
-                                            {
-                                                // 新游戏：如果总时长较小，可能是今天开始玩的
-                                                if (playtimeForever < 480) // 8小时内认为是今天玩的
+                                                else
                                                 {
-                                                    currentMinutes += playtimeForever;
+                                                    // 新游戏：如果总时长较小，可能是昨天开始玩的
+                                                    if (playtimeForever < 480) // 8小时内认为是昨天玩的
+                                                    {
+                                                        currentMinutes += playtimeForever;
+                                                    }
                                                 }
                                             }
                                         }
@@ -1305,10 +1530,10 @@ public class ParentalController : ControllerBase
                                 }
                             }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "实时获取Steam PlaytimeForever数据失败: userId={UserId}", userId);
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "实时获取Steam PlaytimeForever数据失败: userId={UserId}", userId);
+                        }
                     }
                 }
             }
@@ -1320,6 +1545,280 @@ public class ParentalController : ControllerBase
             _logger.LogError(ex, "计算用户 {UserId} 今日游戏时长时发生错误", userId);
             return 0;
         }
+    }
+
+    /// <summary>
+    /// 检查规则并通知家长（立即检测）
+    /// </summary>
+    private async Task CheckRuleAndNotifyAsync(ParentalControlRule rule)
+    {
+        try
+        {
+            // 重新加载规则及其关联数据
+            var ruleWithChild = await _dbContext.ParentalControlRules
+                .Include(r => r.ChildUser)
+                .FirstOrDefaultAsync(r => r.RuleId == rule.RuleId);
+
+            // IsActive 在实体中是 bool?，这里明确按“未启用/空值”处理为 false
+            if (ruleWithChild == null || ruleWithChild.IsActive != true)
+            {
+                return;
+            }
+
+            // 解析规则值
+            var ruleValue = JsonSerializer.Deserialize<JsonElement>(ruleWithChild.RuleValue);
+            var now = DateTime.UtcNow;
+            var today = now.Date;
+
+            // 检查今天是否已经发送过该规则的提醒（避免重复通知）
+            var todayAlert = await _dbContext.ParentalAlertLogs
+                .Where(l => l.RuleId == ruleWithChild.RuleId
+                    && l.AlertTime.HasValue
+                    && l.AlertTime.Value.Date == today)
+                .FirstOrDefaultAsync();
+
+            if (todayAlert != null)
+            {
+                _logger.LogDebug("规则 {RuleId} 今天已发送过提醒，跳过立即检测", ruleWithChild.RuleId);
+                return;
+            }
+
+            bool hasViolation = false;
+            string violationType = "";
+            Dictionary<string, object> violationDetails = new();
+
+            // 根据规则类型进行检查
+            switch (ruleWithChild.RuleType)
+            {
+                case "playtime_daily_limit":
+                    hasViolation = await CheckPlaytimeDailyLimitAsync(ruleWithChild, ruleValue, violationDetails);
+                    violationType = "playtime_daily_limit";
+                    break;
+
+                case "game_restriction":
+                    hasViolation = await CheckGameRestrictionAsync(ruleWithChild, ruleValue, violationDetails);
+                    violationType = "game_restriction";
+                    break;
+
+                case "age_restriction":
+                    hasViolation = await CheckAgeRestrictionAsync(ruleWithChild, ruleValue, violationDetails);
+                    violationType = "age_restriction";
+                    break;
+
+                default:
+                    _logger.LogWarning("未知的规则类型: {RuleType}, 规则ID: {RuleId}", ruleWithChild.RuleType, ruleWithChild.RuleId);
+                    return;
+            }
+
+            if (hasViolation)
+            {
+                // 获取家长用户信息
+                var relationship = await _dbContext.ParentalControlRelationships
+                    .Include(r => r.ParentUser)
+                    .FirstOrDefaultAsync(r => r.ChildUserId == ruleWithChild.ChildUserId);
+
+                if (relationship == null)
+                {
+                    _logger.LogWarning("未找到子账户 {ChildUserId} 的监管关系", ruleWithChild.ChildUserId);
+                    return;
+                }
+
+                var parentUser = relationship.ParentUser;
+                var childUser = ruleWithChild.ChildUser;
+
+                // 创建通知
+                string notificationTitle = "";
+                string notificationContent = "";
+
+                if (violationType == "playtime_daily_limit")
+                {
+                    notificationTitle = $"游戏时长提醒：{childUser.Username}";
+                    var limitMinutes = ruleValue.TryGetProperty("limitMinutes", out var limit) ? limit.GetInt32() : 0;
+                    var currentMinutes = violationDetails.ContainsKey("currentMinutes") 
+                        ? (int)violationDetails["currentMinutes"] 
+                        : 0;
+                    notificationContent = $"您的孩子 {childUser.Username} 今日游戏时长已达到 {currentMinutes} 分钟，超过设定的限制 {limitMinutes} 分钟。";
+                }
+                else if (violationType == "game_restriction")
+                {
+                    notificationTitle = $"游戏限制提醒：{childUser.Username}";
+                    var blockedGameNames = violationDetails.ContainsKey("blockedGameNames") 
+                        ? (List<string>)violationDetails["blockedGameNames"] 
+                        : new List<string>();
+                    notificationContent = $"您的孩子 {childUser.Username} 的游戏库中包含被限制的游戏：{string.Join("、", blockedGameNames)}。";
+                }
+                else if (violationType == "age_restriction")
+                {
+                    notificationTitle = $"年龄限制提醒：{childUser.Username}";
+                    var maxAgeRating = ruleValue.TryGetProperty("maxAgeRating", out var maxAge) ? maxAge.GetInt32() : 0;
+                    var violatingGameNames = violationDetails.ContainsKey("violatingGameNames") 
+                        ? (List<string>)violationDetails["violatingGameNames"] 
+                        : new List<string>();
+                    notificationContent = $"您的孩子 {childUser.Username} 的游戏库中包含超出年龄分级（{maxAgeRating}+）的游戏：{string.Join("、", violatingGameNames)}。";
+                }
+
+                var notification = new NotificationCenter
+                {
+                    UserId = parentUser.UserId,
+                    SourceModule = "parental_control",
+                    Title = notificationTitle,
+                    Content = notificationContent,
+                    NotificationType = "warning",
+                    IsRead = false,
+                    RelatedId = ruleWithChild.RuleId,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _dbContext.NotificationCenters.Add(notification);
+                await _dbContext.SaveChangesAsync();
+
+                // 创建违规日志
+                var alertLog = new ParentalAlertLog
+                {
+                    RuleId = ruleWithChild.RuleId,
+                    ChildUserId = ruleWithChild.ChildUserId,
+                    ViolationDetails = JsonSerializer.Serialize(violationDetails),
+                    AlertTime = DateTime.UtcNow,
+                    NotificationId = notification.NotificationId,
+                    Severity = "warning"
+                };
+
+                _dbContext.ParentalAlertLogs.Add(alertLog);
+                await _dbContext.SaveChangesAsync();
+
+                _logger.LogInformation("已为家长 {ParentUserId} 创建家长监管提醒: 规则ID={RuleId}, 子账户={ChildUserId}, 违规类型={ViolationType}",
+                    parentUser.UserId, ruleWithChild.RuleId, ruleWithChild.ChildUserId, violationType);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "检查规则违规时发生错误: 规则ID={RuleId}", rule.RuleId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 检查每日游戏时长限制
+    /// </summary>
+    private async Task<bool> CheckPlaytimeDailyLimitAsync(
+        ParentalControlRule rule,
+        JsonElement ruleValue,
+        Dictionary<string, object> violationDetails)
+    {
+        if (!ruleValue.TryGetProperty("limitMinutes", out var limitProp))
+        {
+            return false;
+        }
+
+        var limitMinutes = limitProp.GetInt32();
+        if (limitMinutes <= 0)
+        {
+            return false;
+        }
+
+        // 使用CalculateTodayPlaytimeAsync计算今日游戏时长
+        var currentMinutes = await CalculateTodayPlaytimeAsync(rule.ChildUserId);
+        violationDetails["currentMinutes"] = currentMinutes;
+        violationDetails["limitMinutes"] = limitMinutes;
+
+        // 检查是否超过限制
+        if (currentMinutes >= limitMinutes)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 检查游戏限制
+    /// </summary>
+    private async Task<bool> CheckGameRestrictionAsync(
+        ParentalControlRule rule,
+        JsonElement ruleValue,
+        Dictionary<string, object> violationDetails)
+    {
+        if (!ruleValue.TryGetProperty("blockedGameNames", out var blockedGamesProp))
+        {
+            return false;
+        }
+
+        var blockedGameNames = JsonSerializer.Deserialize<List<string>>(blockedGamesProp.GetRawText());
+        if (blockedGameNames == null || !blockedGameNames.Any())
+        {
+            return false;
+        }
+
+        // 获取子账户的游戏库
+        // 说明：当前数据模型中没有 UserGames 表，统一游戏库请使用 user_platform_library
+        // 这里按“该子账户绑定的所有平台账号”汇总其游戏库。
+        var userGames = await _dbContext.UserPlatformBindings
+            .Where(b => b.UserId == rule.ChildUserId && b.BindingStatus == true)
+            .Join(_dbContext.UserPlatformLibraries,
+                b => new { b.PlatformUserId, b.PlatformId },
+                upl => new { upl.PlatformUserId, upl.PlatformId },
+                (b, upl) => upl)
+            .Include(upl => upl.Game)
+            .ToListAsync();
+
+        var violatingGameNames = userGames
+            .Where(ug => blockedGameNames.Contains(ug.Game.Name, StringComparer.OrdinalIgnoreCase))
+            .Select(ug => ug.Game.Name)
+            .ToList();
+
+        if (violatingGameNames.Any())
+        {
+            violationDetails["blockedGameNames"] = violatingGameNames;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 检查年龄限制
+    /// </summary>
+    private async Task<bool> CheckAgeRestrictionAsync(
+        ParentalControlRule rule,
+        JsonElement ruleValue,
+        Dictionary<string, object> violationDetails)
+    {
+        if (!ruleValue.TryGetProperty("maxAgeRating", out var maxAgeProp))
+        {
+            return false;
+        }
+
+        var maxAgeRating = maxAgeProp.GetInt32();
+        if (maxAgeRating <= 0)
+        {
+            return false;
+        }
+
+        // 获取子账户的游戏库
+        // 说明：当前数据模型中没有 UserGames 表，统一游戏库请使用 user_platform_library
+        // 这里按“该子账户绑定的所有平台账号”汇总其游戏库。
+        var userGames = await _dbContext.UserPlatformBindings
+            .Where(b => b.UserId == rule.ChildUserId && b.BindingStatus == true)
+            .Join(_dbContext.UserPlatformLibraries,
+                b => new { b.PlatformUserId, b.PlatformId },
+                upl => new { upl.PlatformUserId, upl.PlatformId },
+                (b, upl) => upl)
+            .Include(upl => upl.Game)
+            .ToListAsync();
+
+        var violatingGameNames = userGames
+            .Where(ug => ug.Game.RequireAge.HasValue && ug.Game.RequireAge.Value > maxAgeRating)
+            .Select(ug => ug.Game.Name)
+            .ToList();
+
+        if (violatingGameNames.Any())
+        {
+            violationDetails["violatingGameNames"] = violatingGameNames;
+            violationDetails["maxAgeRating"] = maxAgeRating;
+            return true;
+        }
+
+        return false;
     }
 }
 
