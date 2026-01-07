@@ -2500,10 +2500,10 @@ onMounted(() => {
     transform: translateY(-100px) rotate(calc(var(--rotation) - 180deg)) scale(0.5);
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.75;
   }
   100% {
-    opacity: 0.5;
+    opacity: 0.75;
     transform: translateY(0) rotate(var(--rotation)) scale(1);
   }
 }
