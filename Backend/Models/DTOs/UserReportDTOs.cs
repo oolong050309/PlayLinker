@@ -148,6 +148,32 @@ public class DailyPlaytimeDto
     /// 当日游玩的游戏数
     /// </summary>
     public int GamesPlayed { get; set; }
+    
+    /// <summary>
+    /// 当日游玩的游戏列表（游戏名和时长）
+    /// </summary>
+    public List<DailyGamePlaytimeDto> Games { get; set; } = new();
+}
+
+/// <summary>
+/// 每日单个游戏的游玩时长
+/// </summary>
+public class DailyGamePlaytimeDto
+{
+    /// <summary>
+    /// 游戏ID
+    /// </summary>
+    public long GameId { get; set; }
+    
+    /// <summary>
+    /// 游戏名称
+    /// </summary>
+    public string GameName { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// 当日游玩时长（分钟）
+    /// </summary>
+    public int PlaytimeMinutes { get; set; }
 }
 
 /// <summary>

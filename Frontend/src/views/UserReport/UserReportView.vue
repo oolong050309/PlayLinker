@@ -291,21 +291,45 @@
 
           <!-- Activity Heatmap -->
           <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="chart-card heatmap-card">
-            <h3 class="chart-title">🔥 游戏活跃度</h3>
+            <div class="heatmap-header">
+              <h3 class="chart-title">🔥 游戏活跃度</h3>
+              <div class="heatmap-filter">
+                <select v-model="heatmapYear" @change="updateHeatmapFilter" class="filter-select">
+                  <option v-for="year in availableYears" :key="year" :value="year">{{ year }}年</option>
+                </select>
+                <select v-model="heatmapMonth" @change="updateHeatmapFilter" class="filter-select">
+                  <option v-for="month in 12" :key="month" :value="month">{{ month }}月</option>
+                </select>
+              </div>
+            </div>
             <div class="heatmap-container-inline">
               <div class="heatmap-weekdays-inline">
                 <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
               </div>
               <div class="heatmap-grid-inline">
                 <div 
-                  v-for="(day, index) in heatmapData" 
+                  v-for="(day, index) in filteredHeatmapData" 
                   :key="index" 
                   class="heatmap-cell-inline"
                   :class="getHeatmapClass(day.playtimeMinutes)"
-                  :title="day.isEmpty ? '' : `${day.date}: ${formatMinutes(day.playtimeMinutes)}`"
+                  @mouseenter="showTooltip($event, day)"
+                  @mouseleave="hideTooltip"
                 >
                   <span v-if="!day.isEmpty" class="heatmap-date">{{ day.dayOfMonth }}</span>
                 </div>
+              </div>
+            </div>
+            <!-- 工具提示 -->
+            <div v-if="tooltipVisible" class="heatmap-tooltip" :style="{ left: tooltipX + 'px', top: tooltipY + 'px' }">
+              <div class="tooltip-date">{{ tooltipDate }}</div>
+              <div class="tooltip-playtime">总时长: {{ tooltipPlaytime }}</div>
+              <div v-if="tooltipGames && tooltipGames.length > 0" class="tooltip-games">
+                <div v-for="(game, index) in tooltipGames" :key="game.gameId || game.GameId || index" class="tooltip-game-item">
+                  {{ game.gameName || game.GameName || '未知游戏' }} ({{ formatMinutes(game.playtimeMinutes || game.PlaytimeMinutes || 0) }})
+                </div>
+              </div>
+              <div v-else-if="tooltipPlaytime !== '0分钟'" class="tooltip-no-games">
+                暂无游戏详情
               </div>
             </div>
           </div>
@@ -1006,13 +1030,61 @@ const formatLastPlayed = (dateStr) => {
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-// 热力图数据
-const heatmapData = computed(() => {
+// 热力图筛选
+const heatmapYear = ref(new Date().getFullYear())
+const heatmapMonth = ref(new Date().getMonth() + 1)
+
+// 获取可用的年份列表
+const availableYears = computed(() => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return [new Date().getFullYear()]
+  const years = new Set()
+  trend.forEach(d => {
+    const date = new Date(d.date)
+    years.add(date.getFullYear())
+  })
+  return Array.from(years).sort((a, b) => b - a)
+})
+
+// 更新筛选器时，自动选择有数据的月份
+const updateHeatmapFilter = () => {
+  const trend = gameLibrary.value.dailyPlaytimeTrend
+  if (!trend?.length) return
+  
+  // 检查选中的年月是否有数据
+  const hasData = trend.some(d => {
+    const date = new Date(d.date)
+    return date.getFullYear() === heatmapYear.value && date.getMonth() + 1 === heatmapMonth.value
+  })
+  
+  // 如果没有数据，选择最近有数据的月份
+  if (!hasData) {
+    const filtered = trend.filter(d => {
+      const date = new Date(d.date)
+      return date.getFullYear() === heatmapYear.value
+    })
+    if (filtered.length > 0) {
+      const lastDate = new Date(filtered[filtered.length - 1].date)
+      heatmapMonth.value = lastDate.getMonth() + 1
+    }
+  }
+}
+
+// 热力图数据（按月份筛选）
+const filteredHeatmapData = computed(() => {
   const trend = gameLibrary.value.dailyPlaytimeTrend
   if (!trend?.length) return []
   
-  // 获取第一天是星期几 (0=周日, 1=周一, ..., 6=周六)
-  const firstDate = new Date(trend[0].date)
+  // 筛选指定年月的数据
+  const filtered = trend.filter(d => {
+    const date = new Date(d.date)
+    return date.getFullYear() === heatmapYear.value && date.getMonth() + 1 === heatmapMonth.value
+  })
+  
+  if (!filtered.length) return []
+  
+  // 获取该月第一天是星期几 (0=周日, 1=周一, ..., 6=周六)
+  const firstDate = new Date(filtered[0].date)
   // 转换为周一开始 (0=周一, 1=周二, ..., 6=周日)
   let firstDayOfWeek = firstDate.getDay()
   firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
@@ -1024,22 +1096,89 @@ const heatmapData = computed(() => {
       date: '',
       dayOfMonth: '',
       playtimeMinutes: -1, // 用 -1 表示空白格子
-      isEmpty: true
+      isEmpty: true,
+      games: []
     })
   }
   
   // 添加实际数据
-  trend.forEach(d => {
+  filtered.forEach(d => {
     result.push({
       date: new Date(d.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
       dayOfMonth: new Date(d.date).getDate(),
       playtimeMinutes: d.playtimeMinutes,
-      isEmpty: false
+      isEmpty: false,
+      games: d.games || d.Games || [] // 兼容不同的属性名（大小写）
     })
   })
   
   return result
 })
+
+// 工具提示
+const tooltipVisible = ref(false)
+const tooltipX = ref(0)
+const tooltipY = ref(0)
+const tooltipDate = ref('')
+const tooltipPlaytime = ref('')
+const tooltipGames = ref([])
+
+const showTooltip = (event, day) => {
+  if (day.isEmpty) return
+  
+  tooltipDate.value = day.date
+  tooltipPlaytime.value = formatMinutes(day.playtimeMinutes)
+  // 确保正确获取游戏列表数据（兼容大小写）
+  tooltipGames.value = day.games || day.Games || []
+  
+  // 先设置可见，让 DOM 渲染
+  tooltipVisible.value = true
+  
+  // 使用 nextTick 确保 DOM 更新后再计算位置
+  nextTick(() => {
+    const tooltip = document.querySelector('.heatmap-tooltip')
+    if (tooltip) {
+      const tooltipWidth = tooltip.offsetWidth
+      const tooltipHeight = tooltip.offsetHeight
+      const viewportWidth = window.innerWidth
+      
+      // 计算位置，确保工具提示不会超出视口
+      let x = event.clientX
+      let y = event.clientY
+      
+      // 如果工具提示会超出右边界，调整到鼠标左侧
+      if (x + tooltipWidth / 2 > viewportWidth) {
+        x = viewportWidth - tooltipWidth / 2 - 10
+      }
+      // 如果工具提示会超出左边界，调整到鼠标右侧
+      if (x - tooltipWidth / 2 < 0) {
+        x = tooltipWidth / 2 + 10
+      }
+      
+      // 如果工具提示会超出上边界，显示在鼠标下方
+      if (y - tooltipHeight - 8 < 0) {
+        y = event.clientY + 20
+        tooltipX.value = x
+        tooltipY.value = y
+        // 更新 transform 为显示在下方
+        tooltip.style.transform = 'translate(-50%, 0)'
+      } else {
+        tooltipX.value = x
+        tooltipY.value = y
+        // 显示在上方
+        tooltip.style.transform = 'translate(-50%, calc(-100% - 8px))'
+      }
+    } else {
+      // 如果工具提示还没渲染，使用简单的位置
+      tooltipX.value = event.clientX
+      tooltipY.value = event.clientY
+    }
+  })
+}
+
+const hideTooltip = () => {
+  tooltipVisible.value = false
+}
 
 const getHeatmapClass = (minutes) => {
   if (minutes === -1) return 'level-empty' // 空白格子
@@ -1116,6 +1255,14 @@ const applyData = (data) => {
       percentage: g.percentage,
       gameCount: g.gameCount || Math.round(g.percentage / 10) || 1 // Estimate if not provided
     }))
+  }
+  
+  // 初始化热力图筛选器
+  if (data.gameLibrary?.dailyPlaytimeTrend?.length) {
+    const trend = data.gameLibrary.dailyPlaytimeTrend
+    const lastDate = new Date(trend[trend.length - 1].date)
+    heatmapYear.value = lastDate.getFullYear()
+    heatmapMonth.value = lastDate.getMonth() + 1
   }
 }
 
@@ -2613,6 +2760,52 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.heatmap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.heatmap-filter {
+  display: flex;
+  gap: 8px;
+}
+
+.heatmap-filter .filter-select {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  font-size: 13px;
+  background-color: rgba(30, 30, 35, 0.8);
+  color: #f8fafc;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23f8fafc' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+.heatmap-filter .filter-select:hover {
+  background-color: rgba(30, 30, 35, 0.95);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.heatmap-filter .filter-select:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.5);
+  background-color: rgba(30, 30, 35, 0.95);
+}
+
+.heatmap-filter .filter-select option {
+  background-color: rgba(30, 30, 35, 0.95);
+  color: #f8fafc;
 }
 
 .heatmap-card .heatmap-container-inline {
@@ -2620,6 +2813,51 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+.heatmap-tooltip {
+  position: fixed;
+  background: rgba(24, 24, 27, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 200px;
+  max-width: 300px;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  /* transform 将在 JavaScript 中动态设置 */
+}
+
+.tooltip-date {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 6px;
+}
+
+.tooltip-playtime {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+}
+
+.tooltip-games {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tooltip-game-item {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.tooltip-game-item:last-child {
+  margin-bottom: 0;
 }
 
 /* Chart Card */

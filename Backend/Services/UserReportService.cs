@@ -1226,7 +1226,7 @@ public class UserReportService : IUserReportService
         }
 
         // 按日期分组，计算每天的游戏时长增量
-        var dailyData = new Dictionary<DateTime, (int playtimeChange, HashSet<long> gamesPlayed)>();
+        var dailyData = new Dictionary<DateTime, (int playtimeChange, Dictionary<long, int> gamesPlaytime)>();
         
         // 从最早记录开始计算，用空字典初始化
         // 第一天的数据会被跳过（因为没有前一天的基准，避免把历史总时长当作当天增量）
@@ -1237,12 +1237,20 @@ public class UserReportService : IUserReportService
             .OrderBy(g => g.Key)
             .ToList();
 
-        // 用于追踪每个游戏的前一天时长和日期
-        var previousDayPlaytime = new Dictionary<(long GameId, int PlatformId), (int playtime, DateTime date)>();
+        // 用于追踪每个游戏的前一天时长（从空开始，第一天自然被跳过）
+        var previousDayPlaytime = new Dictionary<(long GameId, int PlatformId), int>();
+        
+        // 获取所有游戏信息，用于后续查询游戏名称
+        var gameIds = allHistory.Select(h => h.GameId).Distinct().ToList();
+        var games = await _context.Games
+            .Where(g => gameIds.Contains(g.GameId))
+            .ToDictionaryAsync(g => g.GameId, g => g.Name);
 
         foreach (var dayGroup in gamesByDate)
         {
-            var currentDate = dayGroup.Key;
+            var date = dayGroup.Key;
+            var dailyPlaytimeChange = 0;
+            var gamesPlaytimeToday = new Dictionary<long, int>();
 
             foreach (var record in dayGroup)
             {
@@ -1257,23 +1265,25 @@ public class UserReportService : IUserReportService
                     // 只计算正向增量，且增量不能超过24小时（1440分钟）作为合理性检查
                     if (change > 0 && change <= 1440)
                     {
-                        // 增量归属于前一天（previous.date），因为这是前一天玩的时长
-                        var attributeDate = previous.date;
+                        dailyPlaytimeChange += change;
                         
-                        if (!dailyData.ContainsKey(attributeDate))
+                        // 记录该游戏当天的游玩时长
+                        if (gamesPlaytimeToday.ContainsKey(record.GameId))
                         {
-                            dailyData[attributeDate] = (0, new HashSet<long>());
+                            gamesPlaytimeToday[record.GameId] += change;
                         }
-                        
-                        var (existingPlaytime, existingGames) = dailyData[attributeDate];
-                        existingGames.Add(record.GameId);
-                        dailyData[attributeDate] = (existingPlaytime + change, existingGames);
+                        else
+                        {
+                            gamesPlaytimeToday[record.GameId] = change;
+                        }
                     }
                 }
                 
                 // 更新/记录当前时长和日期，作为下一次计算的基准
                 previousDayPlaytime[key] = (record.PlaytimeForever, currentDate);
             }
+
+            dailyData[date] = (dailyPlaytimeChange, gamesPlaytimeToday);
         }
 
         // 生成最近14天的趋势数据（不包含今天，因为今天数据不完整）
@@ -1282,12 +1292,20 @@ public class UserReportService : IUserReportService
         for (int i = 13; i >= 0; i--)
         {
             var date = yesterday.AddDays(-i);
-            var data = dailyData.GetValueOrDefault(date, (0, new HashSet<long>()));
+            var data = dailyData.GetValueOrDefault(date, (0, new Dictionary<long, int>()));
+            var gamesList = data.Item2.Select(kv => new DailyGamePlaytimeDto
+            {
+                GameId = kv.Key,
+                GameName = games.GetValueOrDefault(kv.Key, "未知游戏"),
+                PlaytimeMinutes = kv.Value
+            }).OrderByDescending(g => g.PlaytimeMinutes).ToList();
+            
             trendData.Add(new DailyPlaytimeDto
             {
                 Date = date.ToString("yyyy-MM-dd"),
                 PlaytimeMinutes = data.Item1,
-                GamesPlayed = data.Item2.Count
+                GamesPlayed = data.Item2.Count,
+                Games = gamesList
             });
         }
         result.DailyPlaytimeTrend = trendData;
