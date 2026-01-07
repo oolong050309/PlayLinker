@@ -2034,9 +2034,9 @@ public class ReportGenerationService
         </div>" : "")}
 
         <div class='section'>
-            <h2>🎮 游戏收藏 <span class='count'>{totalGames}</span></h2>
+            <h2>🎮 游玩时长排行 <span class='count'>TOP 30</span></h2>
             <div class='game-list'>
-                {string.Join("", gameRecords.Take(30).Select(r => {
+                {string.Join("", gameRecords.OrderByDescending(g => g.PlaytimeMinutes).Take(30).Select(r => {
                     var isInstalled = localGames.Any(l => l.GameId == r.GameId);
                     var headerImage = r.Game?.HeaderImage;
                     var hasImage = !string.IsNullOrEmpty(headerImage);
@@ -2391,8 +2391,8 @@ public class ReportGenerationService
                         });
                     }
 
-                    // 游戏收藏
-                    column.Item().Text("● 游戏收藏").FontSize(14).SemiBold().FontColor(accentCyan);
+                    // 游玩时长最长的游戏
+                    column.Item().Text("● 游玩时长排行").FontSize(14).SemiBold().FontColor(accentCyan);
 
                     column.Item().Background(darkCard).Padding(8).Table(table =>
                     {
@@ -2412,7 +2412,7 @@ public class ReportGenerationService
                             header.Cell().Padding(5).Text("状态").FontSize(9).SemiBold().FontColor(accentCyan);
                         });
 
-                        foreach (var game in gameRecords.Take(30))
+                        foreach (var game in gameRecords.OrderByDescending(g => g.PlaytimeMinutes).Take(30))
                         {
                             var isInstalled = localGames.Any(l => l.GameId == game.GameId);
                             table.Cell().Padding(4).Text(game.Game?.Name ?? "未知").FontSize(8).FontColor(textLight);
