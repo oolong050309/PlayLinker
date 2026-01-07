@@ -2303,7 +2303,7 @@ public class ReportGenerationService
 
                 page.Header().PaddingBottom(15).Column(col =>
                 {
-                    col.Item().Text("📦 游戏库存报告").FontSize(26).SemiBold().FontColor(accentCyan);
+                    col.Item().Text("游戏库存报告").FontSize(26).SemiBold().FontColor(accentCyan);
                     col.Item().Text($"生成时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(10).FontColor(textMuted);
                 });
 
