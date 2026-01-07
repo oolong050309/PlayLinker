@@ -41,8 +41,7 @@
         </div>
         <div class="user-meta" :class="{ 'fade-out': isCollapsed }">
           <span class="username">{{ displayUserName }}</span>
-          <span class="user-lvl">Lv. {{ currentUser?.level || 1 }}</span>
-        </div>
+          </div>
       </div>
     </div>
 
@@ -565,13 +564,6 @@ const handleLogout = async () => {
   font-weight: 600;
   color: var(--c-text-main);
   white-space: nowrap;
-}
-
-.user-lvl {
-  font-size: 12px;
-  color: var(--c-accent);
-  font-family: 'Rajdhani', sans-serif;
-  font-weight: 700;
 }
 
 /* 导航区域 */
