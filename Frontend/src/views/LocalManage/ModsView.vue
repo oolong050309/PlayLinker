@@ -389,12 +389,12 @@
         
         <div class="dialog-form">
           <div class="form-group">
-            <label>选择游戏（从游戏数据库）</label>
+            <label>选择游戏（从我的游戏库）</label>
             <input 
               v-model="gameSearchQuery"
               type="text"
               class="form-input"
-              placeholder="输入游戏名称搜索..."
+              placeholder="搜索我的游戏库..."
               @input="searchUserGames"
               @focus="searchUserGames"
             />
@@ -718,9 +718,9 @@ import {
   getLocalGameDetail,
   addMod,
   toggleMod,
-  deleteMod,
-  searchGames
+  deleteMod
 } from '@/api/localGame'
+import { libraryApi } from '@/api/index'
 
 const activeTab = ref('games')
 const loading = ref(true)
@@ -1259,7 +1259,10 @@ const handleDownloadCloud = async (backup) => {
     const url = URL.createObjectURL(new Blob([response]))
     const link = document.createElement('a')
     link.href = url
-    link.download = `${backup.cloudBackupId}.dat`
+    // 文件名格式: 游戏名_云存档_日期.zip
+    const dateStr = new Date(backup.uploadTime).toISOString().slice(0, 10)
+    const safeName = (backup.gameName || 'save').replace(/[<>:"/\\|?*]/g, '_')
+    link.download = `${safeName}_云存档_${dateStr}.zip`
     link.click()
     URL.revokeObjectURL(url)
   } catch (err) {
@@ -1300,14 +1303,20 @@ const searchUserGames = async () => {
   searchTimeout = setTimeout(async () => {
     searchingGames.value = true
     try {
-      const response = await searchGames({
-        query: gameSearchQuery.value,
+      // 从用户游戏库中搜索
+      const response = await libraryApi.getGames({
+        search: gameSearchQuery.value,
         page: 1,
-        page_size: 10
+        pageSize: 10
       })
       
       if (response.data?.items) {
-        searchedGames.value = response.data.items
+        // 转换字段名以匹配现有逻辑 (后端返回 name, 前端需要 name)
+        searchedGames.value = response.data.items.map(item => ({
+          gameId: item.gameId,
+          name: item.name,
+          headerImage: item.headerImage
+        }))
       } else {
         searchedGames.value = []
       }

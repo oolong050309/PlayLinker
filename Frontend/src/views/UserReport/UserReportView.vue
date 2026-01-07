@@ -37,20 +37,6 @@
 
     <!-- Content (show with cached data or fresh data) -->
     <template v-else>
-      <!-- Profile Card -->
-      <div class="profile-section">
-        <div class="profile-card">
-          <div class="profile-avatar">
-            <img v-if="profile.avatarUrl" :src="profile.avatarUrl" alt="avatar" />
-            <User v-else class="avatar-placeholder" />
-          </div>
-          <div class="profile-info">
-            <h2 class="profile-name">{{ profile.steamProfileName || profile.username }}</h2>
-            <p class="profile-id" v-if="profile.steamId">Steam ID: {{ profile.steamId }}</p>
-          </div>
-        </div>
-      </div>
-
       <!-- Stats Overview -->
       <div class="stats-grid">
         <div class="stat-card">
@@ -1704,76 +1690,7 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-/* Profile Section */
-.profile-section {
-  margin-bottom: 24px;
-}
-
-.profile-card {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  border-radius: 16px;
-  padding: 24px;
-}
-
-.profile-avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.profile-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  width: 40px;
-  height: 40px;
-  color: var(--text-secondary);
-}
-
-.profile-info {
-  flex: 1;
-}
-
-.profile-name {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.profile-id {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
-
-.profile-stats {
-  display: flex;
-  gap: 32px;
-}
-
-.profile-stat {
-  text-align: center;
-}
-
-.profile-stat .stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.profile-stat .stat-label {
+/* Stats Grid */.profile-stat .stat-label {
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -2727,11 +2644,6 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .profile-card {
-    flex-direction: column;
-    text-align: center;
-  }
-  
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
