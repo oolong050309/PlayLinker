@@ -666,7 +666,7 @@ public class ReportGenerationService
                 page.Size(PageSizes.A4);
                 page.Margin(1.5f, Unit.Centimetre);
                 page.PageColor(darkBg);
-                page.DefaultTextStyle(x => x.FontSize(11).FontColor(textLight));
+                page.DefaultTextStyle(x => x.FontSize(11).FontColor(textLight).FontFamily("Noto Sans CJK SC", "Microsoft YaHei", "SimHei", "Arial"));
 
                 // 页眉
                 page.Header()
@@ -1479,7 +1479,7 @@ public class ReportGenerationService
                 page.Size(PageSizes.A4);
                 page.Margin(1.5f, Unit.Centimetre);
                 page.PageColor(darkBg);
-                page.DefaultTextStyle(x => x.FontSize(11).FontColor(textLight));
+                page.DefaultTextStyle(x => x.FontSize(11).FontColor(textLight).FontFamily("Noto Sans CJK SC", "Microsoft YaHei", "SimHei", "Arial"));
 
                 page.Header().PaddingBottom(15).Column(col =>
                 {
@@ -2299,7 +2299,7 @@ public class ReportGenerationService
                 page.Size(PageSizes.A4);
                 page.Margin(1.5f, Unit.Centimetre);
                 page.PageColor(darkBg);
-                page.DefaultTextStyle(x => x.FontSize(10).FontColor(textLight));
+                page.DefaultTextStyle(x => x.FontSize(10).FontColor(textLight).FontFamily("Noto Sans CJK SC", "Microsoft YaHei", "SimHei", "Arial"));
 
                 page.Header().PaddingBottom(15).Column(col =>
                 {
