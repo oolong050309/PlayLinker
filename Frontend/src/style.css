@@ -53,13 +53,31 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: var(--bg-primary);
+  /* --- 修改开始 --- */
+  /* 使用线性渐变添加一层半透明黑色遮罩，确保文字清晰可见 */
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
+    url('./assets/bg.jpg'); /* 替换为你的图片路径，如果是网络图片直接填 URL */
+  
+  /* 确保背景覆盖整个屏幕 */
+  background-size: cover;
+  /* 背景图居中 */
+  background-position: center;
+  /* 背景图固定，不随滚动条滚动 */
+  background-attachment: fixed;
+  /*以此颜色作为图片加载前的底色 */
+  background-color: var(--bg-primary); 
+  /* --- 修改结束 --- */
   color: var(--text-primary);
   line-height: 1.6;
 }
 
 #app {
   min-height: 100vh;
+}
+#app > * {
+  background-color: transparent !important; /* !important 确保覆盖 .vue 文件里的设置 */
+  background: transparent !important;
 }
 
 .container {
