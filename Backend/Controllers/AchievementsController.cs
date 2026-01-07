@@ -108,10 +108,18 @@ public class AchievementsController : ControllerBase
                 .Where(a => a.GameId == gameId)
                 .ToListAsync();
 
+            // 平台信息字典
+            var platformIds = achievementsList.Select(a => a.PlatformId).Distinct().ToList();
+            var platformMap = await _context.Platforms
+                .Where(p => platformIds.Contains(p.PlatformId))
+                .ToDictionaryAsync(p => p.PlatformId, p => p.PlatformName);
+
             // 构建成就DTO列表（不再请求 Steam，全局解锁率统一为 0）
             var achievements = new List<AchievementDto>();
             foreach (var achievement in achievementsList)
             {
+                platformMap.TryGetValue(achievement.PlatformId, out var platformName);
+
                 achievements.Add(new AchievementDto
                 {
                     AchievementId = achievement.AchievementId,
@@ -121,7 +129,9 @@ public class AchievementsController : ControllerBase
                     Hidden = achievement.Hidden,
                     IconUnlocked = achievement.IconUnlocked,
                     IconLocked = achievement.IconLocked,
-                    GlobalUnlockRate = 0.0
+                    GlobalUnlockRate = 0.0,
+                    PlatformId = achievement.PlatformId,
+                    PlatformName = platformName
                 });
             }
 
