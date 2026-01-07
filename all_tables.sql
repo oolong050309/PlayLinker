@@ -559,6 +559,7 @@ create table notification_center
     content           text                                                                                not null,
     notification_type enum ('info', 'warning', 'alert') default 'info'                                    null,
     is_read           tinyint(1)                        default 0                                         null,
+    is_visible        tinyint(1)                        default 1                                         null,
     related_id        bigint                                                                              not null,
     created_at        datetime                          default CURRENT_TIMESTAMP                         null,
     constraint related_id

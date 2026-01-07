@@ -62,6 +62,13 @@
           </div>
           <p class="notification-message">{{ notification.message }}</p>
           <div class="notification-action">
+            <button
+              class="btn btn-sm btn-danger btn-delete"
+              title="删除"
+              @click.stop="deleteNotification(notification)"
+            >
+              删除
+            </button>
             <!-- 家长监管邀请：显示"同意 / 拒绝"两个按钮（仅未读且未处理过的邀请） -->
             <template v-if="notification.type === 'parental' && notification.action?.kind === 'parental_invite' && !notification.read && !notification.processed">
               <button 
@@ -381,6 +388,25 @@ const markAllAsRead = async () => {
   }
 }
 
+const deleteNotification = async (notification) => {
+  const id = notification?.rawId || notification?.id
+  if (!id) return
+  if (!confirm('确定要删除这条消息吗？')) return
+
+  // 乐观更新：先从列表移除
+  const backup = [...notifications.value]
+  notifications.value = notifications.value.filter(n => (n.rawId || n.id) !== id)
+
+  try {
+    await notificationsApi.delete(id)
+  } catch (error) {
+    console.error('删除消息失败:', error)
+    alert('删除消息失败: ' + (error.message || '未知错误'))
+    // 回滚
+    notifications.value = backup
+  }
+}
+
 const clearAll = async () => {
   if (notifications.value.length === 0) return
   if (!confirm('确定要清空所有消息吗？')) return
@@ -577,6 +603,14 @@ onMounted(() => {
 
 .notification-action {
   margin-top: var(--spacing-sm);
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn-delete {
+  margin-left: auto;
 }
 
 .unread-dot {
