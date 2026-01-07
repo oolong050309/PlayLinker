@@ -85,24 +85,6 @@
             <span v-if="loading">登录中...</span>
             <ArrowRight class="icon arrow-icon" />
           </button>
-
-          <!-- 分隔线 -->
-          <div class="divider">
-            <span>或通过以下方式登录</span>
-          </div>
-
-          <!-- 社交登录 -->
-          <div class="social-login-container">
-            <button type="button" class="social-btn" :disabled="loading">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/1024px-Steam_icon_logo.svg.png" alt="Steam">
-            </button>
-            <button type="button" class="social-btn" :disabled="loading">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/a/a7/Epic_Games_logo.png" alt="Epic">
-            </button>
-            <button type="button" class="social-btn" :disabled="loading">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Xbox_one_logo.svg/2048px-Xbox_one_logo.svg.png" alt="Xbox">
-            </button>
-          </div>
         </form>
 
         <!-- 注册链接 -->
@@ -530,6 +512,7 @@ const handleLogin = async () => {
   text-align: center;
   font-size: 14px;
   color: #a1a1aa;
+  margin-top: 24px;
 }
 
 .link {
