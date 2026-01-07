@@ -954,7 +954,6 @@ public class UserReportService : IUserReportService
 
                         // 获取价格信息
                         int? currentPrice = null;
-                        int? originalPrice = null;
                         int? discountPercent = null;
                         bool isOnSale = false;
 
@@ -1238,7 +1237,7 @@ public class UserReportService : IUserReportService
             .ToList();
 
         // 用于追踪每个游戏的前一天时长（从空开始，第一天自然被跳过）
-        var previousDayPlaytime = new Dictionary<(long GameId, int PlatformId), int>();
+        var previousDayPlaytime = new Dictionary<(long GameId, int PlatformId), (int playtime, DateTime date)>();
         
         // 获取所有游戏信息，用于后续查询游戏名称
         var gameIds = allHistory.Select(h => h.GameId).Distinct().ToList();
@@ -1280,7 +1279,7 @@ public class UserReportService : IUserReportService
                 }
                 
                 // 更新/记录当前时长和日期，作为下一次计算的基准
-                previousDayPlaytime[key] = (record.PlaytimeForever, currentDate);
+                previousDayPlaytime[key] = (record.PlaytimeForever, date);
             }
 
             dailyData[date] = (dailyPlaytimeChange, gamesPlaytimeToday);
