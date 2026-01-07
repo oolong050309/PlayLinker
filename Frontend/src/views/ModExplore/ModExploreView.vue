@@ -1,6 +1,5 @@
 <template>
   <div class="mod-explore-page">
-    <!-- 顶部区域 -->
     <div class="page-header">
       <div class="header-content">
         <h1 class="page-title">
@@ -11,10 +10,8 @@
       </div>
     </div>
 
-    <!-- 游戏选择器 -->
     <div class="selector-section">
       <div class="game-selectors-row">
-        <!-- 本地游戏选择器 -->
         <div class="game-selector-wrapper" :class="{ disabled: selectionMode === 'search' }">
           <div class="selector-label">
             <Gamepad2 class="label-icon" />
@@ -55,7 +52,6 @@
 
         <div class="selector-divider">或</div>
 
-        <!-- 搜索所有游戏 -->
         <div class="game-search-wrapper" :class="{ disabled: selectionMode === 'local' }">
           <div class="selector-label">
             <Search class="label-icon" />
@@ -73,11 +69,7 @@
               @input="handleGameSearchInput"
               @focus="showGameSearchResults = true"
             />
-            <button v-if="gameSearchQuery && selectionMode !== 'local'" class="clear-btn" @click="clearGameSearch">
-              <X :size="16" />
-            </button>
-          </div>
-          <!-- 搜索结果下拉 -->
+            </div>
           <div v-if="showGameSearchResults && selectionMode !== 'local' && (gameSearchResults.length > 0 || gameSearchLoading)" class="game-search-dropdown">
             <div v-if="gameSearchLoading" class="search-loading">
               <div class="mini-loader"></div>
@@ -101,7 +93,6 @@
       </div>
     </div>
 
-    <!-- Mod 来源标签 -->
     <div v-if="modSources.length > 0" class="source-section">
       <div class="source-tabs">
         <button 
@@ -117,7 +108,6 @@
         </button>
       </div>
       
-      <!-- 搜索栏 -->
       <div class="search-section" v-if="selectedSource">
         <div class="search-box">
           <Search class="search-icon" />
@@ -132,7 +122,6 @@
       </div>
     </div>
 
-    <!-- 无 Mod 来源提示 -->
     <div v-else-if="selectedGameId && !sourcesLoading" class="empty-state no-source">
       <Package class="empty-icon" />
       <h3>该游戏暂无 Mod 平台支持</h3>
@@ -140,19 +129,16 @@
       <p class="hint">目前支持 NexusMods、3DM 等平台的热门游戏</p>
     </div>
 
-    <!-- 加载来源状态 -->
     <div v-if="sourcesLoading" class="loading-state">
       <div class="loader"></div>
       <p>正在加载 Mod 来源...</p>
     </div>
 
-    <!-- 加载 Mod 列表状态 -->
     <div v-else-if="loading" class="loading-state">
       <div class="loader"></div>
       <p>正在加载 Mod 列表...</p>
     </div>
 
-    <!-- Mod 列表 -->
     <div v-else-if="mods.length > 0" class="mod-grid">
       <div v-for="mod in mods" :key="mod.modId" class="mod-card">
         <div class="card-image">
@@ -177,7 +163,6 @@
       </div>
     </div>
 
-    <!-- 空状态 - 选择了游戏和来源但没有 Mod -->
     <div v-else-if="selectedGameId && selectedSource && !loading && !sourcesLoading && modSources.length > 0" class="empty-state">
       <Package class="empty-icon" />
       <h3>在 {{ selectedSourceName }} 上暂无 Mod</h3>
@@ -185,7 +170,6 @@
       <p class="hint">可以尝试切换其他 Mod 来源平台</p>
     </div>
 
-    <!-- 空状态 - 未选择游戏 -->
     <div v-else-if="!selectedGameId" class="empty-state">
       <Gamepad2 class="empty-icon" />
       <h3 v-if="localGames.length === 0">暂无本地游戏</h3>
@@ -197,7 +181,6 @@
       </router-link>
     </div>
 
-    <!-- 分页 -->
     <div v-if="totalPages > 1" class="pagination">
       <button class="page-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">
         <ChevronLeft :size="16" /> 上一页
