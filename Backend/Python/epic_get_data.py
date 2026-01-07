@@ -70,22 +70,33 @@ def get_legendary_credentials():
     用于后续需要身份验证的 API 请求
     """
     possible_paths = [
+        # Linux 标准路径
+        os.path.expanduser('~/.config/legendary/user.json'),
+        # Windows 路径
         os.path.join(os.environ.get('APPDATA', ''), 'legendary', 'user.json'),
         os.path.join(os.environ.get('USERPROFILE', ''), '.config', 'legendary', 'user.json'),
+        # 当前目录
         os.path.join(os.getcwd(), 'legendary', 'user.json'),
         os.path.join(os.getcwd(), 'user.json')
     ]
+    
+    print(f"查找 legendary 配置文件...", file=sys.stderr, flush=True)
     for path in possible_paths:
+        print(f"  检查路径: {path}", file=sys.stderr, flush=True)
         if os.path.exists(path):
+            print(f"  找到文件: {path}", file=sys.stderr, flush=True)
             try:
                 with open(path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     token = data.get('access_token') or data.get('userdata', {}).get('access_token')
                     aid = data.get('account_id')
                     if token:
+                        print(f"  成功读取 token, account_id={aid}", file=sys.stderr, flush=True)
                         return token, aid
-            except:
-                pass
+            except Exception as e:
+                print(f"  读取文件失败: {e}", file=sys.stderr, flush=True)
+    
+    print(f"未找到 legendary 配置文件", file=sys.stderr, flush=True)
     return None, None
 
 
