@@ -85,8 +85,8 @@ public class PricesController : ControllerBase
 
         try
         {
-        var ids = game_ids.Split(',').Select(long.Parse).ToList();
-        
+            var ids = game_ids.Split(',').Select(long.Parse).ToList();
+            
             // 获取所有相关游戏的价格历史记录（包括关联数据）
             var allPrices = await _context.PriceHistories
             .Where(p => ids.Contains(p.GameId))
@@ -100,8 +100,8 @@ public class PricesController : ControllerBase
                 .Select(g => g.OrderByDescending(p => p.RecordDate).First())
                 .ToList();
 
-        var result = prices.Select(p => new
-        {
+            var result = prices.Select(p => new
+            {
                 gameId = p.GameId,
                 GameName = p.Game?.Name ?? "未知游戏",
                 Platform = p.Platform?.PlatformName ?? "未知平台",
@@ -110,7 +110,7 @@ public class PricesController : ControllerBase
                 discount = p.DiscountRate,
                 discountRate = p.DiscountRate, // 兼容字段
                 isDiscount = p.IsDiscount,
-            LastUpdated = p.RecordDate
+                LastUpdated = p.RecordDate
             }).ToList();
 
             return Ok(ApiResponse<object>.SuccessResponse(new { prices = result, totalCount = result.Count }));
@@ -156,7 +156,6 @@ public class PricesController : ControllerBase
             {
                 new {
                     event_name = "AI 预测下次折扣",
-                    // [修复] 因为 DTO 中已经是 string，这里直接赋值即可，不会报错
                     estimatedDate = predictionDto.EstimatedDate, 
                     probability = predictionDto.Probability,
                     confidence = predictionDto.Probability > 0.8 ? "high" : "medium",
@@ -302,34 +301,60 @@ public class PricesController : ControllerBase
             }
         }
         // 检查是否满足目标折扣条件
-        else if (subscription.TargetDiscount.HasValue && latestPrice.DiscountRate >= subscription.TargetDiscount.Value)
+        // [修复] 修改判断逻辑：当前折扣率 >= (100 - 目标折扣率)
+        // 例如：用户输入80 (8折)，期望折扣 >= 20%。当前折扣75%，75 >= 20，触发提醒。
+        else if (subscription.TargetDiscount.HasValue && latestPrice.DiscountRate >= (100 - subscription.TargetDiscount.Value))
         {
             shouldNotify = true;
             alertType = "target_discount";
             notificationTitle = $"折扣提醒：{game.Name}";
-            notificationContent = $"游戏 {game.Name} 当前折扣 {latestPrice.DiscountRate}%，已达到您设置的目标折扣 {subscription.TargetDiscount.Value}%。";
+            notificationContent = $"游戏 {game.Name} 当前折扣 {latestPrice.DiscountRate}%，已达到您设置的目标折扣 {subscription.TargetDiscount.Value}%（{(subscription.TargetDiscount.Value / 10.0):F1}折）。";
             notificationContent += $" 当前价格：¥{latestPrice.CurrentPrice:F2}，原价：¥{latestPrice.OriginalPrice:F2}。";
         }
 
         if (shouldNotify)
         {
-            // 创建通知到消息中心
-            var notification = new NotificationCenter
-            {
-                UserId = userId,
-                SourceModule = "price_alert",
-                Title = notificationTitle,
-                Content = notificationContent,
-                NotificationType = "info",
-                IsRead = false,
-                RelatedId = subscription.SubscriptionId,
-                CreatedAt = DateTime.UtcNow
-            };
+            _logger.LogInformation("立即检查满足条件: 用户 {UserId}, 游戏 {GameId}, 类型 {AlertType}", userId, subscription.GameId, alertType);
 
-            _context.NotificationCenters.Add(notification);
+            // [核心修复]：检查是否已存在通知，解决 Duplicate entry 错误
+            var existingNotification = await _context.NotificationCenters
+                .FirstOrDefaultAsync(n => n.RelatedId == subscription.SubscriptionId && n.SourceModule == "price_alert");
+
+            NotificationCenter notification;
+
+            if (existingNotification != null)
+            {
+                // 如果存在，执行更新
+                _logger.LogInformation("发现已存在通知(ID={NotifId})，执行更新操作", existingNotification.NotificationId);
+                existingNotification.Title = notificationTitle;
+                existingNotification.Content = notificationContent;
+                existingNotification.IsRead = false; // 重新标记为未读
+                existingNotification.CreatedAt = DateTime.UtcNow; // 更新时间
+                existingNotification.NotificationType = "info";
+                
+                notification = existingNotification;
+                // 不需要 Add，EF Core 会自动追踪更新
+            }
+            else
+            {
+                // 如果不存在，执行插入
+                notification = new NotificationCenter
+                {
+                    UserId = userId,
+                    SourceModule = "price_alert",
+                    Title = notificationTitle,
+                    Content = notificationContent,
+                    NotificationType = "info",
+                    IsRead = false,
+                    RelatedId = subscription.SubscriptionId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.NotificationCenters.Add(notification);
+            }
+
             await _context.SaveChangesAsync();
 
-            // 创建价格提醒日志
+            // 创建价格提醒日志 (日志表没有 RelatedId 唯一约束，可以直接 Add)
             var alertLog = new PriceAlertLog
             {
                 SubscriptionId = subscription.SubscriptionId,
@@ -395,8 +420,13 @@ public class PricesController : ControllerBase
                 }
             }
 
-            _logger.LogInformation("已为用户 {UserId} 创建立即价格提醒通知: GameId={GameId}, Price={Price}, Discount={Discount}%",
+            _logger.LogInformation("已为用户 {UserId} 创建/更新立即价格提醒通知: GameId={GameId}, Price={Price}, Discount={Discount}%",
                 userId, subscription.GameId, latestPrice.CurrentPrice, latestPrice.DiscountRate);
+        }
+        else
+        {
+            _logger.LogInformation("立即检查未满足条件: 用户 {UserId}, 游戏 {GameId}。当前折扣率={CurrentRate}, 目标折扣率={TargetRate}", 
+                userId, subscription.GameId, latestPrice.DiscountRate, subscription.TargetDiscount.HasValue ? (100 - subscription.TargetDiscount.Value) : "N/A");
         }
     }
 
