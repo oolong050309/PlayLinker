@@ -73,7 +73,7 @@
           <div class="setting-item">
             <div class="setting-info">
               <h3 class="setting-label">手机号</h3>
-              <p class="setting-desc">用于账户验证和安全保护</p>
+              <p class="setting-desc">请输入您的手机号</p>
             </div>
             <div class="setting-action">
               <input 
