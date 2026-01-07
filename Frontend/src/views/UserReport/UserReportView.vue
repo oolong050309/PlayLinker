@@ -124,7 +124,7 @@
 
       <!-- Weekly Comparison Chart -->
       <div v-if="gameLibrary.dailyPlaytimeTrend?.length >= 7" class="weekly-section">
-        <h3 class="section-title">📊 周游戏时长对比</h3>
+        <h3 class="section-title">📊 两周游戏时长对比（按星期）</h3>
         <div class="weekly-chart-container">
           <canvas ref="weeklyChartRef"></canvas>
         </div>
@@ -1438,17 +1438,15 @@ const initCharts = () => {
     const trendData = gameLibrary.value.dailyPlaytimeTrend
     const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
     
-    // 按星期几分组统计
-    const weekdayStats = Array(7).fill(0).map(() => ({ total: 0, count: 0 }))
+    // 按星期几分组统计总和（两周数据）
+    const weekdayStats = Array(7).fill(0)
     trendData.forEach(d => {
       const dayOfWeek = new Date(d.date).getDay()
-      weekdayStats[dayOfWeek].total += d.playtimeMinutes
-      weekdayStats[dayOfWeek].count++
+      weekdayStats[dayOfWeek] += d.playtimeMinutes
     })
     
-    const avgByWeekday = weekdayStats.map(s => s.count > 0 ? Math.round(s.total / s.count) : 0)
     // 重新排序：周一到周日
-    const reorderedAvg = [...avgByWeekday.slice(1), avgByWeekday[0]]
+    const reorderedTotal = [...weekdayStats.slice(1), weekdayStats[0]]
     const reorderedLabels = [...weekdays.slice(1), weekdays[0]]
     
     weeklyChart = new Chart(ctx, {
@@ -1456,10 +1454,10 @@ const initCharts = () => {
       data: {
         labels: reorderedLabels,
         datasets: [{
-          label: '平均游戏时长',
-          data: reorderedAvg,
-          backgroundColor: reorderedAvg.map((v, i) => {
-            const max = Math.max(...reorderedAvg)
+          label: '游戏时长（两周总和）',
+          data: reorderedTotal,
+          backgroundColor: reorderedTotal.map((v, i) => {
+            const max = Math.max(...reorderedTotal)
             const intensity = max > 0 ? v / max : 0
             return `rgba(99, 102, 241, ${0.3 + intensity * 0.7})`
           }),
