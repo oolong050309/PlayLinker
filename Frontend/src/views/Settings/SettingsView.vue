@@ -190,44 +190,6 @@
       </section>
 
       <section class="settings-section">
-        <h2 class="section-title">数据与存储</h2>
-        <div class="settings-card">
-          <div class="storage-stats">
-            <div class="stat-item">
-              <div class="stat-label">云存储使用</div>
-              <div class="stat-value">{{ storageData.cloudUsed }} GB</div>
-              <div class="stat-desc">共 {{ storageData.cloudTotal }} GB</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">存档文件</div>
-              <div class="stat-value">{{ storageData.saveFiles }}</div>
-              <div class="stat-desc">来自 {{ storageData.gamesCount }} 款游戏</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">最后备份</div>
-              <div class="stat-value">{{ storageData.lastBackup }}</div>
-              <div class="stat-desc">自动同步已启用</div>
-            </div>
-          </div>
-
-          <div class="storage-actions">
-            <button class="btn btn-secondary full-width" @click="handleBackupSaves">
-              <CloudUpload class="icon" />
-              备份所有存档
-            </button>
-            <button class="btn btn-secondary full-width" @click="handleExportData">
-              <Download class="icon" />
-              导出数据
-            </button>
-            <button class="btn btn-danger full-width" @click="handleClearCache">
-              <Trash2 class="icon" />
-              清除缓存
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section class="settings-section">
         <h2 class="section-title danger-title">危险操作</h2>
         <div class="settings-card danger-card">
           <div class="setting-item">
