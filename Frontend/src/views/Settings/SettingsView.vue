@@ -189,43 +189,7 @@
         </div>
       </section>
 
-      <section class="settings-section">
-        <h2 class="section-title">数据与存储</h2>
-        <div class="settings-card">
-          <div class="storage-stats">
-            <div class="stat-item">
-              <div class="stat-label">云存储使用</div>
-              <div class="stat-value">{{ storageData.cloudUsed }} GB</div>
-              <div class="stat-desc">共 {{ storageData.cloudTotal }} GB</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">存档文件</div>
-              <div class="stat-value">{{ storageData.saveFiles }}</div>
-              <div class="stat-desc">来自 {{ storageData.gamesCount }} 款游戏</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">最后备份</div>
-              <div class="stat-value">{{ storageData.lastBackup }}</div>
-              <div class="stat-desc">自动同步已启用</div>
-            </div>
-          </div>
 
-          <div class="storage-actions">
-            <button class="btn btn-secondary full-width" @click="handleBackupSaves">
-              <CloudUpload class="icon" />
-              备份所有存档
-            </button>
-            <button class="btn btn-secondary full-width" @click="handleExportData">
-              <Download class="icon" />
-              导出数据
-            </button>
-            <button class="btn btn-danger full-width" @click="handleClearCache">
-              <Trash2 class="icon" />
-              清除缓存
-            </button>
-          </div>
-        </div>
-      </section>
 
       <section class="settings-section">
         <h2 class="section-title danger-title">危险操作</h2>
@@ -289,7 +253,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Camera, CloudUpload, Download, Trash2 } from 'lucide-vue-next'
+import { Camera } from 'lucide-vue-next'
 import { usersApi } from '@/api/users'
 import { preferenceApi } from '@/api/preference' // [修复] 引入偏好 API
 
@@ -326,13 +290,7 @@ const settings = ref({
   }
 })
 
-const storageData = ref({
-  cloudUsed: 2.4,
-  cloudTotal: 10,
-  saveFiles: 47,
-  gamesCount: 12,
-  lastBackup: '2小时前'
-})
+
 
 // [修复] 前端字符串与后端数据库ID的映射表
 // 注意：这里假设数据库中的 genres 表 ID 顺序如下。
@@ -571,14 +529,25 @@ const handleSave = async () => {
   }
 }
 
-// 其他占位功能
-const handleBackupSaves = async () => { alert('备份存档功能待实现') }
-const handleExportData = async () => { alert('导出数据功能待实现') }
-const handleClearCache = () => { 
-  if (confirm('确定要清除缓存吗？')) alert('清除缓存功能待实现') 
-}
-const handleDeleteAccount = () => { 
-  if (confirm('确定要删除账户吗？此操作不可恢复！')) alert('账户删除功能待实现') 
+// 删除账户：调用后端接口置为 inactive，并注销跳转
+const handleDeleteAccount = async () => {
+  const confirmed = confirm('确定要删除账户吗？此操作不可恢复！')
+  if (!confirmed) return
+
+  try {
+    const resp = await usersApi.deleteAccount()
+    if (resp?.success) {
+      alert('账户已删除，状态已设为 inactive')
+      sessionStorage.clear()
+      router.push('/login')
+    } else {
+      const msg = resp?.message || '删除失败，请稍后重试'
+      alert(msg)
+    }
+  } catch (error) {
+    const msg = error?.response?.data?.message || error.message || '未知错误'
+    alert('删除失败：' + msg)
+  }
 }
 
 const handleChangePassword = async () => {

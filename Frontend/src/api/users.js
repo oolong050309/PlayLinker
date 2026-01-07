@@ -52,6 +52,14 @@ export const usersApi = {
    */
   updateRole(data) {
     return api.patch('/users/role', data)
+  },
+
+  /**
+   * 删除账户（将状态设为 inactive）
+   * @returns {Promise}
+   */
+  deleteAccount() {
+    return api.delete('/users/account')
   }
 }
 

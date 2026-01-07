@@ -408,5 +408,49 @@ public class UsersController : ControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
         }
     }
+
+    /// <summary>
+    /// 删除账户（将状态标记为 disabled）
+    /// </summary>
+    [SwaggerOperation(Summary = "删除账户", Description = "将当前登录用户状态标记为 disabled，实现软删除。需要 JWT 认证。")]
+    [HttpDelete("account")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<object>>> DeleteAccount()
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized(ApiResponse<object>.ErrorResponse("ERR_UNAUTHORIZED", "未认证"));
+            }
+
+            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResponse("ERR_NOT_FOUND", "用户不存在"));
+            }
+
+            // 如果已是 disabled，直接返回
+            if (string.Equals(user.Status, "disabled", StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(ApiResponse<object>.SuccessResponse(new { status = user.Status }, "账户已处于删除状态"));
+            }
+
+            user.Status = "disabled";
+            _dbContext.Users.Update(user);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("User {UserId} set to disabled (account deleted)", userId);
+            return Ok(ApiResponse<object>.SuccessResponse(new { status = user.Status }, "账户已删除"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting account");
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("ERR_INTERNAL", "服务器内部错误"));
+        }
+    }
 }
 
