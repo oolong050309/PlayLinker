@@ -106,9 +106,27 @@ public class EpicService : IEpicService
             _fastApiProcess = Process.Start(startInfo);
             if (_fastApiProcess != null)
             {
+                // 异步读取输出，避免缓冲区满导致进程挂起
+                _fastApiProcess.OutputDataReceived += (sender, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                    {
+                        _logger.LogInformation("[FastAPI stdout] {Output}", e.Data);
+                    }
+                };
+                _fastApiProcess.ErrorDataReceived += (sender, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                    {
+                        _logger.LogWarning("[FastAPI stderr] {Output}", e.Data);
+                    }
+                };
+                _fastApiProcess.BeginOutputReadLine();
+                _fastApiProcess.BeginErrorReadLine();
+                
                 _logger.LogInformation("FastAPI服务已启动: PID={ProcessId}", _fastApiProcess.Id);
                 // 等待服务启动
-                await Task.Delay(3000);
+                await Task.Delay(5000);
             }
         }
         catch (Exception ex)
