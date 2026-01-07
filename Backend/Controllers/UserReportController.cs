@@ -165,6 +165,33 @@ public class UserReportController : ControllerBase
     }
 
     /// <summary>
+    /// 获取最近游玩游戏的14天时长历史
+    /// </summary>
+    /// <param name="days">天数，默认14天</param>
+    /// <returns>每个游戏的每日时长数据</returns>
+    [HttpGet("recent-played/history")]
+    [ProducesResponseType(typeof(ApiResponse<RecentGamesPlaytimeHistoryDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<RecentGamesPlaytimeHistoryDto>>> GetRecentPlayedHistory([FromQuery] int days = 14)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == 0)
+        {
+            return Unauthorized(ApiResponse<object>.ErrorResponse("UNAUTHORIZED", "用户未登录"));
+        }
+
+        try
+        {
+            var result = await _userReportService.GetRecentGamesPlaytimeHistoryAsync(userId, days);
+            return Ok(ApiResponse<RecentGamesPlaytimeHistoryDto>.SuccessResponse(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取最近游玩历史失败: userId={UserId}", userId);
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("INTERNAL_ERROR", "获取历史数据失败"));
+        }
+    }
+
+    /// <summary>
     /// 获取愿望单
     /// </summary>
     /// <remarks>

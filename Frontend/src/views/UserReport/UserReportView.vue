@@ -93,17 +93,6 @@
           <div class="stat-value">{{ achievements.unlockedAchievements }}</div>
           <div class="stat-desc">完成率 {{ achievements.completionRate }}%</div>
         </div>
-
-        <div class="stat-card">
-          <div class="stat-header">
-            <span class="stat-label">愿望单</span>
-            <div class="stat-icon rose">
-              <Heart class="icon" />
-            </div>
-          </div>
-          <div class="stat-value">{{ wishlist.totalItems }}</div>
-          <div class="stat-desc">{{ wishlist.onSaleCount }} 款在打折</div>
-        </div>
       </div>
 
       <!-- Playtime Trend Chart -->
@@ -141,32 +130,89 @@
         </div>
       </div>
 
-      <!-- Activity Heatmap -->
-      <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="heatmap-section">
-        <h3 class="section-title">🔥 游戏活跃度</h3>
-        <div class="heatmap-container">
-          <div class="heatmap-weekdays">
-            <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
-          </div>
-          <div class="heatmap-grid">
-            <div 
-              v-for="(day, index) in heatmapData" 
-              :key="index" 
-              class="heatmap-cell"
-              :class="getHeatmapClass(day.playtimeMinutes)"
-              :title="`${day.date}: ${formatMinutes(day.playtimeMinutes)}`"
-            >
-              <span class="heatmap-date">{{ day.dayOfMonth }}</span>
+      <!-- Recent Played Analysis -->
+      <div v-if="filteredRecentPlayed.length" class="recent-analysis-section">
+        <h3 class="section-title">🎮 最近游玩详细分析</h3>
+        <div class="recent-analysis-container">
+          <!-- 总览统计 -->
+          <div class="recent-summary">
+            <div class="summary-item">
+              <span class="summary-value">{{ filteredRecentPlayed.length }}</span>
+              <span class="summary-label">游戏数</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-value">{{ formatMinutes(recentTotalPlaytime) }}</span>
+              <span class="summary-label">总时长(2周)</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-value">{{ formatMinutes(recentDailyAverage) }}</span>
+              <span class="summary-label">日均时长</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-value">{{ mostPlayedRecent?.gameName?.substring(0, 8) || '-' }}</span>
+              <span class="summary-label">最常玩</span>
             </div>
           </div>
-          <div class="heatmap-legend">
-            <span class="legend-label">少</span>
-            <div class="legend-cell level-0"></div>
-            <div class="legend-cell level-1"></div>
-            <div class="legend-cell level-2"></div>
-            <div class="legend-cell level-3"></div>
-            <div class="legend-cell level-4"></div>
-            <span class="legend-label">多</span>
+          
+          <!-- 游戏详细列表 -->
+          <div class="recent-games-detail">
+            <div 
+              v-for="(game, index) in filteredRecentPlayed" 
+              :key="game.gameId" 
+              class="recent-game-card clickable"
+              @click="goToGameDetail(game.gameId)"
+            >
+              <div class="game-rank-badge" :class="getRankClass(index)">{{ index + 1 }}</div>
+              <img :src="game.headerImage || noCoverImage" class="game-cover" @error="handleImageError" />
+              <div class="game-details">
+                <h4 class="game-title">{{ game.gameName }}</h4>
+                <div class="game-stats">
+                  <div class="stat-row">
+                    <span class="stat-icon">⏱️</span>
+                    <span class="stat-text">近2周: {{ formatMinutes(game.recentPlaytimeMinutes) }}</span>
+                  </div>
+                  <div class="stat-row">
+                    <span class="stat-icon">📊</span>
+                    <span class="stat-text">总时长: {{ formatMinutes(game.playtimeMinutes) }}</span>
+                  </div>
+                  <div class="stat-row" v-if="game.lastPlayed">
+                    <span class="stat-icon">📅</span>
+                    <span class="stat-text">最后游玩: {{ formatLastPlayed(game.lastPlayed) }}</span>
+                  </div>
+                </div>
+                <!-- 时长占比条 -->
+                <div class="playtime-bar-container">
+                  <div 
+                    class="playtime-bar" 
+                    :style="{ width: getRecentPlaytimePercent(game.recentPlaytimeMinutes) + '%' }"
+                  ></div>
+                  <span class="playtime-percent">{{ getRecentPlaytimePercent(game.recentPlaytimeMinutes).toFixed(1) }}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Games Playtime Chart -->
+      <div v-if="recentGamesHistory.games?.length" class="recent-chart-section">
+        <h3 class="section-title">📈 最近14天各游戏时长趋势</h3>
+        <div class="recent-chart-container">
+          <div class="chart-wrapper">
+            <canvas ref="recentGamesChartRef"></canvas>
+          </div>
+          <div class="chart-legend">
+            <div 
+              v-for="(game, index) in recentGamesHistory.games.slice(0, 6)" 
+              :key="game.gameId"
+              class="legend-item clickable"
+              :class="{ 'legend-hidden': hiddenGames.has(game.gameId) }"
+              @click="toggleGameVisibility(game.gameId)"
+            >
+              <span class="legend-color" :style="{ background: gameChartColors[index] }"></span>
+              <span class="legend-name">{{ game.gameName }}</span>
+              <span class="legend-time">{{ formatMinutes(game.totalPlaytime) }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -224,7 +270,12 @@
           <div class="chart-card">
             <h3 class="chart-title">最常玩的游戏</h3>
             <div v-if="gameLibrary.topPlayedGames?.length" class="games-list">
-              <div v-for="(game, index) in gameLibrary.topPlayedGames" :key="game.gameId" class="game-item clickable" @click="goToGameDetail(game.gameId)">
+              <div 
+                v-for="(game, index) in gameLibrary.topPlayedGames.slice(0, 10)" 
+                :key="game.gameId" 
+                class="game-item clickable" 
+                @click="goToGameDetail(game.gameId)"
+              >
                 <div class="game-rank" :class="getRankClass(index)">{{ index + 1 }}</div>
                 <img :src="game.headerImage || noCoverImage" class="game-image" @error="handleImageError" />
                 <div class="game-info">
@@ -236,6 +287,36 @@
               </div>
             </div>
             <div v-else class="empty-state">暂无游戏数据</div>
+          </div>
+
+          <!-- Activity Heatmap -->
+          <div v-if="gameLibrary.dailyPlaytimeTrend?.length" class="chart-card">
+            <h3 class="chart-title">🔥 游戏活跃度</h3>
+            <div class="heatmap-container-inline">
+              <div class="heatmap-weekdays-inline">
+                <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+              </div>
+              <div class="heatmap-grid-inline">
+                <div 
+                  v-for="(day, index) in heatmapData" 
+                  :key="index" 
+                  class="heatmap-cell-inline"
+                  :class="getHeatmapClass(day.playtimeMinutes)"
+                  :title="day.isEmpty ? '' : `${day.date}: ${formatMinutes(day.playtimeMinutes)}`"
+                >
+                  <span v-if="!day.isEmpty" class="heatmap-date">{{ day.dayOfMonth }}</span>
+                </div>
+              </div>
+              <div class="heatmap-legend-inline">
+                <span class="legend-label">少</span>
+                <div class="legend-cell level-0"></div>
+                <div class="legend-cell level-1"></div>
+                <div class="legend-cell level-2"></div>
+                <div class="legend-cell level-3"></div>
+                <div class="legend-cell level-4"></div>
+                <span class="legend-label">多</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -293,7 +374,12 @@
           <div class="chart-card">
             <h3 class="chart-title">最近游玩</h3>
             <div v-if="recentPlayed.length" class="recent-list">
-              <div v-for="game in recentPlayed.slice(0, 5)" :key="game.gameId" class="recent-item clickable" @click="goToGameDetail(game.gameId)">
+              <div 
+                v-for="game in recentPlayed.slice(0, 10)" 
+                :key="game.gameId" 
+                class="recent-item clickable" 
+                @click="goToGameDetail(game.gameId)"
+              >
                 <img :src="game.headerImage || noCoverImage" class="recent-image" @error="handleImageError" />
                 <div class="recent-info">
                   <h4 class="recent-name">{{ game.gameName }}</h4>
@@ -322,30 +408,6 @@
             <div v-else class="empty-state">暂无成就数据</div>
           </div>
         </div>
-      </div>
-
-      <!-- Wishlist Section -->
-      <div class="wishlist-section">
-        <div class="section-header">
-          <h2 class="section-title">愿望单</h2>
-          <span class="sale-badge" v-if="wishlist.onSaleCount > 0">
-            🔥 {{ wishlist.onSaleCount }} 款在打折
-          </span>
-        </div>
-        <div v-if="wishlist.items?.length" class="wishlist-grid">
-          <div v-for="item in wishlist.items.slice(0, 8)" :key="item.steamAppId" class="wishlist-item" :class="{ 'on-sale': item.isOnSale }">
-            <img :src="item.headerImage || noCoverImage" class="wishlist-image" @error="handleImageError" />
-            <div class="wishlist-info">
-              <h4 class="wishlist-name">{{ item.gameName }}</h4>
-              <div class="wishlist-price" v-if="item.currentPrice">
-                <span v-if="item.isOnSale" class="discount-badge">-{{ item.discountPercent }}%</span>
-                <span class="price">¥{{ (item.currentPrice / 100).toFixed(2) }}</span>
-              </div>
-              <p class="wishlist-added" v-if="item.addedTime">添加于 {{ item.addedTime }}</p>
-            </div>
-          </div>
-        </div>
-        <div v-else class="empty-state">愿望单为空</div>
       </div>
 
       <!-- Reports Section -->
@@ -635,7 +697,8 @@ import {
   getYearlyReportUrl,
   getInventoryReportUrl,
   downloadReport,
-  openHtmlReport
+  openHtmlReport,
+  getRecentPlayedHistory
 } from '@/api/userReport'
 import { useRouter } from 'vue-router'
 
@@ -650,9 +713,11 @@ const CACHE_EXPIRY = 30 * 60 * 1000 // 30 minutes
 const genreChartRef = ref(null)
 const trendChartRef = ref(null)
 const weeklyChartRef = ref(null)
+const recentGamesChartRef = ref(null)
 let genreChart = null
 let trendChart = null
 let weeklyChart = null
+let recentGamesChart = null
 
 const loading = ref(true)
 const refreshing = ref(false)
@@ -660,6 +725,16 @@ const error = ref(null)
 const syncing = ref(false)
 const hasCachedData = ref(false)
 const lastUpdateTime = ref('')
+
+// Recent games history data
+const recentGamesHistory = ref({ dates: [], games: [] })
+const hiddenGames = ref(new Set())
+
+// Game chart colors
+const gameChartColors = [
+  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308',
+  '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6'
+]
 
 // Report generation state
 const generating = ref({
@@ -849,11 +924,6 @@ const achievements = ref({
   gameProgress: []
 })
 const recentPlayed = ref([])
-const wishlist = ref({
-  totalItems: 0,
-  onSaleCount: 0,
-  items: []
-})
 const genreStats = ref([])
 
 // Recent reports history (stored in localStorage)
@@ -908,18 +978,80 @@ const trendDirectionText = computed(() => {
   return '➡️ 平稳'
 })
 
+// 过滤掉最近两周时长为0的游戏
+const filteredRecentPlayed = computed(() => {
+  return recentPlayed.value.filter(g => g.recentPlaytimeMinutes > 0)
+})
+
+// 最近游玩分析计算属性
+const recentTotalPlaytime = computed(() => {
+  return filteredRecentPlayed.value.reduce((sum, g) => sum + (g.recentPlaytimeMinutes || 0), 0)
+})
+
+const recentDailyAverage = computed(() => {
+  return Math.round(recentTotalPlaytime.value / 14) // 2周 = 14天
+})
+
+const mostPlayedRecent = computed(() => {
+  if (!filteredRecentPlayed.value.length) return null
+  return filteredRecentPlayed.value.reduce((max, g) => 
+    (g.recentPlaytimeMinutes || 0) > (max.recentPlaytimeMinutes || 0) ? g : max
+  , filteredRecentPlayed.value[0])
+})
+
+const getRecentPlaytimePercent = (minutes) => {
+  if (!recentTotalPlaytime.value || recentTotalPlaytime.value === 0) return 0
+  return (minutes / recentTotalPlaytime.value) * 100
+}
+
+const formatLastPlayed = (dateStr) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24))
+  if (diffDays === 0) return '今天'
+  if (diffDays === 1) return '昨天'
+  if (diffDays < 7) return `${diffDays}天前`
+  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+}
+
 // 热力图数据
 const heatmapData = computed(() => {
   const trend = gameLibrary.value.dailyPlaytimeTrend
   if (!trend?.length) return []
-  return trend.map(d => ({
-    date: new Date(d.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
-    dayOfMonth: new Date(d.date).getDate(),
-    playtimeMinutes: d.playtimeMinutes
-  }))
+  
+  // 获取第一天是星期几 (0=周日, 1=周一, ..., 6=周六)
+  const firstDate = new Date(trend[0].date)
+  // 转换为周一开始 (0=周一, 1=周二, ..., 6=周日)
+  let firstDayOfWeek = firstDate.getDay()
+  firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
+  
+  // 在前面填充空白格子，使日期对齐到正确的星期
+  const result = []
+  for (let i = 0; i < firstDayOfWeek; i++) {
+    result.push({
+      date: '',
+      dayOfMonth: '',
+      playtimeMinutes: -1, // 用 -1 表示空白格子
+      isEmpty: true
+    })
+  }
+  
+  // 添加实际数据
+  trend.forEach(d => {
+    result.push({
+      date: new Date(d.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
+      dayOfMonth: new Date(d.date).getDate(),
+      playtimeMinutes: d.playtimeMinutes,
+      isEmpty: false
+    })
+  })
+  
+  return result
 })
 
 const getHeatmapClass = (minutes) => {
+  if (minutes === -1) return 'level-empty' // 空白格子
   if (minutes === 0) return 'level-0'
   if (minutes < 30) return 'level-1'
   if (minutes < 60) return 'level-2'
@@ -984,7 +1116,6 @@ const applyData = (data) => {
   gameLibrary.value = data.gameLibrary || gameLibrary.value
   achievements.value = data.achievements || achievements.value
   recentPlayed.value = data.recentPlayed || []
-  wishlist.value = data.wishlist || wishlist.value
   
   // Extract genre stats from playtimeByGenre
   if (data.gameLibrary?.playtimeByGenre) {
@@ -1043,6 +1174,9 @@ const loadData = async (forceRefresh = false) => {
       loading.value = false
       setTimeout(() => initCharts(), 100)
       
+      // Load recent games history
+      loadRecentGamesHistory()
+      
       // Refresh in background
       refreshing.value = true
       try {
@@ -1073,6 +1207,9 @@ const loadData = async (forceRefresh = false) => {
       hasCachedData.value = true
     }
     setTimeout(() => initCharts(), 100)
+    
+    // Load recent games history
+    loadRecentGamesHistory()
   } catch (err) {
     console.error('加载数据失败:', err)
     error.value = '加载数据失败，请确保已绑定Steam账号'
@@ -1099,6 +1236,105 @@ const handleSync = async () => {
   } finally {
     syncing.value = false
   }
+}
+
+// 加载最近游玩游戏的时长历史
+const loadRecentGamesHistory = async () => {
+  try {
+    const res = await getRecentPlayedHistory(14)
+    if (res.data) {
+      recentGamesHistory.value = res.data
+      setTimeout(() => initRecentGamesChart(), 100)
+    }
+  } catch (err) {
+    console.error('加载游戏时长历史失败:', err)
+  }
+}
+
+// 切换游戏在图表中的显示/隐藏
+const toggleGameVisibility = (gameId) => {
+  if (hiddenGames.value.has(gameId)) {
+    hiddenGames.value.delete(gameId)
+  } else {
+    hiddenGames.value.add(gameId)
+  }
+  hiddenGames.value = new Set(hiddenGames.value) // 触发响应式更新
+  initRecentGamesChart()
+}
+
+// 初始化最近游戏时长图表
+const initRecentGamesChart = () => {
+  if (!recentGamesChartRef.value || !recentGamesHistory.value.games?.length) return
+  
+  const ctx = recentGamesChartRef.value.getContext('2d')
+  
+  if (recentGamesChart) {
+    recentGamesChart.destroy()
+  }
+  
+  const visibleGames = recentGamesHistory.value.games
+    .slice(0, 6)
+    .filter(g => !hiddenGames.value.has(g.gameId))
+  
+  const datasets = visibleGames.map((game, index) => ({
+    label: game.gameName.length > 15 ? game.gameName.substring(0, 15) + '...' : game.gameName,
+    data: game.dailyPlaytime,
+    borderColor: gameChartColors[recentGamesHistory.value.games.findIndex(g => g.gameId === game.gameId)],
+    backgroundColor: gameChartColors[recentGamesHistory.value.games.findIndex(g => g.gameId === game.gameId)] + '20',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 3,
+    pointHoverRadius: 5
+  }))
+  
+  recentGamesChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: recentGamesHistory.value.dates,
+      datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          display: false // 使用自定义图例
+        },
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const minutes = context.raw
+              if (minutes < 60) return `${context.dataset.label}: ${minutes}分钟`
+              const hours = Math.floor(minutes / 60)
+              const mins = minutes % 60
+              return `${context.dataset.label}: ${hours}小时${mins > 0 ? mins + '分钟' : ''}`
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: 'rgba(255,255,255,0.6)' }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: {
+            color: 'rgba(255,255,255,0.6)',
+            callback: (value) => {
+              if (value < 60) return value + '分'
+              return Math.floor(value / 60) + '时'
+            }
+          }
+        }
+      }
+    }
+  })
 }
 
 const initCharts = () => {
@@ -1785,11 +2021,104 @@ onUnmounted(() => {
   padding: 20px;
 }
 
+.heatmap-container-inline {
+  padding: 0;
+}
+
+/* Inline Heatmap Styles (for main-column) */
+.heatmap-weekdays-inline {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  justify-content: center;
+}
+
+.heatmap-weekdays-inline span {
+  width: 40px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.heatmap-grid-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  max-width: calc(7 * 40px + 6 * 6px);
+  margin: 0 auto;
+}
+
+.heatmap-cell-inline {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+  font-size: 12px;
+}
+
+.heatmap-cell-inline:hover {
+  transform: scale(1.1);
+}
+
+.heatmap-cell-inline .heatmap-date {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.heatmap-cell-inline.level-empty {
+  background: transparent;
+  pointer-events: none;
+}
+
+.heatmap-cell-inline.level-0 {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.heatmap-cell-inline.level-1 {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.heatmap-cell-inline.level-2 {
+  background: rgba(99, 102, 241, 0.4);
+}
+
+.heatmap-cell-inline.level-3 {
+  background: rgba(99, 102, 241, 0.6);
+}
+
+.heatmap-cell-inline.level-4 {
+  background: rgba(99, 102, 241, 0.9);
+}
+
+.heatmap-legend-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.heatmap-legend-inline .legend-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.heatmap-legend-inline .legend-cell {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
 .heatmap-weekdays {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 8px;
-  padding-left: 4px;
 }
 
 .heatmap-weekdays span {
@@ -1803,6 +2132,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  max-width: calc(7 * 32px + 6 * 4px); /* 7个格子 + 6个间隙 */
 }
 
 .heatmap-cell {
@@ -1823,6 +2153,11 @@ onUnmounted(() => {
 .heatmap-date {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.6);
+}
+
+.heatmap-cell.level-empty {
+  background: transparent;
+  pointer-events: none;
 }
 
 .heatmap-cell.level-0 {
@@ -1883,6 +2218,259 @@ onUnmounted(() => {
 
 .heatmap-legend .legend-cell.level-4 {
   background: rgba(99, 102, 241, 0.9);
+}
+
+/* Recent Analysis Section */
+.recent-analysis-section {
+  margin-bottom: 24px;
+}
+
+.recent-analysis-container {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.recent-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.summary-item {
+  text-align: center;
+}
+
+.summary-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 4px;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.recent-games-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.recent-game-card {
+  display: flex;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.recent-game-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateY(-2px);
+}
+
+.game-rank-badge {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(100, 100, 100, 0.8);
+  color: white;
+}
+
+.game-rank-badge.rank-gold {
+  background: linear-gradient(135deg, #ffd700, #ffb700);
+  color: #1a1a1a;
+}
+
+.game-rank-badge.rank-silver {
+  background: linear-gradient(135deg, #c0c0c0, #a0a0a0);
+  color: #1a1a1a;
+}
+
+.game-rank-badge.rank-bronze {
+  background: linear-gradient(135deg, #cd7f32, #b87333);
+  color: white;
+}
+
+.recent-game-card .game-cover {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.game-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-details .game-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.stat-icon {
+  font-size: 12px;
+}
+
+.playtime-bar-container {
+  position: relative;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.playtime-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), #8b5cf6);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.playtime-percent {
+  position: absolute;
+  right: 0;
+  top: -16px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .recent-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .recent-games-detail {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Recent Games Chart Section */
+.recent-chart-section {
+  margin-bottom: 24px;
+}
+
+.recent-chart-container {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.recent-chart-container .chart-wrapper {
+  height: 300px;
+  margin-bottom: 16px;
+}
+
+.recent-chart-container .chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.recent-chart-container .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.recent-chart-container .legend-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.recent-chart-container .legend-item.legend-hidden {
+  opacity: 0.4;
+}
+
+.recent-chart-container .legend-item.legend-hidden .legend-color {
+  background: rgba(100, 100, 100, 0.5) !important;
+}
+
+.recent-chart-container .legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.recent-chart-container .legend-name {
+  font-size: 12px;
+  color: var(--text-primary);
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-chart-container .legend-time {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .recent-chart-container .chart-wrapper {
+    height: 250px;
+  }
+  
+  .recent-chart-container .legend-item {
+    padding: 4px 8px;
+  }
+  
+  .recent-chart-container .legend-name {
+    max-width: 80px;
+  }
 }
 
 /* Platform Stats Section */
@@ -2089,6 +2677,24 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.btn-show-more {
+  width: 100%;
+  padding: 10px;
+  margin-top: 8px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px dashed rgba(99, 102, 241, 0.3);
+  border-radius: 8px;
+  color: var(--primary-color);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-show-more:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
 }
 
 .game-item {
@@ -2309,102 +2915,6 @@ onUnmounted(() => {
 .progress-detail {
   font-size: 11px;
   color: var(--text-secondary);
-}
-
-/* Wishlist Section */
-.wishlist-section {
-  margin-top: 32px;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.section-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.sale-badge {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.wishlist-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.wishlist-item {
-  background: rgba(24, 24, 27, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: all 0.2s;
-}
-
-.wishlist-item:hover {
-  border-color: rgba(99, 102, 241, 0.5);
-}
-
-.wishlist-item.on-sale {
-  border-color: rgba(239, 68, 68, 0.5);
-}
-
-.wishlist-image {
-  width: 100%;
-  height: 90px;
-  object-fit: cover;
-}
-
-.wishlist-info {
-  padding: 12px;
-}
-
-.wishlist-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wishlist-price {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.discount-badge {
-  background: #ef4444;
-  color: white;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.price {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.wishlist-added {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 4px;
 }
 
 /* Genre Stats */
@@ -2637,19 +3147,11 @@ onUnmounted(() => {
   .content-grid {
     grid-template-columns: 1fr;
   }
-  
-  .wishlist-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 768px) {
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .wishlist-grid {
-    grid-template-columns: 1fr;
   }
   
   .trend-chart-container {

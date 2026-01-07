@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using PlayLinker.Data;
 using PlayLinker.Models.DTOs;
 using PlayLinker.Models.Entities;
@@ -15,19 +16,27 @@ public class UserReportService : IUserReportService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITokenEncryptionService _encryptionService;
     private readonly ILogger<UserReportService> _logger;
+    private readonly IMemoryCache _cache;
     private const int STEAM_PLATFORM_ID = 1;
     private const string STEAM_API_BASE = "https://api.steampowered.com";
+    
+    // 缓存配置
+    private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(10);
+    private const string CACHE_KEY_OVERVIEW = "UserReport_Overview_{0}";
+    private const string CACHE_KEY_HISTORY = "UserReport_History_{0}_{1}";
 
     public UserReportService(
         PlayLinkerDbContext context,
         IHttpClientFactory httpClientFactory,
         ITokenEncryptionService encryptionService,
-        ILogger<UserReportService> logger)
+        ILogger<UserReportService> logger,
+        IMemoryCache cache)
     {
         _context = context;
         _httpClientFactory = httpClientFactory;
         _encryptionService = encryptionService;
         _logger = logger;
+        _cache = cache;
     }
 
     /// <summary>
@@ -35,6 +44,17 @@ public class UserReportService : IUserReportService
     /// </summary>
     public async Task<UserReportOverviewDto> GetUserReportOverviewAsync(int userId)
     {
+        var cacheKey = string.Format(CACHE_KEY_OVERVIEW, userId);
+        
+        // 尝试从缓存获取
+        if (_cache.TryGetValue(cacheKey, out UserReportOverviewDto? cachedResult) && cachedResult != null)
+        {
+            _logger.LogInformation("用户 {UserId} 报表数据从缓存获取", userId);
+            return cachedResult;
+        }
+        
+        _logger.LogInformation("用户 {UserId} 报表数据从数据库加载", userId);
+        
         var result = new UserReportOverviewDto();
 
         // 获取用户资料
@@ -51,6 +71,12 @@ public class UserReportService : IUserReportService
 
         // 获取愿望单
         result.Wishlist = await GetWishlistAsync(userId);
+
+        // 存入缓存
+        var cacheOptions = new MemoryCacheEntryOptions()
+            .SetAbsoluteExpiration(CacheExpiration)
+            .SetSlidingExpiration(TimeSpan.FromMinutes(5));
+        _cache.Set(cacheKey, result, cacheOptions);
 
         return result;
     }
@@ -399,10 +425,11 @@ public class UserReportService : IUserReportService
                 .ToList();
         }
 
-        // 在内存中按游戏+平台分组，取每组最新记录，按两周时长排序
+        // 在内存中按游戏+平台分组，取每组最新记录，过滤掉两周时长为0的，按两周时长排序
         var latestPlaytimeHistory = allHistory
             .GroupBy(h => new { h.GameId, h.PlatformId })
             .Select(g => g.OrderByDescending(h => h.RecordDate).First())
+            .Where(h => h.Playtime2Weeks > 0) // 只保留最近两周有游玩时长的游戏
             .OrderByDescending(h => h.Playtime2Weeks)
             .Take(count)
             .ToList();
@@ -439,6 +466,123 @@ public class UserReportService : IUserReportService
                 };
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// 获取最近游玩游戏的时长历史（每日增量）
+    /// </summary>
+    public async Task<RecentGamesPlaytimeHistoryDto> GetRecentGamesPlaytimeHistoryAsync(int userId, int days = 14)
+    {
+        var cacheKey = string.Format(CACHE_KEY_HISTORY, userId, days);
+        
+        // 尝试从缓存获取
+        if (_cache.TryGetValue(cacheKey, out RecentGamesPlaytimeHistoryDto? cachedResult) && cachedResult != null)
+        {
+            _logger.LogInformation("用户 {UserId} 时长历史从缓存获取", userId);
+            return cachedResult;
+        }
+        
+        var result = new RecentGamesPlaytimeHistoryDto();
+        
+        var today = DateTime.UtcNow.Date;
+        var yesterday = today.AddDays(-1);
+        // 显示的日期范围：从 (days-1) 天前到昨天（不包含今天，与游戏时长趋势保持一致）
+        var displayStartDate = yesterday.AddDays(-days + 1);
+        
+        // 生成日期列表
+        for (var date = displayStartDate; date <= yesterday; date = date.AddDays(1))
+        {
+            result.Dates.Add(date.ToString("MM-dd"));
+        }
+        
+        // 获取历史记录（需要多查一些数据作为基准）
+        var queryStartDate = displayStartDate.AddDays(-1);
+        var historyRecords = await _context.UserPlaytimeHistories
+            .Include(h => h.Game)
+            .Where(h => h.UserId == userId && h.RecordDate >= queryStartDate && h.RecordDate <= yesterday)
+            .OrderBy(h => h.RecordDate)
+            .ToListAsync();
+        
+        if (!historyRecords.Any())
+        {
+            return result;
+        }
+        
+        // 按游戏分组
+        var gameGroups = historyRecords
+            .GroupBy(h => h.GameId)
+            .ToList();
+        
+        foreach (var group in gameGroups)
+        {
+            var gameId = group.Key;
+            var records = group.OrderBy(r => r.RecordDate).ToList();
+            var firstRecord = records.First();
+            
+            // 计算每日增量（与游戏时长趋势保持一致的逻辑）
+            var dailyPlaytime = new List<int>();
+            var previousPlaytime = new Dictionary<int, int>(); // platformId -> playtime
+            
+            // 按日期顺序处理，用当天记录减去前一天记录得到增量
+            for (var date = displayStartDate; date <= yesterday; date = date.AddDays(1))
+            {
+                var dayRecords = records.Where(r => r.RecordDate == date).ToList();
+                var dayIncrement = 0;
+                
+                foreach (var record in dayRecords)
+                {
+                    if (previousPlaytime.TryGetValue(record.PlatformId, out var prevTime))
+                    {
+                        var increment = record.PlaytimeForever - prevTime;
+                        if (increment > 0 && increment < 1440) // 排除异常数据（一天最多24小时）
+                        {
+                            dayIncrement += increment;
+                        }
+                    }
+                    previousPlaytime[record.PlatformId] = record.PlaytimeForever;
+                }
+                
+                // 如果当天没有记录，检查是否有更早的记录可以作为基准
+                if (!dayRecords.Any())
+                {
+                    var earlierRecords = records.Where(r => r.RecordDate < date).ToList();
+                    foreach (var record in earlierRecords)
+                    {
+                        if (!previousPlaytime.ContainsKey(record.PlatformId))
+                        {
+                            previousPlaytime[record.PlatformId] = record.PlaytimeForever;
+                        }
+                    }
+                }
+                
+                dailyPlaytime.Add(dayIncrement);
+            }
+            
+            // 只添加有实际游玩时长的游戏
+            var totalPlaytime = dailyPlaytime.Sum();
+            if (totalPlaytime > 0)
+            {
+                result.Games.Add(new GamePlaytimeSeriesDto
+                {
+                    GameId = gameId,
+                    GameName = firstRecord.Game?.Name ?? "Unknown",
+                    HeaderImage = firstRecord.Game?.HeaderImage,
+                    DailyPlaytime = dailyPlaytime,
+                    TotalPlaytime = totalPlaytime
+                });
+            }
+        }
+        
+        // 按总时长排序
+        result.Games = result.Games.OrderByDescending(g => g.TotalPlaytime).ToList();
+        
+        // 存入缓存
+        var cacheOptions = new MemoryCacheEntryOptions()
+            .SetAbsoluteExpiration(CacheExpiration)
+            .SetSlidingExpiration(TimeSpan.FromMinutes(5));
+        _cache.Set(cacheKey, result, cacheOptions);
+        
+        return result;
     }
 
     /// <summary>
@@ -492,6 +636,10 @@ public class UserReportService : IUserReportService
             // 更新同步时间
             steamBinding.LastSyncTime = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+
+            // 清除缓存，让下次请求获取最新数据
+            _cache.Remove(string.Format(CACHE_KEY_OVERVIEW, userId));
+            _cache.Remove(string.Format(CACHE_KEY_HISTORY, userId, 14));
 
             result.Success = true;
             result.Message = "同步成功";
@@ -1041,9 +1189,13 @@ public class UserReportService : IUserReportService
         var startOfWeek = today.AddDays(-(int)today.DayOfWeek + (int)DayOfWeek.Monday);
         if (today.DayOfWeek == DayOfWeek.Sunday) startOfWeek = startOfWeek.AddDays(-7);
         
-        result.ThisWeekPlaytimeMinutes = dailyData
-            .Where(d => d.Key >= startOfWeek && d.Key < today)
-            .Sum(d => d.Value.Item1);
+        var thisWeekData = dailyData.Where(d => d.Key >= startOfWeek && d.Key < today).ToList();
+        result.ThisWeekPlaytimeMinutes = thisWeekData.Sum(d => d.Value.Item1);
+        
+        _logger.LogInformation("用户 {UserId} 本周计算: 今天={Today}, 周一={StartOfWeek}, 本周数据天数={Days}, 各天时长={Details}", 
+            userId, today.ToString("yyyy-MM-dd"), startOfWeek.ToString("yyyy-MM-dd"), 
+            thisWeekData.Count,
+            string.Join(", ", thisWeekData.Select(d => $"{d.Key:MM-dd}:{d.Value.Item1}分钟")));
 
         // 计算本月时长（不包含今天）
         var startOfMonth = new DateTime(today.Year, today.Month, 1);

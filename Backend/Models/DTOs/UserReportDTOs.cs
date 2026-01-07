@@ -277,6 +277,40 @@ public class RecentPlayedGameDto
 }
 
 /// <summary>
+/// 最近游玩游戏的时长历史
+/// </summary>
+public class RecentGamesPlaytimeHistoryDto
+{
+    /// <summary>
+    /// 日期列表
+    /// </summary>
+    public List<string> Dates { get; set; } = new();
+    
+    /// <summary>
+    /// 每个游戏的时长数据
+    /// </summary>
+    public List<GamePlaytimeSeriesDto> Games { get; set; } = new();
+}
+
+/// <summary>
+/// 单个游戏的时长序列
+/// </summary>
+public class GamePlaytimeSeriesDto
+{
+    public long GameId { get; set; }
+    public string GameName { get; set; } = string.Empty;
+    public string? HeaderImage { get; set; }
+    /// <summary>
+    /// 每日时长增量（分钟），与 Dates 一一对应
+    /// </summary>
+    public List<int> DailyPlaytime { get; set; } = new();
+    /// <summary>
+    /// 总时长（分钟）
+    /// </summary>
+    public int TotalPlaytime { get; set; }
+}
+
+/// <summary>
 /// 愿望单摘要
 /// </summary>
 public class WishlistSummaryDto

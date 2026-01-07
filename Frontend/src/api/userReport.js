@@ -56,6 +56,20 @@ export const getRecentPlayed = (count = 10) => {
 }
 
 /**
+ * 获取最近游玩游戏的时长历史
+ * @param {number} days - 天数，默认14天
+ * @returns {Promise}
+ */
+export const getRecentPlayedHistory = (days = 14) => {
+  return request({
+    url: '/user-report/recent-played/history',
+    method: 'get',
+    params: { days },
+    timeout: 30000
+  })
+}
+
+/**
  * 获取愿望单
  * @returns {Promise}
  */

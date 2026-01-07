@@ -29,6 +29,11 @@ public interface IUserReportService
     Task<List<RecentPlayedGameDto>> GetRecentPlayedGamesAsync(int userId, int count = 10);
     
     /// <summary>
+    /// 获取最近游玩游戏的时长历史
+    /// </summary>
+    Task<RecentGamesPlaytimeHistoryDto> GetRecentGamesPlaytimeHistoryAsync(int userId, int days = 14);
+    
+    /// <summary>
     /// 获取愿望单
     /// </summary>
     Task<WishlistSummaryDto> GetWishlistAsync(int userId);
