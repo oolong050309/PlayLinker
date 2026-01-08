@@ -55,7 +55,8 @@ builder.Services.AddScoped<ITokenEncryptionService, TokenEncryptionService>();
 
 // --- 游戏平台服务 ---
 builder.Services.AddScoped<ISteamService, SteamService>();
-builder.Services.AddHttpClient<ISteamService, SteamService>();
+builder.Services.AddHttpClient<ISteamService, SteamService>()
+    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<IXboxService, XboxService>();
 builder.Services.AddScoped<IPsnService, PsnService>();
 builder.Services.AddScoped<IGogService, GogService>();

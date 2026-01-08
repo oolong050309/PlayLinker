@@ -24,7 +24,7 @@ export const platformsApi = {
    * @param {string} [data.refreshToken] - 刷新令牌 (Xbox/PSN/GOG平台可选)
    */
   bindPlatform(data) {
-    return api.post('/platforms/bind', data)
+    return api.post('/platforms/bind', data, { timeout: 300000 }) // 5分钟超时
   },
 
   /**

@@ -250,7 +250,7 @@ export const newsApi = {
 export const steamApi = {
   // 导入Steam数据（单独提高超时时间，避免导入过程过长导致超时）
   importData(data) {
-    return api.post('/steam/import', data, { timeout: 120000 }) // 2分钟超时
+    return api.post('/steam/import', data, { timeout: 300000 }) // 5分钟超时
   },
   // 获取Steam用户信息
   getUser(steamId) {
@@ -266,7 +266,7 @@ export const steamApi = {
 export const xboxApi = {
   // 导入Xbox数据
   importData(data) {
-    return api.post('/xbox/import', data, { timeout: 120000 }) // 2分钟超时
+    return api.post('/xbox/import', data, { timeout: 300000 }) // 5分钟超时
   },
   // 获取Xbox用户信息
   getUser(xuid) {
@@ -294,7 +294,7 @@ export const xboxApi = {
 export const psnApi = {
   // 导入PSN数据
   importData(data) {
-    return api.post('/psn/import', data, { timeout: 120000 }) // 2分钟超时
+    return api.post('/psn/import', data, { timeout: 300000 }) // 5分钟超时
   },
   // 获取PSN用户信息
   getUser(onlineId) {
@@ -322,7 +322,7 @@ export const psnApi = {
 export const gogApi = {
   // 导入GOG数据
   importData(data) {
-    return api.post('/gog/import', data, { timeout: 120000 }) // 2分钟超时
+    return api.post('/gog/import', data, { timeout: 300000 }) // 5分钟超时
   },
   // 获取GOG用户信息
   getUser(gogUserId) {
@@ -346,7 +346,7 @@ export const gogApi = {
 export const epicApi = {
   // 导入Epic Games数据
   importData(data) {
-    return api.post('/epic/import', data, { timeout: 120000 }) // 2分钟超时
+    return api.post('/epic/import', data, { timeout: 300000 }) // 5分钟超时
   },
   // 获取Epic Games用户信息
   getUser(epicAccountId) {
