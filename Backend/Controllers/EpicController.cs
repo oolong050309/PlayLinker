@@ -541,7 +541,7 @@ public class EpicController : ControllerBase
                                 Linux = epicGame.Platforms.Linux,
                                 ReleaseDate = !string.IsNullOrEmpty(epicGame.ReleaseDate) && 
                                     DateTime.TryParse(epicGame.ReleaseDate, out var releaseDate) 
-                                    ? releaseDate : DateTime.UtcNow,
+                                    ? releaseDate : default(DateTime),
                                 ReviewScore = 0,
                                 ReviewScoreDesc = "",
                                 NumReviews = 0,
