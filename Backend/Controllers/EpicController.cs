@@ -391,6 +391,8 @@ public class EpicController : ControllerBase
         // 导入游戏库数据
         int gamesCount = 0;
         int achievementsCount = 0;
+        int failedGamesCount = 0;
+        List<string> failedGameNames = new();
 
         if (request.ImportGames)
         {
@@ -399,11 +401,18 @@ public class EpicController : ControllerBase
                 logger.LogInformation("开始导入Epic Games游戏数据...");
 
                 var epicGames = await epicService.GetEpicUserGames(request.EpicAccountId, userId);
+                logger.LogInformation("获取到 {Count} 个Epic Games游戏，开始逐个导入...", epicGames.Count);
 
+                int totalGames = epicGames.Count;
+                int currentIndex = 0;
+                
                 foreach (var epicGame in epicGames)
                 {
+                    currentIndex++;
                     try
                     {
+                        logger.LogInformation("正在导入游戏 {CurrentIndex}/{TotalGames}: {GameName}", 
+                            currentIndex, totalGames, epicGame.Name);
                         // 获取游戏详细信息和成就
                         EpicGameDto? gameDetails = null;
                         EpicAchievementsInfoDto? achievementsInfo = null;
@@ -734,11 +743,22 @@ public class EpicController : ControllerBase
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "导入游戏失败: {GameName}", epicGame.Name);
+                        failedGamesCount++;
+                        failedGameNames.Add(epicGame.Name ?? "未知游戏");
+                        logger.LogError(ex, "导入游戏失败 ({FailedCount}/{TotalGames}): {GameName}", 
+                            failedGamesCount, totalGames, epicGame.Name);
+                        // 继续处理下一个游戏，不中断整个导入过程
                     }
                 }
 
-                logger.LogInformation("成功导入 {Count} 个Epic Games游戏", gamesCount);
+                logger.LogInformation("Epic Games游戏导入完成: 成功={SuccessCount}, 失败={FailedCount}, 总计={TotalCount}", 
+                    gamesCount, failedGamesCount, totalGames);
+                
+                if (failedGamesCount > 0)
+                {
+                    logger.LogWarning("以下 {Count} 个游戏导入失败: {FailedGames}", 
+                        failedGamesCount, string.Join(", ", failedGameNames.Take(10))); // 只记录前10个失败的游戏名
+                }
                 
                 // 导入完成后，更新LastSyncTime
                 var binding = await context.UserPlatformBindings
@@ -752,15 +772,27 @@ public class EpicController : ControllerBase
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "导入游戏库数据失败");
+                logger.LogError(ex, "导入游戏库数据时发生严重错误");
+                // 即使发生严重错误，也返回已导入的数据
             }
+        }
+
+        // 构建响应消息
+        string message;
+        if (failedGamesCount > 0)
+        {
+            message = $"成功导入 {gamesCount} 个游戏和 {achievementsCount} 个成就，{failedGamesCount} 个游戏导入失败";
+        }
+        else
+        {
+            message = $"成功导入 {gamesCount} 个游戏和 {achievementsCount} 个成就";
         }
 
         var result = new EpicImportResponseDto
         {
             TaskId = $"epic_import_{DateTime.UtcNow:yyyyMMdd_HHmmss}",
-            Status = "completed",
-            Message = $"成功导入 {gamesCount} 个游戏和 {achievementsCount} 个成就",
+            Status = failedGamesCount > 0 && gamesCount == 0 ? "failed" : "completed", // 如果所有游戏都失败，状态为failed
+            Message = message,
             EstimatedTime = 0,
             Items = new EpicImportItemsDto
             {

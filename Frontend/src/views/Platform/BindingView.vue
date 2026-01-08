@@ -893,6 +893,7 @@ const handleGogPostAuth = async (authResponse) => {
     }
     
     let bindRes
+    let isAlreadyBound = false
     try {
       bindRes = await platformsApi.bindPlatform(bindData)
     } catch (bindError) {
@@ -900,6 +901,7 @@ const handleGogPostAuth = async (authResponse) => {
       if (bindError.response?.status === 409) {
         console.log('GOG平台已绑定，继续执行同步...')
         bindRes = { success: true } // 视为成功，继续执行
+        isAlreadyBound = true
       } else {
         // 其他错误则抛出
         throw bindError
@@ -914,63 +916,38 @@ const handleGogPostAuth = async (authResponse) => {
       }
     }
 
-    // 绑定成功后立即进行同步
+    // 绑定成功后立即进行同步（只执行一次）
     const userId = getCurrentUserId()
     if (!userId) {
       alert('无法获取用户ID')
       return
     }
 
-    try {
-      await gogApi.importData({
-        userId,
-        gogUserId,
-        importGames: true
-      })
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      closeBindModal()
-      await loadBindings()
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await refreshStats()
-      alert('GOG绑定成功并已完成数据同步！')
-    } catch (error) {
-      console.error('GOG绑定后同步失败:', error)
-      const errorMessage = error.response?.data?.message || error.message || '未知错误'
-      alert('GOG数据同步失败: ' + errorMessage + '\n请稍后手动同步')
-      closeBindModal()
-      await loadBindings()
-    }
+    // 执行同步（只在这里执行一次）
+    await gogApi.importData({
+      userId,
+      gogUserId,
+      importGames: true
+    })
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    closeBindModal()
+    await loadBindings()
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await refreshStats()
+    alert(isAlreadyBound ? 'GOG数据同步完成！' : 'GOG绑定成功并已完成数据同步！')
   } catch (error) {
     console.error('GOG认证后处理失败:', error)
     const errorMessage = error.response?.data?.message || error.message || '未知错误'
     const errorStatus = error.response?.status
     
-    // 根据错误类型给出不同的提示
-    if (errorStatus === 409) {
-      alert('GOG平台已绑定，正在同步数据...')
-      // 409错误时，仍然尝试同步
-      const gogUserId = authResponse?.data?.userId || bindForm.value.gogUserId
-      if (gogUserId) {
-        const userId = getCurrentUserId()
-        if (userId) {
-          try {
-            await gogApi.importData({
-              userId,
-              gogUserId,
-              importGames: true
-            })
-            closeBindModal()
-            await loadBindings()
-            await refreshStats()
-            alert('GOG数据同步完成！')
-          } catch (syncError) {
-            console.error('GOG数据同步失败:', syncError)
-            alert('GOG数据同步失败，请稍后手动同步')
-          }
-        }
-      }
+    // 如果错误不是409，说明同步失败
+    if (errorStatus !== 409) {
+      alert('GOG数据同步失败: ' + errorMessage + '\n请稍后手动同步')
+      closeBindModal()
+      await loadBindings()
     } else {
+      // 409错误已经在try块中处理过了，这里不应该再执行同步
       alert('GOG认证后处理失败: ' + errorMessage)
     }
   }
