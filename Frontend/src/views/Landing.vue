@@ -265,7 +265,7 @@
             <ul class="feature-list">
               <li>每日/每周游戏时长限制</li>
               <li>游戏内容分级筛选</li>
-              <li>游戏活动周报推送</li>
+              <li>孩子游戏时长查看</li>
             </ul>
           </div>
 
