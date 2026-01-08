@@ -11,7 +11,7 @@
         <div class="logo-container">
           <Gamepad2 class="icon gamepad-icon" />
         </div>
-        <h1>欢迎来到 GameVerse</h1>
+        <h1>欢迎来到 PlayLinker</h1>
         <p>登录以访问你的统一游戏库</p>
       </div>
 
