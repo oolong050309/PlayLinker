@@ -89,8 +89,8 @@
             </div>
             <div class="solution-item">
               <ShieldCheck class="lucide-icon" />
-              <div class="item-title">官方 API</div>
-              <div class="item-subtitle">100% 合规安全</div>
+              <div class="item-title">优先使用官方 API</div>
+              <div class="item-subtitle">合规安全</div>
             </div>
             <div class="solution-item">
               <BarChart3 class="lucide-icon" />
