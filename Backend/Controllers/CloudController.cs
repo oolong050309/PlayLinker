@@ -171,11 +171,18 @@ public class CloudController : ControllerBase
                     "ERR_SAVE_NOT_FOUND", "存档不存在"));
             }
 
-            // 3. 生成云备份ID（限制在20字符以内）
-            int userId = save.Install.UserId;
+            // 3. 获取当前登录用户ID（而不是存档关联的用户ID）
+            int userId = GetCurrentUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(ApiResponse<UploadToCloudResponse>.ErrorResponse(
+                    "ERR_UNAUTHORIZED", "请先登录"));
+            }
+            
+            // 4. 生成云备份ID（限制在20字符以内）
             var cloudBackupId = $"c{DateTime.UtcNow:yyMMddHHmmss}{new Random().Next(1000, 9999)}";
 
-            // 4. 准备文件流（可选压缩）
+            // 5. 准备文件流（可选压缩）
             Stream uploadStream;
             long uploadedSize;
             
@@ -199,7 +206,7 @@ public class CloudController : ControllerBase
                 uploadedSize = file.Length;
             }
 
-            // 5. 上传到 OSS
+            // 6. 上传到 OSS
             string objectKey;
             try
             {
@@ -220,7 +227,7 @@ public class CloudController : ControllerBase
                 }
             }
 
-            // 6. 记录到数据库
+            // 7. 记录到数据库
             var storageUrl = _ossService.GetFileUrl(objectKey);
             
             var cloudBackup = new CloudSaveBackup
