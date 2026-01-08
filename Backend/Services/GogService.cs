@@ -221,17 +221,33 @@ public class GogService : IGogService
             var binding = await _context.UserPlatformBindings
                 .FirstOrDefaultAsync(b => b.UserId == userId && b.PlatformId == platformId);
             
+            var encryptedToken = _encryptionService.EncryptToken(tokenJson);
+            
             if (binding == null)
             {
-                _logger.LogWarning("未找到绑定记录: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
-                return false;
+                // 绑定记录不存在，创建新的绑定记录
+                _logger.LogInformation("绑定记录不存在，创建新记录: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
+                binding = new Models.Entities.UserPlatformBinding
+                {
+                    UserId = userId,
+                    PlatformId = platformId,
+                    AccessToken = encryptedToken,
+                    BindingStatus = true,
+                    BindingTime = DateTime.UtcNow,
+                    LastSyncTime = DateTime.UtcNow,
+                    ExpireTime = DateTime.UtcNow.AddYears(1)
+                };
+                _context.UserPlatformBindings.Add(binding);
+            }
+            else
+            {
+                // 更新现有绑定记录
+                binding.AccessToken = encryptedToken;
+                binding.LastSyncTime = DateTime.UtcNow;
+                binding.ExpireTime = DateTime.UtcNow.AddYears(1);
+                binding.BindingStatus = true;
             }
             
-            var encryptedToken = _encryptionService.EncryptToken(tokenJson);
-            binding.AccessToken = encryptedToken;
-            binding.LastSyncTime = DateTime.UtcNow;
-            binding.ExpireTime = DateTime.UtcNow.AddYears(1);
-            binding.BindingStatus = true;
             await _context.SaveChangesAsync();
             
             _logger.LogInformation("令牌已保存到数据库: UserId={UserId}, PlatformId={PlatformId}", userId, platformId);
