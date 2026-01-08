@@ -14,7 +14,7 @@
           <Gamepad2 class="icon gamepad-icon" />
         </div>
         <h1>创建账号</h1>
-        <p>加入 GameVerse，统一管理你的游戏库</p>
+        <p>加入 PlayLinker，统一管理你的游戏库</p>
       </div>
 
       <!-- 注册表单 -->
@@ -157,7 +157,7 @@
                 :disabled="loading"
               >
               <span>
-                我同意 <a href="#" class="link">服务条款</a> 和 <a href="#" class="link">隐私政策</a>
+                我同意个人数据被PlayLinker使用
               </span>
             </label>
             <p v-if="errors.agreeTerms" class="field-error-message">{{ errors.agreeTerms }}</p>
@@ -381,7 +381,7 @@ const validateAgreeTerms = () => {
   errors.value.agreeTerms = ''
   
   if (!agreeTerms.value) {
-    errors.value.agreeTerms = '请同意服务条款和隐私政策'
+    errors.value.agreeTerms = '请同意上述说明'
     return false
   }
   return true
