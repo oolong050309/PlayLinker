@@ -91,7 +91,7 @@ def refresh_access_token(refresh_token: str) -> Optional[Dict[str, Any]]:
     }
     
     try:
-        response = requests.get(TOKEN_URL, params=params, timeout=30)
+        response = requests.get(TOKEN_URL, params=params, timeout=300)
         response.raise_for_status()
         
         token_data = response.json()
@@ -128,7 +128,7 @@ def make_request(endpoint: str, access_token: str, host: str = EMBED_HOST,
     }
     
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response = requests.get(url, headers=headers, params=params, timeout=300)
         
         # 404表示数据不存在(例如游戏没有游玩记录),这是正常情况
         if response.status_code == 404:
