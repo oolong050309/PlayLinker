@@ -22,7 +22,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 const goHome = () => {
-  router.push('/discover')
+  router.push({ name: 'Discover' })
 }
 
 const goBack = () => {

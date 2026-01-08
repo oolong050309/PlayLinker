@@ -24,13 +24,13 @@ const routes = [
   },
   {
     path: '/app',
-    component: () => import('@/views/Home.vue'),
+    component: () => import('@/views/Home/Home.vue'),
     redirect: '/app/discover',
     children: [
       {
         path: 'list',
         name: 'GameList',
-        component: () => import('@/views/GameList.vue'),
+        component: () => import('@/views/GameList/GameList.vue'),
         meta: {
           title: '游戏列表',
           requiresAuth: true
@@ -69,7 +69,7 @@ const routes = [
       {
         path: 'ranking',
         name: 'GameRanking',
-        component: () => import('@/views/GameRanking.vue'),
+        component: () => import('@/views/GameRanking/GameRanking.vue'),
         meta: {
           title: '排行榜',
           requiresAuth: true
@@ -78,7 +78,7 @@ const routes = [
       {
         path: 'news',
         name: 'News',
-        component: () => import('@/views/News.vue'),
+        component: () => import('@/views/GameNews/News.vue'),
         meta: {
           title: '新闻',
           requiresAuth: true

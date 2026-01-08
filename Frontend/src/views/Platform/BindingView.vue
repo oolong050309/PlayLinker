@@ -988,10 +988,10 @@ const handlePsnPostAuth = async (authResponse) => {
     }
 
     // 先绑定平台（如果已绑定，409错误是正常的，继续执行同步）
-    const bindData = {
-      platformId: 6,
-      psnOnlineId: psnOnlineId
-    }
+      const bindData = {
+        platformId: 6,
+        psnOnlineId: psnOnlineId
+      }
     
     let bindRes
     try {
@@ -1016,25 +1016,25 @@ const handlePsnPostAuth = async (authResponse) => {
     }
 
     // 绑定成功后立即进行同步
-    const userId = getCurrentUserId()
+        const userId = getCurrentUserId()
     if (!userId) {
       alert('无法获取用户ID')
       return
     }
 
     try {
-      await psnApi.importData({
-        userId,
-        psnOnlineId,
-        importGames: true,
-        importTrophies: true
-      })
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      closeBindModal()
-      await loadBindings()
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await refreshStats()
+        await psnApi.importData({
+          userId,
+          psnOnlineId,
+          importGames: true,
+          importTrophies: true
+        })
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        closeBindModal()
+        await loadBindings()
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await refreshStats()
       alert('PSN绑定成功并已完成数据同步！')
     } catch (error) {
       console.error('PSN绑定后同步失败:', error)
@@ -1197,10 +1197,10 @@ const handleXboxPostAuth = async (authResponse) => {
     }
 
     // 先绑定平台（如果已绑定，409错误是正常的，继续执行同步）
-    const bindData = {
-      platformId: 7,
-      xboxUserId: xboxUserId
-    }
+      const bindData = {
+        platformId: 7,
+        xboxUserId: xboxUserId
+      }
     
     let bindRes
     try {
@@ -1225,25 +1225,25 @@ const handleXboxPostAuth = async (authResponse) => {
     }
 
     // 绑定成功后立即进行同步
-    const userId = getCurrentUserId()
+        const userId = getCurrentUserId()
     if (!userId) {
       alert('无法获取用户ID')
       return
     }
 
     try {
-      await xboxApi.importData({
-        userId,
-        xboxUserId,
-        importGames: true,
-        importAchievements: true
-      })
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      closeBindModal()
-      await loadBindings()
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await refreshStats()
+        await xboxApi.importData({
+          userId,
+          xboxUserId,
+          importGames: true,
+          importAchievements: true
+        })
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        closeBindModal()
+        await loadBindings()
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await refreshStats()
       alert('Xbox绑定成功并已完成数据同步！')
     } catch (error) {
       console.error('Xbox绑定后同步失败:', error)

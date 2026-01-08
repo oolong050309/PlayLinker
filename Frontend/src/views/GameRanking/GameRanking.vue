@@ -45,7 +45,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { gameApi } from '../api'
+import { gameApi } from '@/api'
 import noCoverImage from '@/assets/no_cover.png'
 
 const router = useRouter()

@@ -138,7 +138,7 @@
 
 <script setup>
 import { ref, onMounted, onActivated, computed, watch } from 'vue'
-import { libraryApi, achievementApi } from '../api'
+import { libraryApi, achievementApi } from '@/api'
 import { Gamepad2, Play, Clock, Trophy, Search } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import noCoverImage from '@/assets/no_cover.png'

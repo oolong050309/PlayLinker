@@ -112,7 +112,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { newsApi } from '../api'
+import { newsApi } from '@/api'
 import { X } from 'lucide-vue-next'
 import Pagination from '@/components/common/Pagination.vue'
 

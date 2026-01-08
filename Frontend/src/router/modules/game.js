@@ -1,14 +1,5 @@
 export default [
   {
-    path: '/discover',
-    name: 'Discover',
-    component: () => import('@/views/ComingSoon.vue'),
-    meta: {
-      title: '游戏发现',
-      requiresAuth: true
-    }
-  },
-  {
     path: '/game/:id',
     name: 'GameDetail',
     component: () => import('@/views/GameDetail/GameDetail.vue'),

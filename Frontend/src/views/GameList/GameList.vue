@@ -151,7 +151,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { gameApi, metadataApi } from '../api'
+import { gameApi, metadataApi } from '@/api'
 import noCoverImage from '@/assets/no_cover.png'
 import Pagination from '@/components/common/Pagination.vue'
 
