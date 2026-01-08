@@ -179,22 +179,6 @@
           </button>
 
           <!-- 分隔线 -->
-          <div class="divider">
-            <span>或通过以下方式注册</span>
-          </div>
-
-          <!-- 社交注册 -->
-          <div class="social-login-container">
-            <button type="button" class="social-btn" :disabled="loading">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/1024px-Steam_icon_logo.svg.png" alt="Steam" class="social-icon">
-            </button>
-            <button type="button" class="social-btn" :disabled="loading">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/a/a7/Epic_Games_logo.png" alt="Epic" class="social-icon">
-            </button>
-            <button type="button" class="social-btn" :disabled="loading">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Xbox_one_logo.svg/2048px-Xbox_one_logo.svg.png" alt="Xbox" class="social-icon">
-            </button>
-          </div>
         </form>
 
         <!-- 登录链接 -->
@@ -892,6 +876,7 @@ const handleRegister = async () => {
   text-align: center;
   font-size: 14px;
   color: #a1a1aa;
+  margin-top: 24px;
 }
 
 /* 返回首页链接 */
