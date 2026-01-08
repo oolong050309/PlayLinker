@@ -231,7 +231,6 @@
             <ul class="feature-list">
               <li>跨平台成就统一展示</li>
               <li>成就完成率分析</li>
-              <li>难度评级与解锁攻略</li>
               <li>成就分享到社交平台</li>
             </ul>
           </div>
@@ -279,7 +278,7 @@
               支持多种格式导出游戏数据，满足媒体创作、数据分析等专业需求
             </p>
             <ul class="feature-list">
-              <li>PDF/html 格式导出</li>
+              <li>PDF/CSV/html 格式导出</li>
               <li>自定义导出数据维度</li>
               <li>可视化图表导出</li>
             </ul>
