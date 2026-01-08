@@ -1247,9 +1247,7 @@ public class UserReportService : IUserReportService
 
         foreach (var dayGroup in gamesByDate)
         {
-            var date = dayGroup.Key;
-            var dailyPlaytimeChange = 0;
-            var gamesPlaytimeToday = new Dictionary<long, int>();
+            var currentDate = dayGroup.Key;
 
             foreach (var record in dayGroup)
             {
@@ -1264,25 +1262,33 @@ public class UserReportService : IUserReportService
                     // 只计算正向增量，且增量不能超过24小时（1440分钟）作为合理性检查
                     if (change > 0 && change <= 1440)
                     {
-                        dailyPlaytimeChange += change;
+                        // 关键修复：增量应该归属到前一天（previous.date），因为这是前一天玩的
+                        var playedDate = previous.date;
                         
-                        // 记录该游戏当天的游玩时长
-                        if (gamesPlaytimeToday.ContainsKey(record.GameId))
+                        if (!dailyData.ContainsKey(playedDate))
                         {
-                            gamesPlaytimeToday[record.GameId] += change;
+                            dailyData[playedDate] = (0, new Dictionary<long, int>());
+                        }
+                        
+                        var (existingPlaytime, existingGames) = dailyData[playedDate];
+                        existingPlaytime += change;
+                        
+                        if (existingGames.ContainsKey(record.GameId))
+                        {
+                            existingGames[record.GameId] += change;
                         }
                         else
                         {
-                            gamesPlaytimeToday[record.GameId] = change;
+                            existingGames[record.GameId] = change;
                         }
+                        
+                        dailyData[playedDate] = (existingPlaytime, existingGames);
                     }
                 }
                 
                 // 更新/记录当前时长和日期，作为下一次计算的基准
-                previousDayPlaytime[key] = (record.PlaytimeForever, date);
+                previousDayPlaytime[key] = (record.PlaytimeForever, currentDate);
             }
-
-            dailyData[date] = (dailyPlaytimeChange, gamesPlaytimeToday);
         }
 
         // 生成最近14天的趋势数据（不包含今天，因为今天数据不完整）
