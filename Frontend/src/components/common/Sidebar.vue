@@ -574,6 +574,12 @@ const handleLogout = async () => {
   overflow-x: hidden;
 }
 
+.nav-menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
 .nav-item {
   margin-bottom: 4px;
 }
@@ -638,10 +644,7 @@ const handleLogout = async () => {
 }
 
 .sidebar-collapsed .active-indicator {
-  height: 6px;
-  width: 6px;
-  right: 6px;
-  border-radius: 50%;
+  display: none;
 }
 
 /* 分隔线 */
