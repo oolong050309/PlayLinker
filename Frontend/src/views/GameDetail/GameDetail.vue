@@ -836,9 +836,46 @@ const loadPlaytimeHistory = async () => {
       console.warn('获取游戏时长历史数据失败，响应:', response)
       playtimeHistory.value = []
     }
+    
+    // 如果没有历史数据，使用当前游戏时间生成7天的默认数据（显示为直线）
+    if (playtimeHistory.value.length === 0 && gamePlaytime.value !== undefined && gamePlaytime.value !== null) {
+      const currentPlaytimeMinutes = gamePlaytime.value * 60 // 转换为分钟
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      // 生成过去7天的数据，每天都是相同的游戏时间
+      playtimeHistory.value = []
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today)
+        date.setDate(date.getDate() - i)
+        playtimeHistory.value.push({
+          date: date.toISOString().split('T')[0],
+          playtimeMinutes: currentPlaytimeMinutes
+        })
+      }
+      console.log('生成默认游戏时长历史数据（7天直线），游戏时间:', gamePlaytime.value, '小时')
+    }
   } catch (err) {
     console.error('加载游戏时长历史数据失败:', err)
     playtimeHistory.value = []
+    
+    // 即使出错，如果有当前游戏时间，也生成默认数据
+    if (gamePlaytime.value !== undefined && gamePlaytime.value !== null) {
+      const currentPlaytimeMinutes = gamePlaytime.value * 60
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      playtimeHistory.value = []
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today)
+        date.setDate(date.getDate() - i)
+        playtimeHistory.value.push({
+          date: date.toISOString().split('T')[0],
+          playtimeMinutes: currentPlaytimeMinutes
+        })
+      }
+      console.log('生成默认游戏时长历史数据（7天直线），游戏时间:', gamePlaytime.value, '小时')
+    }
   } finally {
     playtimeHistoryLoading.value = false
   }
