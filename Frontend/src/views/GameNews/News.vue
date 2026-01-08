@@ -273,7 +273,6 @@ onMounted(() => {
   background: rgba(20, 20, 23, 0.6);
   min-height: 100vh;
   color: #f8fafc;
-  backdrop-filter: blur(12px);
 }
 
 .header {
