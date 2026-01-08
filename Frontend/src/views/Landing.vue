@@ -54,7 +54,7 @@
           <h3 class="section-subtitle">面临的挑战</h3>
           <h2 class="section-title">碎片化是最大的敌人</h2>
           <p class="section-desc">
-            如今的游戏玩家深受启动器疲劳的困扰。成就、存档和好友列表分散在
+            如今的游戏玩家深受启动器疲劳的困扰。成就、存档和游戏数据分散在
             Steam、Epic、GOG 和 Xbox 等多个平台。
           </p>
           <ul class="problem-list">
